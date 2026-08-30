@@ -1,0 +1,175 @@
+# HabOS — Agent Onboarding & Development Guide
+
+## 1. Project Mission & Identity
+**HabOS** is a modular personal life operating system that unifies 24 life domains into a single connected platform. It replaces fragmented apps by linking tasks, software development projects, academic learning, physical fitness, personal finance, knowledge management, habits, and daily focus into a reactive ecosystem powered by an overarching **Life Score** and an AI assistant.
+
+---
+
+## 2. Primary Documentation References
+Any AI agent working on this codebase MUST consult these primary documents before making architectural decisions or implementing features:
+- **[System Architecture](file:///d:/HABos/docs/architecture.md)**: Full architecture specifications, clean architecture diagrams, database ER diagrams, and reactive event flows.
+- **[Use Case Specifications](file:///d:/HABos/docs/usecases.md)**: Complete specifications for all 182 use cases across all 24 modules (UC-01 to UC-182).
+
+---
+
+## 3. Repository Anatomy
+
+```
+HABos/
+├── client/                     # Flutter Mobile & Desktop Client Application
+│   ├── assets/                 # Icons, images, illustrations
+│   └── lib/
+│       ├── app/                # App initialization, routing (GoRouter), theme configuration
+│       ├── core/               # Shared networking (Dio), errors, constants, theme
+│       ├── domain/             # Pure business rules (Entities, Repositories interfaces, UseCases)
+│       ├── data/               # Models (DTOs), DataSources (Remote/Local), Repository implementations
+│       ├── presentation/       # Riverpod Providers, Pages, and reusable Widgets
+│       └── main.dart           # Entry point with ProviderScope
+├── server/                     # Express.js + TypeScript REST API Backend
+│   ├── prisma/
+│   │   ├── schema.prisma       # Complete PostgreSQL database schema
+│   │   └── seed.ts             # Initial database seed script (TypeScript)
+│   ├── tsconfig.json           # TypeScript configuration
+│   └── src/
+│       ├── server.ts           # HTTP listener startup
+│       ├── app.ts              # Express app configuration & route registry
+│       ├── config/             # Environment, database, and JWT configuration
+│       ├── middleware/         # Auth, validation, rate limiting, error handling
+│       ├── modules/            # 24 Domain-driven backend TypeScript modules
+│       ├── jobs/               # Cron jobs (midnight streak validation, reminder queue)
+│       └── utils/              # Calculation engines (LifeScore, streaks, date utils)
+├── docs/                       # Architecture, use cases, API, and database specs
+├── docker-compose.yml          # PostgreSQL & Node.js orchestration
+└── README.md                   # Project overview
+```
+
+---
+
+## 4. Module Taxonomy (24 Modules)
+
+| # | Module | Scope & Key Use Cases |
+|---|--------|------------------------|
+| **1** | **Auth & Profile** | User registration, JWT login/refresh, profile settings (UC-01 – UC-05) |
+| **2** | **Dashboard** | Today's priorities, active stats, daily summary, Life Score badge (UC-06 – UC-09) |
+| **3** | **Task Management** | Priority matrix, deadlines, filters, status transitions, downstream triggers (UC-10 – UC-17) |
+| **4** | **Schedule & Calendar** | Time-blocked schedule, daily timeline, weekly planner, conflicts (UC-18 – UC-23) |
+| **5** | **Habits & Streaks** | Daily/weekly routines, streak tracking, completion heatmaps (UC-24 – UC-30) |
+| **6** | **Focus & Pomodoro** | Timed focus sessions (Pomodoro/Deep Work), category tagging (UC-31 – UC-37) |
+| **7** | **Dev Hub — Projects** | Project lifecycle, progress aggregation, repository linking (UC-38 – UC-42) |
+| **8** | **Dev Hub — Features** | Feature backlog, status (TODO/In Progress/Completed) (UC-43 – UC-47) |
+| **9** | **Dev Hub — Bugs** | Issue tracker, reproduction steps, severity levels, resolution (UC-48 – UC-52) |
+| **10** | **GitHub Integration** | OAuth connection, commit stats, pull requests, coding streaks (UC-53 – UC-59) |
+| **11** | **LeetCode Integration** | Public profile sync, problem difficulty breakdown, streak (UC-60 – UC-64) |
+| **12** | **Tech Learning** | Technology roadmap, progress percentage, attached resources (UC-65 – UC-69) |
+| **13** | **Student Hub** | University courses, assignments, exams, grades, attendance (UC-70 – UC-83) |
+| **14** | **Study Sessions** | Focused study timer, course association, session notes (UC-84 – UC-90) |
+| **15** | **Gym & Fitness** | Workout plans, exercises, set/rep/weight logging, PRs, body metrics (UC-91 – UC-101) |
+| **16** | **Personal Finance** | Income/expense logging, category budgets, savings rate (UC-102 – UC-111) |
+| **17** | **Goals & Milestones** | Long-term goals, milestone breakdowns, progress calculation (UC-112 – UC-119) |
+| **18** | **Knowledge Vault** | Second-brain notes, code snippets, terminal commands, mistakes log (UC-120 – UC-130) |
+| **19** | **AI Assistant** | Natural language queries, recommendations, personalized planning (UC-131 – UC-143) |
+| **20** | **Analytics & Trends** | Weekly/monthly trends across productivity, gym, finance, study (UC-144 – UC-154) |
+| **21** | **Life Score Engine** | Composite consistency score ($0 - 100$) computation across active areas (UC-155 – UC-158) |
+| **22** | **Notifications** | Trigger rules for tasks, exams, streaks, budgets, quiet hours (UC-159 – UC-166) |
+| **23** | **Search** | Module-specific and global multi-entity search (UC-167 – UC-172) |
+| **24** | **Settings & Portability**| Dashboard customization, category management, data export/deletion (UC-173 – UC-182) |
+
+---
+
+## 5. Architectural Invariants & Rules for Agents
+
+### Rule 1: Flutter Clean Architecture Separation
+- **Presentation Layer** (`lib/presentation/`): Contains UI widgets, pages, and Riverpod `StateNotifier` / `Notifier` classes. **NEVER** import HTTP clients (Dio) or Database clients directly into presentation files.
+- **Domain Layer** (`lib/domain/`): Contains pure Dart entities, repository interfaces, and use cases. **NEVER** import Flutter UI packages (`material.dart`) or data DTOs into domain.
+- **Data Layer** (`lib/data/`): Contains DTO models (`fromJson`/`toJson`), remote data sources (calling REST API via Dio), local data sources (SecureStorage/SQLite), and concrete repository implementations.
+
+### Rule 2: Backend Modular Monolith Pattern
+Every module inside `server/src/modules/<module_name>/` must maintain clean separation:
+- `<module>.routes.js`: Defines HTTP routes and middleware attachments (Auth, Joi validation).
+- `<module>.controller.js`: Extracts request parameters, invokes the service layer, formats JSON response.
+- `<module>.service.js`: Contains business logic, Prisma database operations, and inter-module triggers.
+- `<module>.validation.js`: Contains strict Joi validation schemas.
+- Route registration: Every new module route MUST be registered in `server/src/app.js`.
+
+### Rule 3: Reactive Inter-Module Event Propagation
+HabOS modules are interdependent. When modifying or adding write operations, ensure downstream updates are respected:
+- **Completing a Task (`UC-13`)** must trigger:
+  1. Project progress recalculation (`UC-42`) if linked to a project.
+  2. Goal milestone progress recalculation (`UC-117`) if linked to a goal.
+  3. Coding streak update (`UC-59`) if tagged as a coding task.
+  4. Life Score recalculation (`UC-155`).
+  5. Dashboard summary statistics update (`UC-06`).
+- **Ending a Study Session (`UC-85`)** must trigger course progress update and Life Score recomputation.
+- **Recording a Workout (`UC-91`)** must trigger PR detection and Gym consistency score update.
+- **Recording an Expense (`UC-103`)** must check budget limits and trigger warnings if $\ge 80\%$.
+
+### Rule 4: Security & Authentication
+- Every protected route must use the `authenticate` middleware (`server/src/middleware/auth.js`).
+- Passwords must always be hashed using `bcrypt` (minimum 10 salt rounds).
+- Access tokens expire in 15 minutes; refresh tokens in 30 days.
+
+---
+
+## 6. How to Implement a New Feature (Agent Recipe)
+
+When an agent is assigned to implement a use case (e.g., `UC-XX`):
+
+```mermaid
+graph TD
+    Step1["1. Consult docs/usecases.md for requirements, preconditions, and flows"]
+    Step2["2. Check & update server/prisma/schema.prisma if DB models/fields needed"]
+    Step3["3. Run prisma generate & prisma migrate dev"]
+    Step4["4. Implement Backend: validation.js -> service.js -> controller.js -> routes.js"]
+    Step5["5. Register module route in server/src/app.js"]
+    Step6["6. Implement Frontend: domain/ (Entity/UseCase) -> data/ (Model/DataSource/Repo)"]
+    Step7["7. Implement Frontend: presentation/ (Riverpod Provider & Screen Widgets)"]
+    Step8["8. Verify inter-module hooks (Life Score / Dashboard updates)"]
+
+    Step1 --> Step2 --> Step3 --> Step4 --> Step5 --> Step6 --> Step7 --> Step8
+```
+
+---
+
+## 7. Essential Development Commands
+
+### Backend Commands (run in `/server`):
+```bash
+# Start development server with live reload
+npm run dev
+
+# Generate Prisma Client after schema changes
+npm run prisma:generate
+
+# Run database migrations
+npm run prisma:migrate
+
+# Seed the database
+npm run prisma:seed
+
+# Run backend tests
+npm test
+```
+
+### Frontend Commands (run in `/client`):
+```bash
+# Install Flutter dependencies
+flutter pub get
+
+# Run Flutter application
+flutter run
+
+# Run Flutter unit and widget tests
+flutter test
+
+# Analyze code quality
+flutter analyze
+```
+
+### Full Stack Docker Environment (run in root `/`):
+```bash
+# Start PostgreSQL & API backend in containers
+docker compose up -d
+
+# View container logs
+docker compose logs -f
+```
