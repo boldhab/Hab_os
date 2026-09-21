@@ -8,7 +8,7 @@ HabOS is a personal life operating system that integrates productivity, developm
 
 ## Module 1: Authentication & Account Management (UC-01 to UC-05)
 
-### UC-01 — Register Account
+##UC-01 — Register Account
 
 | Attribute | Description |
 |-----------|-------------|
