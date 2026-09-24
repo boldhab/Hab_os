@@ -1,13 +1,11 @@
-import dotenv from 'dotenv';
-dotenv.config();
-
+import env from './config/env';
 import app from './app';
 import logger from './utils/logger';
-import { initNotificationScheduler } from './modules/notifications/notifications.service';
+import { initScheduler } from './jobs/scheduler';
 
-const PORT = process.env.PORT || 5000;
+const PORT = env.PORT;
 
 app.listen(PORT, () => {
-  logger.info(`🚀 HABos TypeScript Server running on port ${PORT}`);
-  initNotificationScheduler();
+  logger.info(`🚀 HABos TypeScript Server running on port ${PORT} [${env.NODE_ENV}]`);
+  initScheduler();
 });

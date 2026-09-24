@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import prisma from '../config/db';
 import ApiError from '../common/apiError';
 import asyncHandler from '../common/asyncHandler';
+import env from '../config/env';
 
 export interface AuthenticatedUser {
   id: string;
@@ -39,7 +40,7 @@ export const authenticate = asyncHandler(async (req: Request, _res: Response, ne
   try {
     const decoded = jwt.verify(
       token,
-      process.env.JWT_SECRET || 'supersecretjwtkey_habos_2026_secure'
+      env.JWT_SECRET
     ) as JwtPayload;
 
     const user = await prisma.user.findUnique({

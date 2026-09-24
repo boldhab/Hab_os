@@ -10,6 +10,25 @@ export const createWorkoutSchema = Joi.object({
   durationMinutes: Joi.number().integer().min(1).max(360).default(60),
   notes: Joi.string().trim().allow('', null),
   isCompleted: Joi.boolean().default(true),
+  exercises: Joi.array()
+    .items(
+      Joi.object({
+        exerciseId: Joi.string().uuid().required(),
+        order: Joi.number().integer().min(1).default(1),
+        sets: Joi.array()
+          .items(
+            Joi.object({
+              setNumber: Joi.number().integer().min(1).required(),
+              weightKg: Joi.number().min(0).required(),
+              repetitions: Joi.number().integer().min(0).required(),
+              rpe: Joi.number().min(0).max(10).allow(null),
+              notes: Joi.string().trim().allow('', null),
+            })
+          )
+          .default([]),
+      })
+    )
+    .optional(),
 });
 
 export const updateWorkoutSchema = Joi.object({
@@ -19,6 +38,7 @@ export const updateWorkoutSchema = Joi.object({
   durationMinutes: Joi.number().integer().min(1).max(360),
   notes: Joi.string().trim().allow('', null),
   isCompleted: Joi.boolean(),
+  exercises: Joi.array().optional(),
 });
 
 export const createExerciseSchema = Joi.object({
@@ -29,6 +49,8 @@ export const createExerciseSchema = Joi.object({
   category: Joi.string()
     .valid('CHEST', 'BACK', 'LEGS', 'SHOULDERS', 'ARMS', 'CORE', 'CARDIO')
     .default('CHEST'),
+  muscleGroup: Joi.string().trim().allow('', null),
+  equipmentType: Joi.string().trim().allow('', null),
   notes: Joi.string().trim().allow('', null),
 });
 
@@ -41,6 +63,7 @@ export const addExerciseToWorkoutSchema = Joi.object({
         setNumber: Joi.number().integer().min(1).required(),
         weightKg: Joi.number().min(0).required(),
         repetitions: Joi.number().integer().min(0).required(),
+        rpe: Joi.number().min(0).max(10).allow(null),
         notes: Joi.string().trim().allow('', null),
       })
     )
@@ -51,6 +74,7 @@ export const recordSetSchema = Joi.object({
   setNumber: Joi.number().integer().min(1).required(),
   weightKg: Joi.number().min(0).required(),
   repetitions: Joi.number().integer().min(0).required(),
+  rpe: Joi.number().min(0).max(10).allow(null),
   notes: Joi.string().trim().allow('', null),
 });
 
@@ -59,10 +83,12 @@ export const recordBodyMetricSchema = Joi.object({
   weightKg: Joi.number().min(20).max(300).required().messages({
     'any.required': 'Body weight in kg is required',
   }),
+  bodyFatPercent: Joi.number().min(0).max(100).allow(null),
   chestCm: Joi.number().min(0).allow(null),
   waistCm: Joi.number().min(0).allow(null),
   armsCm: Joi.number().min(0).allow(null),
   legsCm: Joi.number().min(0).allow(null),
+  photoUrl: Joi.string().allow('', null),
   notes: Joi.string().trim().allow('', null),
 });
 

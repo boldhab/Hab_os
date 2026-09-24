@@ -13,6 +13,9 @@ export interface CreateTaskDTO {
   projectId?: string | null;
   goalId?: string | null;
   categoryId?: string | null;
+  parentTaskId?: string | null;
+  isRecurring?: boolean;
+  recurrenceRule?: string | null;
 }
 
 export interface UpdateTaskDTO {
@@ -26,6 +29,9 @@ export interface UpdateTaskDTO {
   projectId?: string | null;
   goalId?: string | null;
   categoryId?: string | null;
+  parentTaskId?: string | null;
+  isRecurring?: boolean;
+  recurrenceRule?: string | null;
 }
 
 export interface GetTasksQuery {
@@ -36,8 +42,9 @@ export interface GetTasksQuery {
   goalId?: string;
   categoryId?: string;
   search?: string;
-  page?: number;
-  limit?: number;
+  parentTaskId?: string;
+  page?: number | string;
+  limit?: number | string;
 }
 
 /**
@@ -68,12 +75,10 @@ const recalculateGoalProgress = async (goalId: string) => {
   const totalItems = totalMilestones + totalTasks;
   if (totalItems === 0) return;
 
-  const completedMilestones = await prisma.milestone.count({
-    where: { goalId, isCompleted: true },
-  });
-  const completedTasks = await prisma.task.count({
-    where: { goalId, isCompleted: true },
-  });
+  const [completedMilestones, completedTasks] = await Promise.all([
+    prisma.milestone.count({ where: { goalId, isCompleted: true } }),
+    prisma.task.count({ where: { goalId, isCompleted: true } }),
+  ]);
 
   const progress = Number((((completedMilestones + completedTasks) / totalItems) * 100).toFixed(1));
   await prisma.goal.update({
@@ -83,40 +88,129 @@ const recalculateGoalProgress = async (goalId: string) => {
 };
 
 /**
- * UC-10: Create a new Task
+ * Helper: Automatically synchronizes parent task status based on subtasks
+ */
+const evaluateParentCompletion = async (userId: string, parentTaskId: string): Promise<void> => {
+  const parent = await prisma.task.findFirst({
+    where: { id: parentTaskId, userId },
+    include: { subtasks: true },
+  });
+
+  if (!parent || parent.subtasks.length === 0) return;
+
+  const allSubtasksDone = parent.subtasks.every((s) => s.isCompleted);
+
+  if (allSubtasksDone && !parent.isCompleted) {
+    await prisma.task.update({
+      where: { id: parentTaskId },
+      data: {
+        isCompleted: true,
+        status: 'COMPLETED',
+        completedAt: new Date(),
+      },
+    });
+  } else if (!allSubtasksDone && parent.isCompleted) {
+    await prisma.task.update({
+      where: { id: parentTaskId },
+      data: {
+        isCompleted: false,
+        status: 'IN_PROGRESS',
+        completedAt: null,
+      },
+    });
+  }
+};
+
+/**
+ * Helper: Spawns next occurrence for a recurring task
+ */
+const generateNextRecurringInstance = async (userId: string, task: any): Promise<void> => {
+  const baseDate = task.dueDate ? new Date(task.dueDate) : new Date();
+  const nextDate = new Date(baseDate);
+  const rule = (task.recurrenceRule || 'DAILY').toUpperCase();
+
+  if (rule.includes('WEEKLY')) {
+    nextDate.setDate(nextDate.getDate() + 7);
+  } else if (rule.includes('MONTHLY')) {
+    nextDate.setMonth(nextDate.getMonth() + 1);
+  } else {
+    nextDate.setDate(nextDate.getDate() + 1);
+  }
+
+  const now = new Date();
+  if (nextDate <= now) {
+    nextDate.setDate(now.getDate() + 1);
+  }
+
+  await prisma.task.create({
+    data: {
+      userId,
+      title: task.title,
+      description: task.description,
+      priority: task.priority,
+      status: 'TODO',
+      isCompleted: false,
+      dueDate: nextDate,
+      estimatedMinutes: task.estimatedMinutes,
+      projectId: task.projectId,
+      categoryId: task.categoryId,
+      goalId: task.goalId,
+      parentTaskId: task.parentTaskId,
+      isRecurring: true,
+      recurrenceRule: task.recurrenceRule,
+    },
+  });
+};
+
+/**
+ * Cycle detection via DFS
+ */
+const detectCycle = async (sourceId: string, targetId: string): Promise<boolean> => {
+  const visited = new Set<string>();
+  const queue = [targetId];
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    if (current === sourceId) {
+      return true;
+    }
+
+    visited.add(current);
+
+    const dependencies = await prisma.taskDependency.findMany({
+      where: { blockedTaskId: current },
+      select: { blockingTaskId: true },
+    });
+
+    for (const dep of dependencies) {
+      if (!visited.has(dep.blockingTaskId)) {
+        queue.push(dep.blockingTaskId);
+      }
+    }
+  }
+
+  return false;
+};
+
+/**
+ * UC-10: Create Task
  */
 export const createTask = async (userId: string, data: CreateTaskDTO) => {
-  // Validate relations ownership
-  if (data.projectId) {
-    const project = await prisma.project.findFirst({ where: { id: data.projectId, userId } });
-    if (!project) throw new ApiError(404, 'Associated project not found');
-  }
-  if (data.goalId) {
-    const goal = await prisma.goal.findFirst({ where: { id: data.goalId, userId } });
-    if (!goal) throw new ApiError(404, 'Associated goal not found');
-  }
-  if (data.categoryId) {
-    const category = await prisma.category.findFirst({ where: { id: data.categoryId, userId } });
-    if (!category) throw new ApiError(404, 'Associated category not found');
-  }
-
-  const isCompleted = data.status === 'COMPLETED';
-  const completedAt = isCompleted ? new Date() : null;
-
   const task = await prisma.task.create({
     data: {
       title: data.title,
       description: data.description,
       priority: data.priority || 'MEDIUM',
       status: data.status || 'TODO',
-      isCompleted,
-      completedAt,
       dueDate: data.dueDate ? new Date(data.dueDate) : null,
       estimatedMinutes: data.estimatedMinutes,
+      parentTaskId: data.parentTaskId || null,
+      isRecurring: data.isRecurring || false,
+      recurrenceRule: data.recurrenceRule || null,
       userId,
-      projectId: data.projectId || null,
-      goalId: data.goalId || null,
-      categoryId: data.categoryId || null,
+      projectId: data.projectId,
+      goalId: data.goalId,
+      categoryId: data.categoryId,
     },
     include: {
       project: { select: { id: true, title: true, color: true } },
@@ -129,16 +223,18 @@ export const createTask = async (userId: string, data: CreateTaskDTO) => {
   if (data.goalId) await recalculateGoalProgress(data.goalId);
 
   invalidateDashboardCache(userId);
-
   return task;
 };
 
 /**
- * UC-15 & UC-16: Get Tasks with Filtering & Views
+ * UC-15, UC-16: Get Tasks with Filtering, Views, Search and Pagination
  */
 export const getTasks = async (userId: string, query: GetTasksQuery) => {
-  const { view = 'all', status, priority, projectId, goalId, categoryId, search, page = 1, limit = 20 } = query;
+  const page = Math.max(1, Number(query.page) || 1);
+  const limit = Math.min(100, Math.max(1, Number(query.limit) || 20));
   const skip = (page - 1) * limit;
+
+  const { view, status, priority, projectId, goalId, categoryId, search, parentTaskId } = query;
 
   const now = new Date();
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -146,11 +242,10 @@ export const getTasks = async (userId: string, query: GetTasksQuery) => {
 
   const where: Prisma.TaskWhereInput = { userId };
 
-  // Apply Views
   if (view === 'today') {
     where.OR = [
       { dueDate: { gte: startOfToday, lte: endOfToday } },
-      { dueDate: { lt: startOfToday }, isCompleted: false }, // Overdue tasks appear in today's view
+      { dueDate: { lt: startOfToday }, isCompleted: false },
     ];
   } else if (view === 'upcoming') {
     where.dueDate = { gt: endOfToday };
@@ -162,14 +257,16 @@ export const getTasks = async (userId: string, query: GetTasksQuery) => {
     where.isCompleted = true;
   }
 
-  // Apply Filters
   if (status) where.status = status;
   if (priority) where.priority = priority;
   if (projectId) where.projectId = projectId;
   if (goalId) where.goalId = goalId;
   if (categoryId) where.categoryId = categoryId;
 
-  // Search keyword (UC-167)
+  if (parentTaskId !== undefined) {
+    where.parentTaskId = parentTaskId === 'null' || parentTaskId === '' ? null : parentTaskId;
+  }
+
   if (search && search.trim() !== '') {
     where.AND = [
       {
@@ -181,7 +278,7 @@ export const getTasks = async (userId: string, query: GetTasksQuery) => {
     ];
   }
 
-  const [tasks, total] = await Promise.all([
+  const [rawTasks, total] = await Promise.all([
     prisma.task.findMany({
       where,
       skip,
@@ -196,19 +293,60 @@ export const getTasks = async (userId: string, query: GetTasksQuery) => {
         project: { select: { id: true, title: true, color: true } },
         goal: { select: { id: true, title: true } },
         category: { select: { id: true, name: true, color: true, icon: true } },
+        subtasks: {
+          select: {
+            id: true,
+            title: true,
+            isCompleted: true,
+            status: true,
+            priority: true,
+          },
+        },
+        blockedBy: {
+          include: {
+            blockingTask: {
+              select: { id: true, title: true, isCompleted: true },
+            },
+          },
+        },
       },
     }),
     prisma.task.count({ where }),
   ]);
 
+  const formatted = rawTasks.map((t) => {
+    const subtaskCount = t.subtasks?.length || 0;
+    const completedSubtaskCount = t.subtasks?.filter((s) => s.isCompleted).length || 0;
+    const incompleteBlockers = t.blockedBy?.filter((b) => !b.blockingTask.isCompleted) || [];
+
+    return {
+      ...t,
+      subtaskProgress: {
+        total: subtaskCount,
+        completed: completedSubtaskCount,
+        fraction: `${completedSubtaskCount}/${subtaskCount}`,
+        percent: subtaskCount > 0 ? Math.round((completedSubtaskCount / subtaskCount) * 100) : 0,
+      },
+      isBlocked: incompleteBlockers.length > 0,
+      blockedByPrerequisites: incompleteBlockers.map((b) => ({
+        id: b.blockingTask.id,
+        title: b.blockingTask.title,
+      })),
+    };
+  });
+
+  const paginationMeta = {
+    total,
+    page,
+    limit,
+    totalPages: Math.ceil(total / limit),
+  };
+
   return {
-    tasks,
-    pagination: {
-      total,
-      page,
-      limit,
-      totalPages: Math.ceil(total / limit),
-    },
+    tasks: formatted,
+    data: formatted,
+    pagination: paginationMeta,
+    meta: paginationMeta,
   };
 };
 
@@ -222,6 +360,12 @@ export const getTaskById = async (userId: string, taskId: string) => {
       project: true,
       goal: true,
       category: true,
+      subtasks: true,
+      blockedBy: {
+        include: {
+          blockingTask: true,
+        },
+      },
       timeEntries: { orderBy: { startTime: 'desc' } },
       focusSessions: { orderBy: { startTime: 'desc' } },
     },
@@ -253,8 +397,12 @@ export const updateTask = async (userId: string, taskId: string, data: UpdateTas
   if (data.priority !== undefined) updateData.priority = data.priority;
   if (data.estimatedMinutes !== undefined) updateData.estimatedMinutes = data.estimatedMinutes;
   if (data.dueDate !== undefined) updateData.dueDate = data.dueDate ? new Date(data.dueDate) : null;
+  if (data.parentTaskId !== undefined) {
+    updateData.parentTask = data.parentTaskId ? { connect: { id: data.parentTaskId } } : { disconnect: true };
+  }
+  if (data.isRecurring !== undefined) updateData.isRecurring = data.isRecurring;
+  if (data.recurrenceRule !== undefined) updateData.recurrenceRule = data.recurrenceRule;
 
-  // Handle completion status transition
   if (data.isCompleted !== undefined || data.status !== undefined) {
     const isCompleted = data.isCompleted !== undefined ? data.isCompleted : data.status === 'COMPLETED';
     updateData.isCompleted = isCompleted;
@@ -282,7 +430,14 @@ export const updateTask = async (userId: string, taskId: string, data: UpdateTas
     },
   });
 
-  // Downstream Progress Updates
+  if (existingTask.parentTaskId) {
+    await evaluateParentCompletion(userId, existingTask.parentTaskId);
+  }
+
+  if (!existingTask.isCompleted && updatedTask.isCompleted && updatedTask.isRecurring) {
+    await generateNextRecurringInstance(userId, updatedTask);
+  }
+
   const affectedProjects = [existingTask.projectId, data.projectId].filter(Boolean) as string[];
   for (const pid of new Set(affectedProjects)) {
     await recalculateProjectProgress(pid);
@@ -294,7 +449,6 @@ export const updateTask = async (userId: string, taskId: string, data: UpdateTas
   }
 
   invalidateDashboardCache(userId);
-
   return updatedTask;
 };
 
@@ -328,13 +482,22 @@ export const toggleTaskComplete = async (userId: string, taskId: string) => {
     },
   });
 
+  if (task.parentTaskId) {
+    await evaluateParentCompletion(userId, task.parentTaskId);
+  }
+
+  if (!task.isCompleted && updatedTask.isCompleted && updatedTask.isRecurring) {
+    await generateNextRecurringInstance(userId, updatedTask);
+  }
+
   if (task.projectId) await recalculateProjectProgress(task.projectId);
   if (task.goalId) await recalculateGoalProgress(task.goalId);
 
   invalidateDashboardCache(userId);
-
   return updatedTask;
 };
+
+export const toggleComplete = toggleTaskComplete;
 
 /**
  * UC-12: Delete Task
@@ -354,7 +517,6 @@ export const deleteTask = async (userId: string, taskId: string) => {
   if (task.goalId) await recalculateGoalProgress(task.goalId);
 
   invalidateDashboardCache(userId);
-
   return { message: 'Task deleted successfully' };
 };
 
@@ -402,12 +564,173 @@ export const getTaskStats = async (userId: string) => {
   };
 };
 
+/**
+ * Create subtask under parent task
+ */
+export const createSubtask = async (userId: string, parentTaskId: string, data: any) => {
+  const parent = await prisma.task.findFirst({
+    where: { id: parentTaskId, userId },
+  });
+
+  if (!parent) {
+    throw new ApiError(404, 'Parent task not found or access denied');
+  }
+
+  const subtask = await prisma.task.create({
+    data: {
+      userId,
+      parentTaskId,
+      title: data.title,
+      description: data.description || null,
+      priority: data.priority || parent.priority,
+      status: 'TODO',
+      isCompleted: false,
+      projectId: parent.projectId,
+      goalId: parent.goalId,
+      categoryId: parent.categoryId,
+    },
+  });
+
+  return subtask;
+};
+
+/**
+ * Add task blocker dependency
+ */
+export const addDependency = async (userId: string, blockedTaskId: string, blockingTaskId: string) => {
+  if (blockedTaskId === blockingTaskId) {
+    throw new ApiError(400, 'A task cannot depend on itself');
+  }
+
+  const [blocked, blocking] = await Promise.all([
+    prisma.task.findFirst({ where: { id: blockedTaskId, userId } }),
+    prisma.task.findFirst({ where: { id: blockingTaskId, userId } }),
+  ]);
+
+  if (!blocked || !blocking) {
+    throw new ApiError(404, 'One or both tasks not found or access denied');
+  }
+
+  const hasCycle = await detectCycle(blockedTaskId, blockingTaskId);
+  if (hasCycle) {
+    throw new ApiError(
+      400,
+      'Circular dependency detected: adding this relation would create an infinite dependency loop'
+    );
+  }
+
+  return await prisma.taskDependency.create({
+    data: {
+      blockedTaskId,
+      blockingTaskId,
+    },
+    include: {
+      blockingTask: { select: { id: true, title: true, isCompleted: true } },
+      blockedTask: { select: { id: true, title: true } },
+    },
+  });
+};
+
+/**
+ * Remove task dependency
+ */
+export const removeDependency = async (userId: string, blockedTaskId: string, blockingTaskId: string) => {
+  const blocked = await prisma.task.findFirst({ where: { id: blockedTaskId, userId } });
+  if (!blocked) {
+    throw new ApiError(404, 'Task not found or access denied');
+  }
+
+  await prisma.taskDependency.deleteMany({
+    where: {
+      blockedTaskId,
+      blockingTaskId,
+    },
+  });
+};
+
+/**
+ * Eisenhower Matrix: 2x2 Quadrant Categorization
+ */
+export const getEisenhowerMatrix = async (userId: string) => {
+  const tasks = await prisma.task.findMany({
+    where: {
+      userId,
+      isCompleted: false,
+    },
+    include: {
+      project: { select: { id: true, title: true } },
+      category: true,
+      subtasks: { select: { id: true, isCompleted: true } },
+    },
+    orderBy: { dueDate: 'asc' },
+  });
+
+  const now = new Date();
+  const urgentThreshold = new Date(now.getTime() + 48 * 60 * 60 * 1000);
+
+  const q1: any[] = [];
+  const q2: any[] = [];
+  const q3: any[] = [];
+  const q4: any[] = [];
+
+  for (const task of tasks) {
+    const isImportant = task.priority === 'HIGH' || task.priority === 'CRITICAL';
+    const isUrgent = task.dueDate !== null && new Date(task.dueDate) <= urgentThreshold;
+
+    if (isImportant && isUrgent) {
+      q1.push(task);
+    } else if (isImportant && !isUrgent) {
+      q2.push(task);
+    } else if (!isImportant && isUrgent) {
+      q3.push(task);
+    } else {
+      q4.push(task);
+    }
+  }
+
+  return {
+    quadrants: {
+      q1_urgent_important: {
+        label: 'Do First (Urgent & Important)',
+        description: 'Pressing deadlines and critical issues',
+        items: q1,
+        count: q1.length,
+      },
+      q2_not_urgent_important: {
+        label: 'Schedule (Important & Not Urgent)',
+        description: 'Long-term strategies, deep work, and high-leverage goals',
+        items: q2,
+        count: q2.length,
+      },
+      q3_urgent_not_important: {
+        label: 'Delegate / Expedite (Urgent & Not Important)',
+        description: 'Time-sensitive requests that do not drive primary outcomes',
+        items: q3,
+        count: q3.length,
+      },
+      q4_not_urgent_not_important: {
+        label: 'Eliminate / Backlog (Not Urgent & Not Important)',
+        description: 'Low impact tasks and distractions',
+        items: q4,
+        count: q4.length,
+      },
+    },
+    totalActiveTasks: tasks.length,
+    generatedAt: new Date().toISOString(),
+  };
+};
+
 export default {
   createTask,
   getTasks,
   getTaskById,
   updateTask,
   toggleTaskComplete,
+  toggleComplete,
   deleteTask,
   getTaskStats,
+  createSubtask,
+  addDependency,
+  removeDependency,
+  getEisenhowerMatrix,
 };

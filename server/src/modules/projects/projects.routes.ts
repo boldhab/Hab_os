@@ -1,70 +1,210 @@
-import { Router } from 'express';
-import * as projectsController from './projects.controller';
-import { authenticate } from '../../middleware/auth';
-import { validate } from '../../middleware/validate';
-import {
-  createProjectSchema,
-  updateProjectSchema,
-  createFeatureSchema,
-  updateFeatureSchema,
-  createBugSchema,
-  updateBugSchema,
-  uuidParamSchema,
-  projectFeatureParamSchema,
-  projectBugParamSchema,
-} from './projects.validation';
+import { Router, Request, Response } from 'express';
+import ApiResponse from '../../common/apiResponse';
+import asyncHandler from '../../common/asyncHandler';
+import authenticate, { AuthRequest } from '../../middleware/auth';
+import projectsService from './projects.service';
 
 const router = Router();
 
-// All project routes require authentication
 router.use(authenticate);
 
-// --- Projects (UC-38 to UC-42) ---
-router.post('/', validate(createProjectSchema), projectsController.createProject);
-router.get('/', projectsController.getProjects);
-router.get('/:id', validate(uuidParamSchema, 'params'), projectsController.getProjectById);
-router.put(
+// ==========================================
+// 1. TECH STACK INSIGHTS (Cross-Project)
+// ==========================================
+
+router.get(
+  '/insights/tech-stack',
+  asyncHandler(async (req: Request, res: Response) => {
+    const authReq = req as AuthRequest;
+    const insights = await projectsService.getTechStackInsights(authReq.user!.id);
+    return ApiResponse.success(res, insights, 'Tech stack insights retrieved');
+  })
+);
+
+// ==========================================
+// 2. PROJECTS CRUD
+// ==========================================
+
+router.get(
+  '/',
+  asyncHandler(async (req: Request, res: Response) => {
+    const authReq = req as AuthRequest;
+    const { status, page, limit } = req.query;
+    const pageNum = page ? parseInt(page as string, 10) : undefined;
+    const limitNum = limit ? parseInt(limit as string, 10) : undefined;
+    const projects = await projectsService.getProjects(authReq.user!.id, status as string, pageNum, limitNum);
+    return ApiResponse.success(res, projects, 'Projects retrieved');
+  })
+);
+
+router.post(
+  '/',
+  asyncHandler(async (req: Request, res: Response) => {
+    const authReq = req as AuthRequest;
+    const project = await projectsService.createProject(authReq.user!.id, req.body);
+    return ApiResponse.success(res, project, 'Project created', 201);
+  })
+);
+
+router.get(
   '/:id',
-  validate(uuidParamSchema, 'params'),
-  validate(updateProjectSchema),
-  projectsController.updateProject
-);
-router.delete('/:id', validate(uuidParamSchema, 'params'), projectsController.deleteProject);
-
-// --- Features (UC-43 to UC-47) ---
-router.post(
-  '/:projectId/features',
-  validate(createFeatureSchema),
-  projectsController.createFeature
-);
-router.put(
-  '/:projectId/features/:featureId',
-  validate(projectFeatureParamSchema, 'params'),
-  validate(updateFeatureSchema),
-  projectsController.updateFeature
-);
-router.delete(
-  '/:projectId/features/:featureId',
-  validate(projectFeatureParamSchema, 'params'),
-  projectsController.deleteFeature
+  asyncHandler(async (req: Request, res: Response) => {
+    const authReq = req as AuthRequest;
+    const project = await projectsService.getProjectById(authReq.user!.id, req.params.id);
+    return ApiResponse.success(res, project, 'Project retrieved');
+  })
 );
 
-// --- Bugs (UC-48 to UC-52) ---
-router.post(
-  '/:projectId/bugs',
-  validate(createBugSchema),
-  projectsController.createBug
-);
-router.put(
-  '/:projectId/bugs/:bugId',
-  validate(projectBugParamSchema, 'params'),
-  validate(updateBugSchema),
-  projectsController.updateBug
-);
+const handleUpdateProject = asyncHandler(async (req: Request, res: Response) => {
+  const authReq = req as AuthRequest;
+  const project = await projectsService.updateProject(authReq.user!.id, req.params.id, req.body);
+  return ApiResponse.success(res, project, 'Project updated');
+});
+
+router.put('/:id', handleUpdateProject);
+router.patch('/:id', handleUpdateProject);
+
 router.delete(
-  '/:projectId/bugs/:bugId',
-  validate(projectBugParamSchema, 'params'),
-  projectsController.deleteBug
+  '/:id',
+  asyncHandler(async (req: Request, res: Response) => {
+    const authReq = req as AuthRequest;
+    await projectsService.deleteProject(authReq.user!.id, req.params.id);
+    return ApiResponse.success(res, null, 'Project deleted');
+  })
+);
+
+// ==========================================
+// 3. FEATURES CRUD
+// ==========================================
+
+router.get(
+  '/:id/features',
+  asyncHandler(async (req: Request, res: Response) => {
+    const authReq = req as AuthRequest;
+    const features = await projectsService.getFeatures(authReq.user!.id, req.params.id, req.query);
+    return ApiResponse.success(res, features, 'Project features retrieved');
+  })
+);
+
+router.post(
+  '/:id/features',
+  asyncHandler(async (req: Request, res: Response) => {
+    const authReq = req as AuthRequest;
+    const feature = await projectsService.createFeature(authReq.user!.id, req.params.id, req.body);
+    return ApiResponse.success(res, feature, 'Feature created', 201);
+  })
+);
+
+const handleUpdateFeature = asyncHandler(async (req: Request, res: Response) => {
+  const authReq = req as AuthRequest;
+  const feature = await projectsService.updateFeature(
+    authReq.user!.id,
+    req.params.id,
+    req.params.featureId,
+    req.body
+  );
+  return ApiResponse.success(res, feature, 'Feature updated');
+});
+
+router.put('/:id/features/:featureId', handleUpdateFeature);
+router.patch('/:id/features/:featureId', handleUpdateFeature);
+
+router.delete(
+  '/:id/features/:featureId',
+  asyncHandler(async (req: Request, res: Response) => {
+    const authReq = req as AuthRequest;
+    await projectsService.deleteFeature(authReq.user!.id, req.params.id, req.params.featureId);
+    return ApiResponse.success(res, null, 'Feature deleted');
+  })
+);
+
+// ==========================================
+// 4. BUGS CRUD
+// ==========================================
+
+router.get(
+  '/:id/bugs',
+  asyncHandler(async (req: Request, res: Response) => {
+    const authReq = req as AuthRequest;
+    const bugs = await projectsService.getBugs(authReq.user!.id, req.params.id, req.query);
+    return ApiResponse.success(res, bugs, 'Project bugs retrieved');
+  })
+);
+
+router.post(
+  '/:id/bugs',
+  asyncHandler(async (req: Request, res: Response) => {
+    const authReq = req as AuthRequest;
+    const bug = await projectsService.createBug(authReq.user!.id, req.params.id, req.body);
+    return ApiResponse.success(res, bug, 'Bug created', 201);
+  })
+);
+
+const handleUpdateBug = asyncHandler(async (req: Request, res: Response) => {
+  const authReq = req as AuthRequest;
+  const bug = await projectsService.updateBug(
+    authReq.user!.id,
+    req.params.id,
+    req.params.bugId,
+    req.body
+  );
+  return ApiResponse.success(res, bug, 'Bug updated');
+});
+
+router.put('/:id/bugs/:bugId', handleUpdateBug);
+router.patch('/:id/bugs/:bugId', handleUpdateBug);
+
+router.delete(
+  '/:id/bugs/:bugId',
+  asyncHandler(async (req: Request, res: Response) => {
+    const authReq = req as AuthRequest;
+    await projectsService.deleteBug(authReq.user!.id, req.params.id, req.params.bugId);
+    return ApiResponse.success(res, null, 'Bug deleted');
+  })
+);
+
+// ==========================================
+// 5. KANBAN BOARD & MOVE
+// ==========================================
+
+router.get(
+  '/:id/board',
+  asyncHandler(async (req: Request, res: Response) => {
+    const authReq = req as AuthRequest;
+    const board = await projectsService.getBoard(authReq.user!.id, req.params.id);
+    return ApiResponse.success(res, board, 'Project board retrieved');
+  })
+);
+
+router.post(
+  '/:id/board/move',
+  asyncHandler(async (req: Request, res: Response) => {
+    const authReq = req as AuthRequest;
+    const result = await projectsService.moveBoardItem(authReq.user!.id, req.params.id, req.body);
+    return ApiResponse.success(res, result, 'Board item moved');
+  })
+);
+
+// ==========================================
+// 6. ANALYTICS & COMMITS
+// ==========================================
+
+router.get(
+  '/:id/analytics',
+  asyncHandler(async (req: Request, res: Response) => {
+    const authReq = req as AuthRequest;
+    const analytics = await projectsService.getProjectAnalytics(authReq.user!.id, req.params.id);
+    return ApiResponse.success(res, analytics, 'Project analytics retrieved');
+  })
+);
+
+router.get(
+  '/:id/commits',
+  asyncHandler(async (req: Request, res: Response) => {
+    const authReq = req as AuthRequest;
+    const commits = await projectsService.getProjectCommits(authReq.user!.id, req.params.id);
+    return ApiResponse.success(res, commits, 'Project commits retrieved');
+  })
 );
 
 export default router;
