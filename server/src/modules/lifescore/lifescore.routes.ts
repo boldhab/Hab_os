@@ -1,4 +1,14 @@
-import { Router, Request, Response } from 'express';
+import { Router } from 'express';
+import * as lifeScoreController from './lifescore.controller';
+import { authenticate } from '../../middleware/auth';
+
 const router = Router();
-router.get('/', (_req: Request, res: Response) => { res.json({ message: 'Lifescore endpoint ready' }); });
+
+// All lifescore routes require authentication
+router.use(authenticate);
+
+router.get('/', lifeScoreController.getLifeScore);
+router.post('/snapshot', lifeScoreController.snapshotLifeScore);
+router.get('/history', lifeScoreController.getLifeScoreHistory);
+
 export default router;

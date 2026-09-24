@@ -12,9 +12,6 @@ router.use(authenticate);
 // 1. TECH STACK INSIGHTS (Cross-Project)
 // ==========================================
 
-/**
- * GET /api/v1/projects/insights/tech-stack
- */
 router.get(
   '/insights/tech-stack',
   asyncHandler(async (req: Request, res: Response) => {
@@ -28,21 +25,18 @@ router.get(
 // 2. PROJECTS CRUD
 // ==========================================
 
-/**
- * GET /api/v1/projects
- */
 router.get(
   '/',
   asyncHandler(async (req: Request, res: Response) => {
     const authReq = req as AuthRequest;
-    const projects = await projectsService.getProjects(authReq.user!.id);
+    const { status, page, limit } = req.query;
+    const pageNum = page ? parseInt(page as string, 10) : undefined;
+    const limitNum = limit ? parseInt(limit as string, 10) : undefined;
+    const projects = await projectsService.getProjects(authReq.user!.id, status as string, pageNum, limitNum);
     return ApiResponse.success(res, projects, 'Projects retrieved');
   })
 );
 
-/**
- * POST /api/v1/projects
- */
 router.post(
   '/',
   asyncHandler(async (req: Request, res: Response) => {
@@ -52,9 +46,6 @@ router.post(
   })
 );
 
-/**
- * GET /api/v1/projects/:id
- */
 router.get(
   '/:id',
   asyncHandler(async (req: Request, res: Response) => {
@@ -64,21 +55,15 @@ router.get(
   })
 );
 
-/**
- * PATCH /api/v1/projects/:id
- */
-router.patch(
-  '/:id',
-  asyncHandler(async (req: Request, res: Response) => {
-    const authReq = req as AuthRequest;
-    const project = await projectsService.updateProject(authReq.user!.id, req.params.id, req.body);
-    return ApiResponse.success(res, project, 'Project updated');
-  })
-);
+const handleUpdateProject = asyncHandler(async (req: Request, res: Response) => {
+  const authReq = req as AuthRequest;
+  const project = await projectsService.updateProject(authReq.user!.id, req.params.id, req.body);
+  return ApiResponse.success(res, project, 'Project updated');
+});
 
-/**
- * DELETE /api/v1/projects/:id
- */
+router.put('/:id', handleUpdateProject);
+router.patch('/:id', handleUpdateProject);
+
 router.delete(
   '/:id',
   asyncHandler(async (req: Request, res: Response) => {
@@ -92,9 +77,6 @@ router.delete(
 // 3. FEATURES CRUD
 // ==========================================
 
-/**
- * GET /api/v1/projects/:id/features
- */
 router.get(
   '/:id/features',
   asyncHandler(async (req: Request, res: Response) => {
@@ -104,9 +86,6 @@ router.get(
   })
 );
 
-/**
- * POST /api/v1/projects/:id/features
- */
 router.post(
   '/:id/features',
   asyncHandler(async (req: Request, res: Response) => {
@@ -116,26 +95,20 @@ router.post(
   })
 );
 
-/**
- * PATCH /api/v1/projects/:id/features/:featureId
- */
-router.patch(
-  '/:id/features/:featureId',
-  asyncHandler(async (req: Request, res: Response) => {
-    const authReq = req as AuthRequest;
-    const feature = await projectsService.updateFeature(
-      authReq.user!.id,
-      req.params.id,
-      req.params.featureId,
-      req.body
-    );
-    return ApiResponse.success(res, feature, 'Feature updated');
-  })
-);
+const handleUpdateFeature = asyncHandler(async (req: Request, res: Response) => {
+  const authReq = req as AuthRequest;
+  const feature = await projectsService.updateFeature(
+    authReq.user!.id,
+    req.params.id,
+    req.params.featureId,
+    req.body
+  );
+  return ApiResponse.success(res, feature, 'Feature updated');
+});
 
-/**
- * DELETE /api/v1/projects/:id/features/:featureId
- */
+router.put('/:id/features/:featureId', handleUpdateFeature);
+router.patch('/:id/features/:featureId', handleUpdateFeature);
+
 router.delete(
   '/:id/features/:featureId',
   asyncHandler(async (req: Request, res: Response) => {
@@ -149,9 +122,6 @@ router.delete(
 // 4. BUGS CRUD
 // ==========================================
 
-/**
- * GET /api/v1/projects/:id/bugs
- */
 router.get(
   '/:id/bugs',
   asyncHandler(async (req: Request, res: Response) => {
@@ -161,9 +131,6 @@ router.get(
   })
 );
 
-/**
- * POST /api/v1/projects/:id/bugs
- */
 router.post(
   '/:id/bugs',
   asyncHandler(async (req: Request, res: Response) => {
@@ -173,26 +140,20 @@ router.post(
   })
 );
 
-/**
- * PATCH /api/v1/projects/:id/bugs/:bugId
- */
-router.patch(
-  '/:id/bugs/:bugId',
-  asyncHandler(async (req: Request, res: Response) => {
-    const authReq = req as AuthRequest;
-    const bug = await projectsService.updateBug(
-      authReq.user!.id,
-      req.params.id,
-      req.params.bugId,
-      req.body
-    );
-    return ApiResponse.success(res, bug, 'Bug updated');
-  })
-);
+const handleUpdateBug = asyncHandler(async (req: Request, res: Response) => {
+  const authReq = req as AuthRequest;
+  const bug = await projectsService.updateBug(
+    authReq.user!.id,
+    req.params.id,
+    req.params.bugId,
+    req.body
+  );
+  return ApiResponse.success(res, bug, 'Bug updated');
+});
 
-/**
- * DELETE /api/v1/projects/:id/bugs/:bugId
- */
+router.put('/:id/bugs/:bugId', handleUpdateBug);
+router.patch('/:id/bugs/:bugId', handleUpdateBug);
+
 router.delete(
   '/:id/bugs/:bugId',
   asyncHandler(async (req: Request, res: Response) => {
@@ -206,9 +167,6 @@ router.delete(
 // 5. KANBAN BOARD & MOVE
 // ==========================================
 
-/**
- * GET /api/v1/projects/:id/board
- */
 router.get(
   '/:id/board',
   asyncHandler(async (req: Request, res: Response) => {
@@ -218,9 +176,6 @@ router.get(
   })
 );
 
-/**
- * POST /api/v1/projects/:id/board/move
- */
 router.post(
   '/:id/board/move',
   asyncHandler(async (req: Request, res: Response) => {
@@ -234,9 +189,6 @@ router.post(
 // 6. ANALYTICS & COMMITS
 // ==========================================
 
-/**
- * GET /api/v1/projects/:id/analytics
- */
 router.get(
   '/:id/analytics',
   asyncHandler(async (req: Request, res: Response) => {
@@ -246,9 +198,6 @@ router.get(
   })
 );
 
-/**
- * GET /api/v1/projects/:id/commits
- */
 router.get(
   '/:id/commits',
   asyncHandler(async (req: Request, res: Response) => {

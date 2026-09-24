@@ -1,4 +1,14 @@
-import { Router, Request, Response } from 'express';
+import { Router } from 'express';
+import * as searchController from './search.controller';
+import { authenticate } from '../../middleware/auth';
+import { validate } from '../../middleware/validate';
+import { globalSearchQuerySchema } from './search.validation';
+
 const router = Router();
-router.get('/', (_req: Request, res: Response) => { res.json({ message: 'Search endpoint ready' }); });
+
+// All search routes require authentication
+router.use(authenticate);
+
+router.get('/', validate(globalSearchQuerySchema, 'query'), searchController.searchGlobal);
+
 export default router;

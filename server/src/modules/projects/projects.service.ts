@@ -197,9 +197,12 @@ export class ProjectsService {
   /**
    * List all projects for a user with computed stats, health badges, and focus hours
    */
-  async getProjects(userId: string) {
+  async getProjects(userId: string, status?: string, page?: number, limit?: number) {
+    const where: any = { userId };
+    if (status) where.status = status;
+
     const projects = await prisma.project.findMany({
-      where: { userId },
+      where,
       include: {
         _count: {
           select: { tasks: true, features: true, bugs: true },
@@ -287,6 +290,20 @@ export class ProjectsService {
           openCriticalBugs,
         },
       });
+    }
+
+    if (page && limit && limit > 0) {
+      const skip = (page - 1) * limit;
+      const paginatedResults = results.slice(skip, skip + limit);
+      return {
+        data: paginatedResults,
+        meta: {
+          total: results.length,
+          page,
+          limit,
+          totalPages: Math.ceil(results.length / limit),
+        },
+      };
     }
 
     return results;
@@ -1023,4 +1040,20 @@ export class ProjectsService {
   }
 }
 
-export default new ProjectsService();
+const projectsServiceInstance = new ProjectsService();
+
+export const createProject = projectsServiceInstance.createProject.bind(projectsServiceInstance);
+export const getProjects = projectsServiceInstance.getProjects.bind(projectsServiceInstance);
+export const getProjectById = projectsServiceInstance.getProjectById.bind(projectsServiceInstance);
+export const updateProject = projectsServiceInstance.updateProject.bind(projectsServiceInstance);
+export const deleteProject = projectsServiceInstance.deleteProject.bind(projectsServiceInstance);
+export const createFeature = projectsServiceInstance.createFeature.bind(projectsServiceInstance);
+export const updateFeature = projectsServiceInstance.updateFeature.bind(projectsServiceInstance);
+export const deleteFeature = projectsServiceInstance.deleteFeature.bind(projectsServiceInstance);
+export const createBug = projectsServiceInstance.createBug.bind(projectsServiceInstance);
+export const updateBug = projectsServiceInstance.updateBug.bind(projectsServiceInstance);
+export const deleteBug = projectsServiceInstance.deleteBug.bind(projectsServiceInstance);
+export const computeAndSyncProjectProgress = projectsServiceInstance.computeAndSyncProjectProgress.bind(projectsServiceInstance);
+export const updateProjectProgressFromComponents = computeAndSyncProjectProgress;
+
+export default projectsServiceInstance;

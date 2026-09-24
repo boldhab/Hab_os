@@ -1,29 +1,26 @@
 import { Router, Request, Response } from 'express';
+import * as tasksController from './tasks.controller';
+import tasksService from './tasks.service';
+import { authenticate, AuthRequest } from '../../middleware/auth';
+import { validate } from '../../middleware/validate';
 import ApiResponse from '../../common/apiResponse';
 import asyncHandler from '../../common/asyncHandler';
-import authenticate, { AuthRequest } from '../../middleware/auth';
-import tasksService from './tasks.service';
+import {
+  createTaskSchema,
+  updateTaskSchema,
+  getTasksQuerySchema,
+  taskIdParamSchema,
+} from './tasks.validation';
 
 const router = Router();
 
+// All task routes require authentication
 router.use(authenticate);
 
-/**
- * GET /api/v1/tasks/stats
- */
-router.get(
-  '/stats',
-  asyncHandler(async (req: Request, res: Response) => {
-    const authReq = req as AuthRequest;
-    const stats = await tasksService.getTaskStats(authReq.user!.id);
-    return ApiResponse.success(res, stats, 'Task statistics retrieved');
-  })
-);
+router.post('/', validate(createTaskSchema), tasksController.createTask);
+router.get('/', validate(getTasksQuerySchema, 'query'), tasksController.getTasks);
+router.get('/stats', tasksController.getTaskStats);
 
-/**
- * GET /api/v1/tasks/matrix
- * Categorizes active tasks into the 4 Eisenhower Matrix quadrants
- */
 router.get(
   '/matrix',
   asyncHandler(async (req: Request, res: Response) => {
@@ -33,36 +30,33 @@ router.get(
   })
 );
 
-/**
- * GET /api/v1/tasks
- * Supports filtering (?status=, ?priority=, ?projectId=, ?search=, ?parentTaskId=)
- * Supports pagination (?page=1&limit=20)
- */
-router.get(
-  '/',
-  asyncHandler(async (req: Request, res: Response) => {
-    const authReq = req as AuthRequest;
-    const result = await tasksService.getTasks(authReq.user!.id, req.query);
-    return ApiResponse.success(res, result, 'Tasks retrieved');
-  })
+router.get('/:id', validate(taskIdParamSchema, 'params'), tasksController.getTaskById);
+
+router.put(
+  '/:id',
+  validate(taskIdParamSchema, 'params'),
+  validate(updateTaskSchema),
+  tasksController.updateTask
 );
 
-/**
- * POST /api/v1/tasks
- */
-router.post(
-  '/',
-  asyncHandler(async (req: Request, res: Response) => {
-    const authReq = req as AuthRequest;
-    const task = await tasksService.createTask(authReq.user!.id, req.body);
-    return ApiResponse.success(res, task, 'Task created', 201);
-  })
+router.patch(
+  '/:id',
+  validate(taskIdParamSchema, 'params'),
+  tasksController.updateTask
 );
 
-/**
- * POST /api/v1/tasks/:id/subtasks
- * Creates a subtask linked to a parent task
- */
+router.patch(
+  '/:id/complete',
+  validate(taskIdParamSchema, 'params'),
+  tasksController.toggleTaskComplete
+);
+
+router.delete(
+  '/:id',
+  validate(taskIdParamSchema, 'params'),
+  tasksController.deleteTask
+);
+
 router.post(
   '/:id/subtasks',
   asyncHandler(async (req: Request, res: Response) => {
@@ -72,10 +66,6 @@ router.post(
   })
 );
 
-/**
- * POST /api/v1/tasks/:id/dependencies
- * Adds a blocker prerequisite: task :id is blocked by req.body.blockingTaskId
- */
 router.post(
   '/:id/dependencies',
   asyncHandler(async (req: Request, res: Response) => {
@@ -86,53 +76,12 @@ router.post(
   })
 );
 
-/**
- * DELETE /api/v1/tasks/:id/dependencies/:blockingId
- * Removes a blocker prerequisite
- */
 router.delete(
   '/:id/dependencies/:blockingId',
   asyncHandler(async (req: Request, res: Response) => {
     const authReq = req as AuthRequest;
     await tasksService.removeDependency(authReq.user!.id, req.params.id, req.params.blockingId);
     return ApiResponse.success(res, null, 'Task dependency removed');
-  })
-);
-
-/**
- * PATCH /api/v1/tasks/:id/complete
- * Dedicated endpoint to toggle task completion
- */
-router.patch(
-  '/:id/complete',
-  asyncHandler(async (req: Request, res: Response) => {
-    const authReq = req as AuthRequest;
-    const task = await tasksService.toggleComplete(authReq.user!.id, req.params.id);
-    return ApiResponse.success(res, task, 'Task completion toggled');
-  })
-);
-
-/**
- * PATCH /api/v1/tasks/:id
- */
-router.patch(
-  '/:id',
-  asyncHandler(async (req: Request, res: Response) => {
-    const authReq = req as AuthRequest;
-    const task = await tasksService.updateTask(authReq.user!.id, req.params.id, req.body);
-    return ApiResponse.success(res, task, 'Task updated');
-  })
-);
-
-/**
- * DELETE /api/v1/tasks/:id
- */
-router.delete(
-  '/:id',
-  asyncHandler(async (req: Request, res: Response) => {
-    const authReq = req as AuthRequest;
-    await tasksService.deleteTask(authReq.user!.id, req.params.id);
-    return ApiResponse.success(res, null, 'Task deleted');
   })
 );
 

@@ -1,67 +1,85 @@
-import { Router, Request, Response } from 'express';
-import prisma from '../../config/db';
-import ApiResponse from '../../common/apiResponse';
-import asyncHandler from '../../common/asyncHandler';
-import authenticate, { AuthRequest } from '../../middleware/auth';
+import { Router } from 'express';
+import * as coursesController from './courses.controller';
+import { authenticate } from '../../middleware/auth';
+import { validate } from '../../middleware/validate';
+import {
+  createCourseSchema,
+  updateCourseSchema,
+  createAssignmentSchema,
+  updateAssignmentSchema,
+  createExamSchema,
+  updateExamSchema,
+  recordAttendanceSchema,
+  uuidParamSchema,
+  courseAssignmentParamSchema,
+  courseExamParamSchema,
+} from './courses.validation';
 
 const router = Router();
 
+// All courses routes require authentication
 router.use(authenticate);
 
-/**
- * GET /api/v1/courses
- */
-router.get(
-  '/',
-  asyncHandler(async (req: Request, res: Response) => {
-    const authReq = req as AuthRequest;
-    const userId = authReq.user!.id;
+// --- Academic Overview (UC-77, UC-79, UC-81) ---
+router.get('/summary', coursesController.getAcademicSummary);
 
-    const courses = await prisma.course.findMany({
-      where: { userId },
-      orderBy: { createdAt: 'desc' },
-    });
-
-    return ApiResponse.success(res, courses, 'Courses retrieved');
-  })
-);
-
-/**
- * POST /api/v1/courses
- */
-router.post(
-  '/',
-  asyncHandler(async (req: Request, res: Response) => {
-    const authReq = req as AuthRequest;
-    const userId = authReq.user!.id;
-    const { name, code, instructor, semester, credits, color } = req.body;
-
-    const course = await prisma.course.create({
-      data: {
-        userId,
-        name,
-        code: code || null,
-        instructor: instructor || null,
-        semester: semester || 'Current Semester',
-        credits: credits ? Number(credits) : 3,
-        color: color || '#8B5CF6',
-      },
-    });
-
-    return ApiResponse.success(res, course, 'Course created', 201);
-  })
-);
-
-/**
- * DELETE /api/v1/courses/:id
- */
-router.delete(
+// --- Courses (UC-70 to UC-74) ---
+router.post('/', validate(createCourseSchema), coursesController.createCourse);
+router.get('/', coursesController.getCourses);
+router.get('/:id', validate(uuidParamSchema, 'params'), coursesController.getCourseById);
+router.put(
   '/:id',
-  asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.params;
-    await prisma.course.delete({ where: { id } });
-    return ApiResponse.success(res, null, 'Course deleted');
-  })
+  validate(uuidParamSchema, 'params'),
+  validate(updateCourseSchema),
+  coursesController.updateCourse
 );
+router.delete('/:id', validate(uuidParamSchema, 'params'), coursesController.deleteCourse);
+
+// --- Assignments (UC-75 to UC-77) ---
+router.post(
+  '/:courseId/assignments',
+  validate(createAssignmentSchema),
+  coursesController.createAssignment
+);
+router.put(
+  '/:courseId/assignments/:assignmentId',
+  validate(courseAssignmentParamSchema, 'params'),
+  validate(updateAssignmentSchema),
+  coursesController.updateAssignment
+);
+router.delete(
+  '/:courseId/assignments/:assignmentId',
+  validate(courseAssignmentParamSchema, 'params'),
+  coursesController.deleteAssignment
+);
+
+// --- Exams (UC-78 to UC-80) ---
+router.post(
+  '/:courseId/exams',
+  validate(createExamSchema),
+  coursesController.createExam
+);
+router.put(
+  '/:courseId/exams/:examId',
+  validate(courseExamParamSchema, 'params'),
+  validate(updateExamSchema),
+  coursesController.updateExam
+);
+router.delete(
+  '/:courseId/exams/:examId',
+  validate(courseExamParamSchema, 'params'),
+  coursesController.deleteExam
+);
+
+// --- Attendance (UC-82 to UC-83) ---
+router.post(
+  '/:courseId/attendance',
+  validate(recordAttendanceSchema),
+  coursesController.recordAttendance
+);
+
+// --- Study Sessions (UC-84 to UC-90) ---
+router.post('/:courseId/study', coursesController.recordStudySession);
+router.get('/:courseId/study', coursesController.getStudySessions);
 
 export default router;

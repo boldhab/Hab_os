@@ -1,18 +1,23 @@
 import { Router, Request, Response } from 'express';
+import * as integrationsController from './integrations.controller';
+import integrationsService from './integrations.service';
+import { authenticate, AuthRequest } from '../../middleware/auth';
+import { validate } from '../../middleware/validate';
 import ApiResponse from '../../common/apiResponse';
 import asyncHandler from '../../common/asyncHandler';
-import authenticate, { AuthRequest } from '../../middleware/auth';
-import integrationsService from './integrations.service';
+import {
+  syncGitHubSchema,
+  importRepoSchema,
+  syncLeetCodeSchema,
+  analyzeRepoParamSchema,
+} from './integrations.validation';
 
 const router = Router();
 
 // ==========================================
-// 1. PUBLIC GITHUB WEBHOOK (Signature Verified)
+// 1. PUBLIC WEBHOOKS & HEALTH
 // ==========================================
 
-/**
- * POST /api/v1/integrations/github/webhook
- */
 router.post(
   '/github/webhook',
   asyncHandler(async (req: Request, res: Response) => {
@@ -25,67 +30,36 @@ router.post(
   })
 );
 
-// General health check
 router.get('/', (_req: Request, res: Response) => {
   res.json({ message: 'Integrations endpoint ready' });
 });
 
 // ==========================================
-// 2. AUTHENTICATED GITHUB DEVELOPER HUB ROUTES
+// 2. AUTHENTICATED ROUTES
 // ==========================================
 
 router.use(authenticate);
 
-/**
- * POST /api/v1/integrations/github/sync
- */
-router.post(
-  '/github/sync',
-  asyncHandler(async (req: Request, res: Response) => {
-    const authReq = req as AuthRequest;
-    const integration = await integrationsService.syncGitHub(authReq.user!.id, req.body);
-    return ApiResponse.success(res, integration, 'GitHub account synced');
-  })
-);
+// --- GitHub Developer Hub ---
+router.post('/github/sync', validate(syncGitHubSchema), integrationsController.syncGitHub);
+router.get('/github/stats', integrationsController.getGitHubStats);
+router.get('/github/repos', integrationsController.listGitHubRepositories);
+router.post('/github/import', validate(importRepoSchema), integrationsController.importRepositoryAsProject);
+router.post('/github/import-repo', validate(importRepoSchema), integrationsController.importRepositoryAsProject);
 
-/**
- * GET /api/v1/integrations/github/repos
- */
-router.get(
-  '/github/repos',
-  asyncHandler(async (req: Request, res: Response) => {
-    const authReq = req as AuthRequest;
-    const repos = await integrationsService.listUserRepos(authReq.user!.id);
-    return ApiResponse.success(res, repos, 'GitHub repositories retrieved');
-  })
-);
-
-/**
- * POST /api/v1/integrations/github/import-repo
- */
-router.post(
-  '/github/import-repo',
-  asyncHandler(async (req: Request, res: Response) => {
-    const authReq = req as AuthRequest;
-    const result = await integrationsService.importRepo(authReq.user!.id, req.body);
-    return ApiResponse.success(res, result, 'Repository imported as project', 201);
-  })
-);
-
-/**
- * GET /api/v1/integrations/github/repos/:owner/:repo/analyze
- */
 router.get(
   '/github/repos/:owner/:repo/analyze',
-  asyncHandler(async (req: Request, res: Response) => {
-    const authReq = req as AuthRequest;
-    const analysis = await integrationsService.analyzeRepo(
-      authReq.user!.id,
-      req.params.owner,
-      req.params.repo
-    );
-    return ApiResponse.success(res, analysis, 'Repository analysis completed');
-  })
+  validate(analyzeRepoParamSchema, 'params'),
+  integrationsController.analyzeRepository
 );
+router.get(
+  '/github/analyze/:owner/:repo',
+  validate(analyzeRepoParamSchema, 'params'),
+  integrationsController.analyzeRepository
+);
+
+// --- LeetCode Integration ---
+router.get('/leetcode/stats', integrationsController.getLeetCodeStats);
+router.post('/leetcode/sync', validate(syncLeetCodeSchema), integrationsController.syncLeetCode);
 
 export default router;
