@@ -12,6 +12,9 @@
     "prisma:push": "prisma db push",
     "prisma:seed": "tsx prisma/seed.ts",
     "reset-password": "tsx scripts/reset-password.ts",
+    "test:security": "node scripts/verify_security.js",
+    "test:arch": "node scripts/verify_architecture.js",
+    "test:tasks": "node scripts/verify_tasks_advanced.js",
     "test": "jest"
   },
   "dependencies": {

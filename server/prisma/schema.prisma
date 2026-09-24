@@ -38,6 +38,7 @@ model User {
   courses              Course[]
   studySessions        StudySession[]
   workouts             Workout[]
+  workoutTemplates     WorkoutTemplate[]
   exercises            Exercise[]
   personalRecords      PersonalRecord[]
   bodyMetrics          BodyMetric[]
@@ -47,6 +48,7 @@ model User {
   vaultNotes           VaultNote[]
   lifeScoreLogs        LifeScoreLog[]
   notifications        Notification[]
+  googleCalendarSync   GoogleCalendarSync?
 
   @@map("users")
 }
@@ -129,38 +131,81 @@ model LifeScoreLog {
 // ==========================================
 
 model Task {
-  id               String         @id @default(uuid())
+  id               String           @id @default(uuid())
   title            String
   description      String?
-  isCompleted      Boolean        @default(false)
-  priority         String         @default("MEDIUM") // LOW, MEDIUM, HIGH, CRITICAL
-  status           String         @default("TODO")   // TODO, IN_PROGRESS, COMPLETED, BLOCKED
+  isCompleted      Boolean          @default(false)
+  priority         String           @default("MEDIUM") // LOW, MEDIUM, HIGH, CRITICAL
+  status           String           @default("TODO")   // TODO, IN_PROGRESS, COMPLETED, BLOCKED
   dueDate          DateTime?
   estimatedMinutes Int?
   completedAt      DateTime?
   
   userId           String
-  user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   
+  parentTaskId     String?
+  parentTask       Task?            @relation("TaskSubtasks", fields: [parentTaskId], references: [id], onDelete: Cascade)
+  subtasks         Task[]           @relation("TaskSubtasks")
+  
+  isRecurring      Boolean          @default(false)
+  recurrenceRule   String?          // e.g. "DAILY", "WEEKLY", "MONTHLY", or iCal RRULE
+  
+  blockedBy        TaskDependency[] @relation("BlockedTasks")
+  blocking         TaskDependency[] @relation("BlockingTasks")
+
+  googleEventId    String?
+  calendarSyncedAt DateTime?
+
   projectId        String?
-  project          Project?       @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  project          Project?         @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  order            Float            @default(0.0)
+  githubIssueNumber Int?
   
   goalId           String?
-  goal             Goal?          @relation(fields: [goalId], references: [id], onDelete: SetNull)
+  goal             Goal?            @relation(fields: [goalId], references: [id], onDelete: SetNull)
   
   categoryId       String?
-  category         Category?      @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  category         Category?        @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   
   timeEntries      TimeEntry[]
   focusSessions    FocusSession[]
   features         Feature[]
   
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
 
   @@index([userId, status])
   @@index([userId, dueDate])
+  @@index([parentTaskId])
   @@map("tasks")
+}
+
+model TaskDependency {
+  id             String   @id @default(uuid())
+  blockingTaskId String
+  blockingTask   Task     @relation("BlockingTasks", fields: [blockingTaskId], references: [id], onDelete: Cascade)
+  blockedTaskId  String
+  blockedTask    Task     @relation("BlockedTasks", fields: [blockedTaskId], references: [id], onDelete: Cascade)
+  createdAt      DateTime @default(now())
+
+  @@unique([blockingTaskId, blockedTaskId])
+  @@index([blockedTaskId])
+  @@index([blockingTaskId])
+  @@map("task_dependencies")
+}
+
+model GoogleCalendarSync {
+  id           String    @id @default(uuid())
+  userId       String    @unique
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  syncToken    String?
+  calendarId   String    @default("primary")
+  lastSyncedAt DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@map("google_calendar_syncs")
 }
 
 model ScheduleEvent {
@@ -271,44 +316,50 @@ model HabitLog {
 // ==========================================
 
 model Project {
-  id           String    @id @default(uuid())
-  title        String
-  description  String?
-  repoUrl      String?
-  status       String    @default("PLANNING") // PLANNING, IN_PROGRESS, COMPLETED, ARCHIVED
-  progress     Float     @default(0.0)
-  technologies String[]  @default([])
-  color        String?   @default("#10B981")
+  id             String        @id @default(uuid())
+  title          String
+  description    String?
+  repoUrl        String?
+  status         String        @default("PLANNING") // PLANNING, IN_PROGRESS, COMPLETED, ARCHIVED
+  progress       Float         @default(0.0)
+  manualProgress Boolean       @default(false)
+  technologies   String[]      @default([])
+  color          String?       @default("#10B981")
+  webhookSecret  String?
   
-  userId       String
-  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   
-  tasks        Task[]
-  features     Feature[]
-  bugs         Bug[]
+  tasks          Task[]
+  features       Feature[]
+  bugs           Bug[]
+  githubLinks    GithubLink[]
   
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
   @@index([userId, status])
   @@map("projects")
 }
 
 model Feature {
-  id             String    @id @default(uuid())
-  name           String
-  description    String?
-  status         String    @default("TODO") // TODO, IN_PROGRESS, COMPLETED, BLOCKED
-  priority       String    @default("MEDIUM") // LOW, MEDIUM, HIGH, CRITICAL
+  id                String    @id @default(uuid())
+  name              String
+  description       String?
+  status            String    @default("TODO") // TODO, IN_PROGRESS, COMPLETED, BLOCKED
+  priority          String    @default("MEDIUM") // LOW, MEDIUM, HIGH, CRITICAL
+  order             Float     @default(0.0)
+  githubIssueNumber Int?
+  githubUrl         String?
   
-  projectId      String
-  project        Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId         String
+  project           Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
   
-  assignedTaskId String?
-  assignedTask   Task?     @relation(fields: [assignedTaskId], references: [id], onDelete: SetNull)
+  assignedTaskId    String?
+  assignedTask      Task?     @relation(fields: [assignedTaskId], references: [id], onDelete: SetNull)
   
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   @@index([projectId, status])
   @@map("features")
@@ -319,8 +370,12 @@ model Bug {
   title              String
   description        String
   stepsToReproduce   String?
+  severity           String    @default("MAJOR")  // CRITICAL, MAJOR, MINOR
   priority           String    @default("MEDIUM") // LOW, MEDIUM, HIGH, CRITICAL
   status             String    @default("OPEN")   // OPEN, IN_PROGRESS, RESOLVED, CLOSED
+  order              Float     @default(0.0)
+  githubIssueNumber  Int?
+  githubUrl          String?
   resolvedAt         DateTime?
   resolutionNotes    String?
   
@@ -332,6 +387,21 @@ model Bug {
 
   @@index([projectId, status])
   @@map("bugs")
+}
+
+model GithubLink {
+  id              String   @id @default(uuid())
+  projectId       String
+  project         Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  repoFullName    String
+  issueOrPrNumber Int
+  entityType      String   // "TASK" | "FEATURE" | "BUG"
+  entityId        String
+  createdAt       DateTime @default(now())
+
+  @@unique([repoFullName, issueOrPrNumber, entityType, entityId])
+  @@index([projectId])
+  @@map("github_links")
 }
 
 model GitHubIntegration {
@@ -517,19 +587,23 @@ model Workout {
 }
 
 model Exercise {
-  id              String            @id @default(uuid())
+  id              String                    @id @default(uuid())
   name            String
-  category        String            @default("CHEST") // CHEST, BACK, LEGS, SHOULDERS, ARMS, CORE, CARDIO
+  category        String                    @default("CHEST") // CHEST, BACK, LEGS, SHOULDERS, ARMS, CORE, CARDIO
+  muscleGroup     String                    @default("CHEST")
+  equipmentType   String?                   @default("BARBELL") // BARBELL, DUMBBELL, MACHINE, CABLE, BODYWEIGHT
+  isCustom        Boolean                   @default(false)
   notes           String?
   
   userId          String
-  user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user            User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
   
   workoutLinks    WorkoutExercise[]
+  templateLinks   WorkoutTemplateExercise[]
   personalRecords PersonalRecord[]
   
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
 
   @@unique([userId, name])
   @@map("exercises")
@@ -553,17 +627,20 @@ model WorkoutExercise {
 }
 
 model SetEntry {
-  id                String          @id @default(uuid())
-  setNumber         Int             @default(1)
-  weightKg          Float           @default(0.0)
-  repetitions       Int             @default(0)
-  isPR              Boolean         @default(false)
-  notes             String?
+  id                 String          @id @default(uuid())
+  setNumber          Int             @default(1)
+  weightKg           Float           @default(0.0)
+  repetitions        Int             @default(0)
+  rpe                Float?          // Rate of Perceived Exertion (1-10)
+  rir                Int?            // Reps in Reserve (0-5)
+  estimatedOneRepMax Float?
+  isPR               Boolean         @default(false)
+  notes              String?
   
-  workoutExerciseId String
-  workoutExercise   WorkoutExercise @relation(fields: [workoutExerciseId], references: [id], onDelete: Cascade)
+  workoutExerciseId  String
+  workoutExercise    WorkoutExercise @relation(fields: [workoutExerciseId], references: [id], onDelete: Cascade)
   
-  createdAt         DateTime        @default(now())
+  createdAt          DateTime        @default(now())
 
   @@index([workoutExerciseId])
   @@map("set_entries")
@@ -588,20 +665,54 @@ model PersonalRecord {
   @@map("personal_records")
 }
 
+model WorkoutTemplate {
+  id          String                    @id @default(uuid())
+  name        String
+  description String?
+  category    String                    @default("PPL") // PPL, UPPER_LOWER, FULL_BODY, STRENGTH, CUSTOM
+  userId      String
+  user        User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  exercises   WorkoutTemplateExercise[]
+  createdAt   DateTime                  @default(now())
+  updatedAt   DateTime                  @updatedAt
+
+  @@index([userId])
+  @@map("workout_templates")
+}
+
+model WorkoutTemplateExercise {
+  id         String          @id @default(uuid())
+  order      Int             @default(1)
+  templateId String
+  template   WorkoutTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  exerciseId String
+  exercise   Exercise        @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  targetSets Int             @default(3)
+  targetReps Int             @default(10)
+  targetRpe  Float?
+  notes      String?
+  createdAt  DateTime        @default(now())
+
+  @@index([templateId])
+  @@map("workout_template_exercises")
+}
+
 model BodyMetric {
-  id        String   @id @default(uuid())
-  date      DateTime @default(now())
-  weightKg  Float
-  chestCm   Float?
-  waistCm   Float?
-  armsCm    Float?
-  legsCm    Float?
-  notes     String?
+  id             String   @id @default(uuid())
+  date           DateTime @default(now())
+  weightKg       Float
+  bodyFatPercent Float?
+  chestCm        Float?
+  waistCm        Float?
+  armsCm         Float?
+  legsCm         Float?
+  photoUrl       String?
+  notes          String?
   
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   
-  createdAt DateTime @default(now())
+  createdAt      DateTime @default(now())
 
   @@index([userId, date])
   @@map("body_metrics")
