@@ -2,7 +2,9 @@ import express, { Request, Response } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
+import env from './config/env';
 import errorHandler from './middleware/errorHandler';
+import { apiLimiter } from './middleware/rateLimiter';
 
 import authRoutes from './modules/auth/auth.routes';
 import taskRoutes from './modules/tasks/tasks.routes';
@@ -26,10 +28,47 @@ import analyticsRoutes from './modules/analytics/analytics.routes';
 
 const app = express();
 
+const allowedOrigins = env.ALLOWED_ORIGINS
+  ? env.ALLOWED_ORIGINS.split(',').map((o) => o.trim()).filter(Boolean)
+  : [];
+
+const corsOptions: cors.CorsOptions = {
+  origin: (origin, callback) => {
+    // Allow non-browser requests (e.g. mobile apps, curl, server-to-server)
+    if (!origin) {
+      return callback(null, true);
+    }
+    // In development or test, permit local development origins
+    if (env.NODE_ENV !== 'production') {
+      const isLocalhost = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
+      if (isLocalhost) {
+        return callback(null, true);
+      }
+    }
+    // Check against configured allowed origins
+    if (allowedOrigins.length === 0 || allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error(`CORS policy blocked access from origin: ${origin}`));
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+};
+
 app.use(helmet());
-app.use(cors());
-app.use(express.json());
+app.use(cors(corsOptions));
+app.use(
+  express.json({
+    verify: (req: any, _res, buf) => {
+      req.rawBody = buf;
+    },
+  })
+);
 app.use(morgan('dev'));
+
+// Rate limit all /api/ endpoints
+app.use('/api/', apiLimiter);
 
 // Health Check
 app.get('/health', (_req: Request, res: Response) => {
