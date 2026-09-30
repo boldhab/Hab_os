@@ -7,20 +7,30 @@ export const createHabitSchema = Joi.object({
   }),
   description: Joi.string().trim().allow('', null),
   frequency: Joi.string().valid('DAILY', 'WEEKLY', 'CUSTOM').default('DAILY'),
+  targetFrequencyCount: Joi.number().integer().min(1).default(1),
+  targetFrequencyPeriod: Joi.string().valid('DAY', 'WEEK', 'MONTH').default('WEEK'),
   targetType: Joi.string().valid('CHECKBOX', 'DURATION', 'COUNT').default('CHECKBOX'),
   targetValue: Joi.number().integer().min(1).default(1),
   reminderTime: Joi.string().pattern(/^([01]\d|2[0-3]):([0-5]\d)$/).allow('', null),
   categoryId: Joi.string().uuid().allow(null),
+  difficulty: Joi.string().valid('TRIVIAL', 'EASY', 'MEDIUM', 'HARD', 'EPIC').default('MEDIUM'),
+  weight: Joi.number().min(0.1).max(10.0).default(1.0),
+  streakFreezes: Joi.number().integer().min(0).default(2),
 });
 
 export const updateHabitSchema = Joi.object({
   name: Joi.string().trim().min(1).max(255),
   description: Joi.string().trim().allow('', null),
   frequency: Joi.string().valid('DAILY', 'WEEKLY', 'CUSTOM'),
+  targetFrequencyCount: Joi.number().integer().min(1),
+  targetFrequencyPeriod: Joi.string().valid('DAY', 'WEEK', 'MONTH'),
   targetType: Joi.string().valid('CHECKBOX', 'DURATION', 'COUNT'),
   targetValue: Joi.number().integer().min(1),
   reminderTime: Joi.string().pattern(/^([01]\d|2[0-3]):([0-5]\d)$/).allow('', null),
   categoryId: Joi.string().uuid().allow(null),
+  difficulty: Joi.string().valid('TRIVIAL', 'EASY', 'MEDIUM', 'HARD', 'EPIC'),
+  weight: Joi.number().min(0.1).max(10.0),
+  streakFreezes: Joi.number().integer().min(0),
   isActive: Joi.boolean(),
 });
 
@@ -36,4 +46,26 @@ export const habitIdParamSchema = Joi.object({
     'string.guid': 'Invalid habit ID format',
     'any.required': 'Habit ID is required',
   }),
+});
+
+export const createRoutineSchema = Joi.object({
+  name: Joi.string().trim().min(1).max(255).required(),
+  description: Joi.string().trim().allow('', null),
+  icon: Joi.string().trim().default('routine'),
+  color: Joi.string().trim().default('#3B82F6'),
+  targetTime: Joi.string().pattern(/^([01]\d|2[0-3]):([0-5]\d)$/).allow('', null),
+  habitIds: Joi.array().items(Joi.string().uuid()).default([]),
+});
+
+export const updateRoutineSchema = Joi.object({
+  name: Joi.string().trim().min(1).max(255),
+  description: Joi.string().trim().allow('', null),
+  icon: Joi.string().trim(),
+  color: Joi.string().trim(),
+  targetTime: Joi.string().pattern(/^([01]\d|2[0-3]):([0-5]\d)$/).allow('', null),
+  habitIds: Joi.array().items(Joi.string().uuid()),
+});
+
+export const routineIdParamSchema = Joi.object({
+  id: Joi.string().uuid().required(),
 });
