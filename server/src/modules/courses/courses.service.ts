@@ -27,6 +27,8 @@ export interface CreateAssignmentDTO {
   title: string;
   description?: string | null;
   dueDate: Date | string;
+  type?: string;
+  weight?: number;
   status?: string;
   grade?: number | null;
   maxGrade?: number;
@@ -36,6 +38,8 @@ export interface UpdateAssignmentDTO {
   title?: string;
   description?: string | null;
   dueDate?: Date | string;
+  type?: string;
+  weight?: number;
   status?: string;
   grade?: number | null;
   maxGrade?: number;
@@ -66,6 +70,85 @@ export interface RecordAttendanceDTO {
   status: string;
   notes?: string | null;
 }
+
+export interface AddClassScheduleDTO {
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
+  room?: string | null;
+}
+
+// ==========================================
+// GRADE & GPA ENGINE HELPERS
+// ==========================================
+
+export interface GradeScaleResult {
+  letter: string;
+  points: number;
+}
+
+export const getLetterGradeAndPoints = (percentage: number): GradeScaleResult => {
+  if (percentage >= 93.0) return { letter: 'A', points: 4.0 };
+  if (percentage >= 90.0) return { letter: 'A-', points: 3.7 };
+  if (percentage >= 87.0) return { letter: 'B+', points: 3.3 };
+  if (percentage >= 83.0) return { letter: 'B', points: 3.0 };
+  if (percentage >= 80.0) return { letter: 'B-', points: 2.7 };
+  if (percentage >= 77.0) return { letter: 'C+', points: 2.3 };
+  if (percentage >= 73.0) return { letter: 'C', points: 2.0 };
+  if (percentage >= 70.0) return { letter: 'C-', points: 1.7 };
+  if (percentage >= 67.0) return { letter: 'D+', points: 1.3 };
+  if (percentage >= 60.0) return { letter: 'D', points: 1.0 };
+  return { letter: 'F', points: 0.0 };
+};
+
+export const computeCourseGrade = (
+  assignments: Array<{ grade: number | null; maxGrade: number | null; weight?: number | null }>,
+  exams: Array<{ grade: number | null; maxGrade: number | null; weight?: number | null }>
+) => {
+  let totalWeightedScore = 0;
+  let totalEvaluatedWeight = 0;
+  let totalPossibleWeight = 0;
+  let gradedItemsCount = 0;
+
+  assignments.forEach((a) => {
+    const w = a.weight ?? 10.0;
+    totalPossibleWeight += w;
+    if (a.grade !== null && a.grade !== undefined && a.maxGrade && a.maxGrade > 0) {
+      const pct = (a.grade / a.maxGrade) * 100;
+      totalWeightedScore += pct * w;
+      totalEvaluatedWeight += w;
+      gradedItemsCount++;
+    }
+  });
+
+  exams.forEach((e) => {
+    const w = e.weight ?? 25.0;
+    totalPossibleWeight += w;
+    if (e.grade !== null && e.grade !== undefined && e.maxGrade && e.maxGrade > 0) {
+      const pct = (e.grade / e.maxGrade) * 100;
+      totalWeightedScore += pct * w;
+      totalEvaluatedWeight += w;
+      gradedItemsCount++;
+    }
+  });
+
+  const runningPercentage =
+    totalEvaluatedWeight > 0
+      ? Number((totalWeightedScore / totalEvaluatedWeight).toFixed(1))
+      : 0.0;
+
+  const { letter, points } = getLetterGradeAndPoints(runningPercentage);
+
+  return {
+    runningPercentage,
+    letter: gradedItemsCount > 0 ? letter : 'N/A',
+    gradePoints: gradedItemsCount > 0 ? points : 0.0,
+    totalEvaluatedWeight,
+    totalPossibleWeight,
+    gradedItemsCount,
+    earnedWeightPoints: Number((totalWeightedScore / 100).toFixed(1)),
+  };
+};
 
 /**
  * Auto-recalculate course progress based on completed assignments & exams (UC-74)
@@ -127,12 +210,52 @@ export const getCourses = async (userId: string, semester?: string) => {
           exams: true,
           attendances: true,
           studySessions: true,
+          tasks: true,
+          classSchedules: true,
         },
+      },
+      assignments: {
+        select: { grade: true, maxGrade: true, weight: true },
+      },
+      exams: {
+        select: { grade: true, maxGrade: true, weight: true },
+      },
+      attendances: {
+        select: { status: true },
+      },
+      classSchedules: {
+        select: { dayOfWeek: true, startTime: true, endTime: true, room: true },
       },
     },
   });
 
-  return courses;
+  return courses.map((course) => {
+    const gradeDetails = computeCourseGrade(course.assignments, course.exams);
+
+    const totalAttendances = course.attendances.length;
+    const presentCount = course.attendances.filter((a) => a.status === 'PRESENT').length;
+    const attendanceRate =
+      totalAttendances > 0
+        ? Number(((presentCount / totalAttendances) * 100).toFixed(1))
+        : 100.0;
+
+    return {
+      id: course.id,
+      name: course.name,
+      code: course.code,
+      semester: course.semester,
+      instructor: course.instructor,
+      credits: course.credits || 3,
+      progress: course.progress,
+      color: course.color,
+      createdAt: course.createdAt,
+      updatedAt: course.updatedAt,
+      counts: course._count,
+      gradeDetails,
+      attendanceRate,
+      classSchedules: course.classSchedules,
+    };
+  });
 };
 
 export const getCourseById = async (userId: string, courseId: string) => {
@@ -141,8 +264,42 @@ export const getCourseById = async (userId: string, courseId: string) => {
     include: {
       assignments: { orderBy: { dueDate: 'asc' } },
       exams: { orderBy: { examDate: 'asc' } },
-      attendances: { orderBy: { date: 'desc' }, take: 20 },
-      studySessions: { orderBy: { startTime: 'desc' }, take: 10 },
+      attendances: { orderBy: { date: 'desc' }, take: 30 },
+      studySessions: { orderBy: { startTime: 'desc' }, take: 20 },
+      classSchedules: { orderBy: [{ dayOfWeek: 'asc' }, { startTime: 'asc' }] },
+      tasks: {
+        where: { userId },
+        orderBy: [{ isCompleted: 'asc' }, { dueDate: 'asc' }],
+        select: {
+          id: true,
+          title: true,
+          status: true,
+          priority: true,
+          dueDate: true,
+          isCompleted: true,
+        },
+      },
+      focusSessions: {
+        where: { userId },
+        orderBy: { startTime: 'desc' },
+        take: 20,
+        select: {
+          id: true,
+          durationMinutes: true,
+          startTime: true,
+          notes: true,
+        },
+      },
+      vaultNotes: {
+        where: { userId },
+        orderBy: { updatedAt: 'desc' },
+        select: {
+          id: true,
+          title: true,
+          updatedAt: true,
+          tags: true,
+        },
+      },
     },
   });
 
@@ -150,14 +307,26 @@ export const getCourseById = async (userId: string, courseId: string) => {
     throw new ApiError(404, 'Course not found');
   }
 
-  // Compute attendance percentage
+  // Attendance percentage
   const totalAttendances = course.attendances.length;
   const presentCount = course.attendances.filter((a) => a.status === 'PRESENT').length;
-  const attendanceRate = totalAttendances > 0 ? Number(((presentCount / totalAttendances) * 100).toFixed(1)) : 100;
+  const attendanceRate =
+    totalAttendances > 0 ? Number(((presentCount / totalAttendances) * 100).toFixed(1)) : 100.0;
+
+  // Grade details
+  const gradeDetails = computeCourseGrade(course.assignments, course.exams);
+
+  // Total study time
+  let totalStudyMinutes = 0;
+  course.studySessions.forEach((s) => (totalStudyMinutes += s.durationMinutes || 0));
+  course.focusSessions.forEach((f) => (totalStudyMinutes += f.durationMinutes || 0));
 
   return {
     ...course,
     attendanceRate,
+    gradeDetails,
+    totalStudyMinutes,
+    totalStudyHours: Number((totalStudyMinutes / 60.0).toFixed(1)),
   };
 };
 
@@ -204,6 +373,8 @@ export const createAssignment = async (userId: string, courseId: string, data: C
       title: data.title,
       description: data.description,
       dueDate: new Date(data.dueDate),
+      type: data.type || 'HOMEWORK',
+      weight: data.weight !== undefined ? Number(data.weight) : 10.0,
       status: data.status || 'NOT_STARTED',
       grade: data.grade,
       maxGrade: data.maxGrade || 100.0,
@@ -231,12 +402,15 @@ export const updateAssignment = async (
   });
   if (!assignment) throw new ApiError(404, 'Assignment not found');
 
+  const updateData: any = { ...data };
+  if (data.dueDate) updateData.dueDate = new Date(data.dueDate);
+  if (data.weight !== undefined) updateData.weight = Number(data.weight);
+  if (data.grade !== undefined) updateData.grade = data.grade !== null ? Number(data.grade) : null;
+  if (data.maxGrade !== undefined) updateData.maxGrade = Number(data.maxGrade);
+
   const updatedAssignment = await prisma.assignment.update({
     where: { id: assignmentId },
-    data: {
-      ...data,
-      dueDate: data.dueDate ? new Date(data.dueDate) : undefined,
-    },
+    data: updateData,
   });
 
   if (data.status !== undefined || data.grade !== undefined) {
@@ -279,7 +453,7 @@ export const createExam = async (userId: string, courseId: string, data: CreateE
       examDate: new Date(data.examDate),
       startTime: data.startTime,
       examType: data.examType || 'MIDTERM',
-      weight: data.weight,
+      weight: data.weight !== undefined ? Number(data.weight) : 25.0,
       grade: data.grade,
       maxGrade: data.maxGrade || 100.0,
       courseId,
@@ -304,12 +478,15 @@ export const updateExam = async (
   });
   if (!exam) throw new ApiError(404, 'Exam not found');
 
+  const updateData: any = { ...data };
+  if (data.examDate) updateData.examDate = new Date(data.examDate);
+  if (data.weight !== undefined) updateData.weight = Number(data.weight);
+  if (data.grade !== undefined) updateData.grade = data.grade !== null ? Number(data.grade) : null;
+  if (data.maxGrade !== undefined) updateData.maxGrade = Number(data.maxGrade);
+
   const updatedExam = await prisma.exam.update({
     where: { id: examId },
-    data: {
-      ...data,
-      examDate: data.examDate ? new Date(data.examDate) : undefined,
-    },
+    data: updateData,
   });
 
   if (data.grade !== undefined) {
@@ -368,18 +545,206 @@ export const recordAttendance = async (userId: string, courseId: string, data: R
 };
 
 // ==========================================
-// 5. ACADEMIC OVERVIEW & COUNTDOWNS (UC-77, UC-79, UC-81)
+// 5. CLASS SCHEDULES (WEEKLY TIMETABLE)
+// ==========================================
+
+export const addClassSchedule = async (userId: string, courseId: string, data: AddClassScheduleDTO) => {
+  const course = await prisma.course.findFirst({ where: { id: courseId, userId } });
+  if (!course) throw new ApiError(404, 'Course not found');
+
+  const schedule = await prisma.classSchedule.create({
+    data: {
+      courseId,
+      dayOfWeek: data.dayOfWeek,
+      startTime: data.startTime,
+      endTime: data.endTime,
+      room: data.room || null,
+    },
+  });
+
+  return schedule;
+};
+
+export const deleteClassSchedule = async (userId: string, courseId: string, scheduleId: string) => {
+  const course = await prisma.course.findFirst({ where: { id: courseId, userId } });
+  if (!course) throw new ApiError(404, 'Course not found');
+
+  const schedule = await prisma.classSchedule.findFirst({
+    where: { id: scheduleId, courseId },
+  });
+  if (!schedule) throw new ApiError(404, 'Class schedule not found');
+
+  await prisma.classSchedule.delete({ where: { id: scheduleId } });
+  return { message: 'Class schedule removed successfully' };
+};
+
+export const getClassSchedules = async (userId: string, courseId?: string) => {
+  return prisma.classSchedule.findMany({
+    where: {
+      course: { userId },
+      ...(courseId ? { courseId } : {}),
+    },
+    include: {
+      course: { select: { id: true, name: true, code: true, color: true } },
+    },
+    orderBy: [{ dayOfWeek: 'asc' }, { startTime: 'asc' }],
+  });
+};
+
+// ==========================================
+// 6. GPA & WHAT-IF CALCULATOR
+// ==========================================
+
+export const calculateGpaOverview = async (userId: string, semester?: string) => {
+  const courses = await prisma.course.findMany({
+    where: {
+      userId,
+      ...(semester ? { semester } : {}),
+    },
+    include: {
+      assignments: { select: { grade: true, maxGrade: true, weight: true } },
+      exams: { select: { grade: true, maxGrade: true, weight: true } },
+    },
+  });
+
+  let totalCreditPoints = 0;
+  let totalCredits = 0;
+  const semesterMap: Record<string, { totalPoints: number; totalCredits: number; courses: any[] }> = {};
+
+  const coursesWithGrades = courses.map((c) => {
+    const credits = c.credits || 3;
+    const grade = computeCourseGrade(c.assignments, c.exams);
+
+    if (grade.gradedItemsCount > 0) {
+      totalCreditPoints += grade.gradePoints * credits;
+      totalCredits += credits;
+    }
+
+    const semKey = c.semester || 'Current';
+    if (!semesterMap[semKey]) {
+      semesterMap[semKey] = { totalPoints: 0, totalCredits: 0, courses: [] };
+    }
+    if (grade.gradedItemsCount > 0) {
+      semesterMap[semKey].totalPoints += grade.gradePoints * credits;
+      semesterMap[semKey].totalCredits += credits;
+    }
+    semesterMap[semKey].courses.push({
+      id: c.id,
+      name: c.name,
+      code: c.code,
+      credits,
+      color: c.color,
+      grade,
+    });
+
+    return {
+      id: c.id,
+      name: c.name,
+      code: c.code,
+      credits,
+      semester: c.semester,
+      grade,
+    };
+  });
+
+  const cumulativeGpa = totalCredits > 0 ? Number((totalCreditPoints / totalCredits).toFixed(2)) : 0.0;
+  const { letter: cumulativeLetter } = getLetterGradeAndPoints(
+    totalCredits > 0 ? (cumulativeGpa / 4.0) * 100 : 0
+  );
+
+  const semesters = Object.entries(semesterMap).map(([sem, data]) => {
+    const semGpa = data.totalCredits > 0 ? Number((data.totalPoints / data.totalCredits).toFixed(2)) : 0.0;
+    return {
+      semester: sem,
+      semesterGpa: semGpa,
+      creditsCount: data.totalCredits,
+      coursesCount: data.courses.length,
+      courses: data.courses,
+    };
+  });
+
+  return {
+    cumulativeGpa,
+    cumulativeLetter,
+    totalCreditsGraded: totalCredits,
+    totalCoursesCount: courses.length,
+    semesters,
+    courses: coursesWithGrades,
+  };
+};
+
+export const calculateWhatIfFinalGrade = async (
+  userId: string,
+  courseId: string,
+  targetPercentage: number,
+  finalExamWeight: number = 30.0
+) => {
+  const course = await prisma.course.findFirst({
+    where: { id: courseId, userId },
+    include: {
+      assignments: { select: { grade: true, maxGrade: true, weight: true } },
+      exams: { select: { grade: true, maxGrade: true, weight: true } },
+    },
+  });
+
+  if (!course) throw new ApiError(404, 'Course not found');
+
+  const grade = computeCourseGrade(course.assignments, course.exams);
+
+  // Total weight currently accounted for
+  const completedWeightFraction = grade.totalEvaluatedWeight / 100.0;
+  // Weighted percentage earned toward 100% of course grade so far
+  const currentEarnedTowardsFinal = (grade.runningPercentage * completedWeightFraction);
+
+  // Target points remaining
+  const neededFromFinal = targetPercentage - currentEarnedTowardsFinal;
+  const weightFraction = finalExamWeight / 100.0;
+
+  const requiredScorePercentage = Number((neededFromFinal / weightFraction).toFixed(1));
+  const maxPossibleGrade = Number((currentEarnedTowardsFinal + finalExamWeight).toFixed(1));
+
+  let status: 'ACHIEVABLE' | 'ALREADY_SECURED' | 'MATHEMATICALLY_IMPOSSIBLE' = 'ACHIEVABLE';
+  let message = `You need ${requiredScorePercentage}% on the final exam (${finalExamWeight}% of course) to achieve a ${targetPercentage}% overall grade.`;
+
+  if (requiredScorePercentage <= 0) {
+    status = 'ALREADY_SECURED';
+    message = `Congratulations! You have already secured at least ${targetPercentage}% in this course.`;
+  } else if (requiredScorePercentage > 100.0) {
+    status = 'MATHEMATICALLY_IMPOSSIBLE';
+    message = `Reaching ${targetPercentage}% is mathematically unattainable (requires ${requiredScorePercentage}%). The maximum possible grade is ${maxPossibleGrade}%.`;
+  }
+
+  const { letter: targetLetter } = getLetterGradeAndPoints(targetPercentage);
+
+  return {
+    courseId,
+    courseName: course.name,
+    targetPercentage,
+    targetLetter,
+    finalExamWeight,
+    currentRunningPercentage: grade.runningPercentage,
+    currentRunningLetter: grade.letter,
+    currentEarnedTowardsFinal: Number(currentEarnedTowardsFinal.toFixed(1)),
+    requiredScorePercentage,
+    maxPossibleGrade,
+    status,
+    message,
+  };
+};
+
+// ==========================================
+// 7. ACADEMIC OVERVIEW & COUNTDOWNS
 // ==========================================
 
 export const getAcademicSummary = async (userId: string) => {
   const now = new Date();
 
-  const [courses, upcomingAssignments, upcomingExams] = await Promise.all([
+  const [courses, upcomingAssignments, upcomingExams, schedules] = await Promise.all([
     prisma.course.findMany({
       where: { userId },
       include: {
-        assignments: true,
-        exams: true,
+        assignments: { select: { grade: true, maxGrade: true, weight: true } },
+        exams: { select: { grade: true, maxGrade: true, weight: true } },
         attendances: true,
       },
     }),
@@ -390,8 +755,8 @@ export const getAcademicSummary = async (userId: string) => {
         status: { notIn: ['SUBMITTED', 'GRADED'] },
       },
       orderBy: { dueDate: 'asc' },
-      take: 5,
-      include: { course: { select: { name: true, color: true } } },
+      take: 6,
+      include: { course: { select: { id: true, name: true, code: true, color: true } } },
     }),
     prisma.exam.findMany({
       where: {
@@ -399,8 +764,13 @@ export const getAcademicSummary = async (userId: string) => {
         examDate: { gte: now },
       },
       orderBy: { examDate: 'asc' },
-      take: 5,
-      include: { course: { select: { name: true, color: true } } },
+      take: 6,
+      include: { course: { select: { id: true, name: true, code: true, color: true } } },
+    }),
+    prisma.classSchedule.findMany({
+      where: { course: { userId } },
+      include: { course: { select: { id: true, name: true, code: true, color: true } } },
+      orderBy: [{ dayOfWeek: 'asc' }, { startTime: 'asc' }],
     }),
   ]);
 
@@ -413,20 +783,40 @@ export const getAcademicSummary = async (userId: string) => {
   });
 
   const overallAttendanceRate =
-    totalAttendances > 0 ? Number(((presentAttendances / totalAttendances) * 100).toFixed(1)) : 100;
+    totalAttendances > 0 ? Number(((presentAttendances / totalAttendances) * 100).toFixed(1)) : 100.0;
+
+  // Calculate cumulative GPA across active courses
+  let totalPoints = 0;
+  let totalCredits = 0;
+  courses.forEach((c) => {
+    const creds = c.credits || 3;
+    const g = computeCourseGrade(c.assignments, c.exams);
+    if (g.gradedItemsCount > 0) {
+      totalPoints += g.gradePoints * creds;
+      totalCredits += creds;
+    }
+  });
+
+  const cumulativeGpa = totalCredits > 0 ? Number((totalPoints / totalCredits).toFixed(2)) : 0.0;
+  const { letter: cumulativeLetter } = getLetterGradeAndPoints(
+    totalCredits > 0 ? (cumulativeGpa / 4.0) * 100 : 0
+  );
 
   return {
     totalCourses: courses.length,
     overallAttendanceRate,
+    cumulativeGpa,
+    cumulativeLetter,
     upcomingAssignmentsCount: upcomingAssignments.length,
     upcomingExamsCount: upcomingExams.length,
     upcomingAssignments,
     upcomingExams,
+    weeklyClassSchedules: schedules,
   };
 };
 
 // ==========================================
-// 6. STUDY SESSIONS (UC-84 to UC-90)
+// 8. STUDY SESSIONS (UC-84 to UC-90)
 // ==========================================
 
 export const recordStudySession = async (
@@ -482,6 +872,11 @@ export default {
   updateExam,
   deleteExam,
   recordAttendance,
+  addClassSchedule,
+  deleteClassSchedule,
+  getClassSchedules,
+  calculateGpaOverview,
+  calculateWhatIfFinalGrade,
   recordStudySession,
   getStudySessions,
   getAcademicSummary,

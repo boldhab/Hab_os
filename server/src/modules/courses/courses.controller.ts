@@ -25,6 +25,13 @@ export const getAcademicSummary = asyncHandler(async (req: Request, res: Respons
   return ApiResponse.success(res, summary, 'Academic summary retrieved successfully');
 });
 
+export const getGpaOverview = asyncHandler(async (req: Request, res: Response) => {
+  const authReq = req as AuthRequest;
+  const { semester } = req.query;
+  const gpa = await coursesService.calculateGpaOverview(authReq.user!.id, semester as string);
+  return ApiResponse.success(res, gpa, 'GPA overview calculated successfully');
+});
+
 export const getCourseById = asyncHandler(async (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
   const course = await coursesService.getCourseById(authReq.user!.id, req.params.id);
@@ -109,6 +116,48 @@ export const recordAttendance = asyncHandler(async (req: Request, res: Response)
   return ApiResponse.success(res, attendance, 'Attendance recorded successfully');
 });
 
+// --- CLASS SCHEDULES ---
+
+export const addClassSchedule = asyncHandler(async (req: Request, res: Response) => {
+  const authReq = req as AuthRequest;
+  const schedule = await coursesService.addClassSchedule(
+    authReq.user!.id,
+    req.params.courseId,
+    req.body
+  );
+  return ApiResponse.success(res, schedule, 'Class schedule added successfully', 201);
+});
+
+export const deleteClassSchedule = asyncHandler(async (req: Request, res: Response) => {
+  const authReq = req as AuthRequest;
+  const result = await coursesService.deleteClassSchedule(
+    authReq.user!.id,
+    req.params.courseId,
+    req.params.scheduleId
+  );
+  return ApiResponse.success(res, result, 'Class schedule removed successfully');
+});
+
+export const getClassSchedules = asyncHandler(async (req: Request, res: Response) => {
+  const authReq = req as AuthRequest;
+  const schedules = await coursesService.getClassSchedules(authReq.user!.id, req.params.courseId);
+  return ApiResponse.success(res, schedules, 'Class schedules retrieved successfully');
+});
+
+// --- WHAT-IF CALCULATOR ---
+
+export const calculateWhatIfFinalGrade = asyncHandler(async (req: Request, res: Response) => {
+  const authReq = req as AuthRequest;
+  const { targetPercentage, finalExamWeight } = req.body;
+  const result = await coursesService.calculateWhatIfFinalGrade(
+    authReq.user!.id,
+    req.params.courseId,
+    Number(targetPercentage),
+    finalExamWeight ? Number(finalExamWeight) : undefined
+  );
+  return ApiResponse.success(res, result, 'What-if calculation completed successfully');
+});
+
 // --- STUDY SESSIONS ---
 
 export const recordStudySession = asyncHandler(async (req: Request, res: Response) => {
@@ -131,6 +180,7 @@ export default {
   createCourse,
   getCourses,
   getAcademicSummary,
+  getGpaOverview,
   getCourseById,
   updateCourse,
   deleteCourse,
@@ -141,6 +191,10 @@ export default {
   updateExam,
   deleteExam,
   recordAttendance,
+  addClassSchedule,
+  deleteClassSchedule,
+  getClassSchedules,
+  calculateWhatIfFinalGrade,
   recordStudySession,
   getStudySessions,
 };
