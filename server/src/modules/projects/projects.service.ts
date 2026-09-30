@@ -718,6 +718,20 @@ export class ProjectsService {
       calculatedOrder = 1000;
     }
 
+    // Safety: if the precision gap is too small, renormalize the source column
+    const MIN_ORDER_GAP = 0.001;
+    if (
+      prevOrder !== undefined &&
+      nextOrder !== undefined &&
+      Math.abs(nextOrder - prevOrder) < MIN_ORDER_GAP
+    ) {
+      // Renormalize the target column after this update
+      await this.normalizeColumnOrder(projectId, entityType, targetStatus);
+      // After renormalization use a simple append order; the column is clean now
+      const last = await this.getLastOrderInColumn(projectId, entityType, targetStatus);
+      calculatedOrder = (last ?? 0) + 1000;
+    }
+
     let entityStatus = targetStatus;
     let isCompleted = false;
 
@@ -772,6 +786,94 @@ export class ProjectsService {
       newOrder: calculatedOrder,
       projectProgress: progress.progress,
     };
+  }
+
+  /**
+   * Resets all order values in a column to clean multiples of 1000.
+   * Called lazily when fractional precision degrades below MIN_ORDER_GAP.
+   */
+  private async normalizeColumnOrder(
+    projectId: string,
+    entityType: 'TASK' | 'FEATURE' | 'BUG',
+    columnStatus: string
+  ): Promise<void> {
+    if (entityType === 'TASK') {
+      const items = await prisma.task.findMany({
+        where: { projectId, status: columnStatus },
+        orderBy: { order: 'asc' },
+        select: { id: true },
+      });
+      for (let i = 0; i < items.length; i++) {
+        await prisma.task.update({
+          where: { id: items[i].id },
+          data: { order: (i + 1) * 1000 },
+        });
+      }
+    } else if (entityType === 'FEATURE') {
+      const items = await prisma.feature.findMany({
+        where: { projectId, status: columnStatus },
+        orderBy: { order: 'asc' },
+        select: { id: true },
+      });
+      for (let i = 0; i < items.length; i++) {
+        await prisma.feature.update({
+          where: { id: items[i].id },
+          data: { order: (i + 1) * 1000 },
+        });
+      }
+    } else if (entityType === 'BUG') {
+      // Map board status → bug status values
+      const bugStatusMap: Record<string, string[]> = {
+        TODO: ['OPEN'],
+        IN_PROGRESS: ['IN_PROGRESS'],
+        COMPLETED: ['RESOLVED', 'CLOSED'],
+        BLOCKED: [],
+      };
+      const statusFilter = bugStatusMap[columnStatus] ?? [];
+      const items = await prisma.bug.findMany({
+        where: { projectId, status: { in: statusFilter } },
+        orderBy: { order: 'asc' },
+        select: { id: true },
+      });
+      for (let i = 0; i < items.length; i++) {
+        await prisma.bug.update({
+          where: { id: items[i].id },
+          data: { order: (i + 1) * 1000 },
+        });
+      }
+    }
+  }
+
+  /**
+   * Returns the highest order value in a column for appending.
+   */
+  private async getLastOrderInColumn(
+    projectId: string,
+    entityType: 'TASK' | 'FEATURE' | 'BUG',
+    columnStatus: string
+  ): Promise<number | null> {
+    if (entityType === 'TASK') {
+      const item = await prisma.task.findFirst({
+        where: { projectId, status: columnStatus },
+        orderBy: { order: 'desc' },
+        select: { order: true },
+      });
+      return item?.order ?? null;
+    } else if (entityType === 'FEATURE') {
+      const item = await prisma.feature.findFirst({
+        where: { projectId, status: columnStatus },
+        orderBy: { order: 'desc' },
+        select: { order: true },
+      });
+      return item?.order ?? null;
+    } else {
+      const item = await prisma.bug.findFirst({
+        where: { projectId },
+        orderBy: { order: 'desc' },
+        select: { order: true },
+      });
+      return item?.order ?? null;
+    }
   }
 
   // ==========================================
