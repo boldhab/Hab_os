@@ -84,6 +84,7 @@ class TaskModel extends Equatable {
   final String? completedAt;
   final String? projectId;
   final String? goalId;
+  final String? milestoneId;
   final String? categoryId;
   final TaskProjectSummary? project;
   final TaskGoalSummary? goal;
@@ -98,6 +99,9 @@ class TaskModel extends Equatable {
   final String? subtaskFraction;
   final int subtaskPercent;
   final List<dynamic> blockedByPrerequisites;
+  final List<TaskModel> subtasks;
+  final List<Map<String, dynamic>> blockedBy;
+  final List<Map<String, dynamic>> blocking;
 
   const TaskModel({
     required this.id,
@@ -114,6 +118,7 @@ class TaskModel extends Equatable {
     this.completedAt,
     this.projectId,
     this.goalId,
+    this.milestoneId,
     this.categoryId,
     this.project,
     this.goal,
@@ -125,6 +130,9 @@ class TaskModel extends Equatable {
     this.subtaskFraction,
     this.subtaskPercent = 0,
     this.blockedByPrerequisites = const [],
+    this.subtasks = const [],
+    this.blockedBy = const [],
+    this.blocking = const [],
     this.createdAt,
     this.updatedAt,
   });
@@ -135,6 +143,15 @@ class TaskModel extends Equatable {
         .toList();
     final tagList = (json['tags'] as List<dynamic>? ?? [])
         .map((t) => t.toString())
+        .toList();
+    final subtasksList = (json['subtasks'] as List<dynamic>? ?? [])
+        .map((s) => TaskModel.fromJson(Map<String, dynamic>.from(s)))
+        .toList();
+    final blockedByList = (json['blockedBy'] as List<dynamic>? ?? [])
+        .map((b) => Map<String, dynamic>.from(b))
+        .toList();
+    final blockingList = (json['blocking'] as List<dynamic>? ?? [])
+        .map((b) => Map<String, dynamic>.from(b))
         .toList();
 
     return TaskModel(
@@ -152,6 +169,7 @@ class TaskModel extends Equatable {
       completedAt: json['completedAt'],
       projectId: json['projectId'],
       goalId: json['goalId'],
+      milestoneId: json['milestoneId'],
       categoryId: json['categoryId'],
       project: json['project'] != null
           ? TaskProjectSummary.fromJson(Map<String, dynamic>.from(json['project']))
@@ -167,6 +185,9 @@ class TaskModel extends Equatable {
       subtaskFraction: json['subtaskProgress'] != null ? json['subtaskProgress']['fraction'] : null,
       subtaskPercent: json['subtaskProgress'] != null ? (json['subtaskProgress']['percent'] ?? 0) : 0,
       blockedByPrerequisites: json['blockedByPrerequisites'] ?? const [],
+      subtasks: subtasksList,
+      blockedBy: blockedByList,
+      blocking: blockingList,
       createdAt: json['createdAt'],
       updatedAt: json['updatedAt'],
     );
@@ -187,6 +208,7 @@ class TaskModel extends Equatable {
     String? completedAt,
     String? projectId,
     String? goalId,
+    String? milestoneId,
     String? categoryId,
     TaskProjectSummary? project,
     TaskGoalSummary? goal,
@@ -209,6 +231,7 @@ class TaskModel extends Equatable {
       completedAt: completedAt ?? this.completedAt,
       projectId: projectId ?? this.projectId,
       goalId: goalId ?? this.goalId,
+      milestoneId: milestoneId ?? this.milestoneId,
       categoryId: categoryId ?? this.categoryId,
       project: project ?? this.project,
       goal: goal ?? this.goal,
@@ -234,6 +257,7 @@ class TaskModel extends Equatable {
         completedAt,
         projectId,
         goalId,
+        milestoneId,
         categoryId,
         project,
         goal,
@@ -242,3 +266,83 @@ class TaskModel extends Equatable {
         updatedAt,
       ];
 }
+
+class DayWorkload extends Equatable {
+  final String date;
+  final int count;
+  final int totalMinutes;
+  final String status;
+
+  const DayWorkload({
+    required this.date,
+    required this.count,
+    required this.totalMinutes,
+    required this.status,
+  });
+
+  factory DayWorkload.fromJson(Map<String, dynamic> json) {
+    return DayWorkload(
+      date: json['date']?.toString() ?? '',
+      count: (json['count'] as num?)?.toInt() ?? 0,
+      totalMinutes: (json['totalMinutes'] as num?)?.toInt() ?? 0,
+      status: json['status']?.toString() ?? 'LIGHT',
+    );
+  }
+
+  @override
+  List<Object?> get props => [date, count, totalMinutes, status];
+}
+
+class TodayWorkload extends Equatable {
+  final int count;
+  final int totalMinutes;
+  final String status;
+  final int overdueCount;
+  final int overdueMinutes;
+
+  const TodayWorkload({
+    required this.count,
+    required this.totalMinutes,
+    required this.status,
+    required this.overdueCount,
+    required this.overdueMinutes,
+  });
+
+  factory TodayWorkload.fromJson(Map<String, dynamic> json) {
+    return TodayWorkload(
+      count: (json['count'] as num?)?.toInt() ?? 0,
+      totalMinutes: (json['totalMinutes'] as num?)?.toInt() ?? 0,
+      status: json['status']?.toString() ?? 'LIGHT',
+      overdueCount: (json['overdueCount'] as num?)?.toInt() ?? 0,
+      overdueMinutes: (json['overdueMinutes'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  @override
+  List<Object?> get props => [count, totalMinutes, status, overdueCount, overdueMinutes];
+}
+
+class TaskWorkloadData extends Equatable {
+  final TodayWorkload today;
+  final List<DayWorkload> upcoming;
+
+  const TaskWorkloadData({
+    required this.today,
+    required this.upcoming,
+  });
+
+  factory TaskWorkloadData.fromJson(Map<String, dynamic> json) {
+    return TaskWorkloadData(
+      today: TodayWorkload.fromJson(
+        Map<String, dynamic>.from(json['today'] ?? {}),
+      ),
+      upcoming: (json['upcoming'] as List<dynamic>? ?? [])
+          .map((item) => DayWorkload.fromJson(Map<String, dynamic>.from(item)))
+          .toList(),
+    );
+  }
+
+  @override
+  List<Object?> get props => [today, upcoming];
+}
+
