@@ -12,9 +12,11 @@ import '../../presentation/screens/more/more_screen.dart';
 import '../../presentation/screens/finance/finance_screen.dart';
 import '../../presentation/screens/gym/gym_screen.dart';
 import '../../presentation/screens/goals/goals_screen.dart';
+import '../../presentation/screens/goals/goal_detail_screen.dart';
 import '../../presentation/screens/projects/projects_screen.dart';
 import '../../presentation/screens/projects/project_detail_screen.dart';
 import '../../presentation/screens/academic/academic_screen.dart';
+import '../../presentation/screens/academic/course_detail_screen.dart';
 import '../../presentation/screens/analytics/analytics_screen.dart';
 import '../../presentation/screens/settings/settings_screen.dart';
 import 'scaffold_with_nav_bar.dart';
@@ -122,6 +124,15 @@ final routerProvider = Provider<GoRouter>((ref) {
                   GoRoute(
                     path: 'goals',
                     builder: (context, state) => const GoalsScreen(),
+                    routes: [
+                      GoRoute(
+                        path: ':id',
+                        builder: (context, state) {
+                          final id = state.pathParameters['id'] ?? '';
+                          return GoalDetailScreen(goalId: id);
+                        },
+                      ),
+                    ],
                   ),
                   GoRoute(
                     path: 'projects',
@@ -139,7 +150,17 @@ final routerProvider = Provider<GoRouter>((ref) {
                   GoRoute(
                     path: 'academic',
                     builder: (context, state) => const AcademicScreen(),
+                    routes: [
+                      GoRoute(
+                        path: ':id',
+                        builder: (context, state) {
+                          final id = state.pathParameters['id'] ?? '';
+                          return CourseDetailScreen(courseId: id);
+                        },
+                      ),
+                    ],
                   ),
+
                   GoRoute(
                     path: 'analytics',
                     builder: (context, state) => const AnalyticsScreen(),

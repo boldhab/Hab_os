@@ -1,4 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/network/api_client.dart';
+import '../../core/storage/secure_storage_service.dart';
 import '../../data/models/dashboard_feed_model.dart';
 import '../../data/repositories/dashboard_repository.dart';
 
@@ -38,12 +40,18 @@ class DashboardState {
 
 class DashboardNotifier extends StateNotifier<DashboardState> {
   final DashboardRepository _repository;
+  final SecureStorageService _storage;
 
-  DashboardNotifier(this._repository) : super(const DashboardState()) {
+  DashboardNotifier(this._repository, this._storage)
+      : super(const DashboardState()) {
     load();
   }
 
   Future<void> load({bool showLoading = true}) async {
+    // Don't hit the API if the user has no token yet (avoids 401 on boot)
+    final token = await _storage.getAccessToken();
+    if (token == null || token.isEmpty) return;
+
     if (showLoading) {
       state = state.copyWith(status: DashboardStatus.loading);
     }
@@ -152,5 +160,6 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
 final dashboardProvider =
     StateNotifierProvider<DashboardNotifier, DashboardState>((ref) {
   final repo = ref.watch(dashboardRepositoryProvider);
-  return DashboardNotifier(repo);
+  final storage = ref.watch(secureStorageProvider);
+  return DashboardNotifier(repo, storage);
 });
