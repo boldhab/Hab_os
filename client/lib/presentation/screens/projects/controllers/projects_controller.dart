@@ -199,6 +199,20 @@ class ProjectsController {
     invalidateProjectViews(projectId);
   }
 
+  Future<Map<String, dynamic>> registerGithubWebhook({
+    required String owner,
+    required String repo,
+    required String projectId,
+  }) async {
+    final dio = ref.read(dioProvider);
+    final response = await dio.post(
+      ApiEndpoints.registerGithubWebhook(owner, repo),
+      data: {'projectId': projectId},
+    );
+    invalidateProjectViews(projectId);
+    return Map<String, dynamic>.from(response.data['data']);
+  }
+
   void invalidateProjectViews(String projectId) {
     ref.invalidate(projectBoardProvider(projectId));
     ref.invalidate(projectFeaturesProvider(projectId));
