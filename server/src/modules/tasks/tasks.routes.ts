@@ -20,6 +20,7 @@ router.use(authenticate);
 router.post('/', validate(createTaskSchema), tasksController.createTask);
 router.get('/', validate(getTasksQuerySchema, 'query'), tasksController.getTasks);
 router.get('/stats', tasksController.getTaskStats);
+router.get('/workload', tasksController.getDailyWorkload);
 
 router.get(
   '/matrix',
@@ -31,6 +32,7 @@ router.get(
 );
 
 router.get('/:id', validate(taskIdParamSchema, 'params'), tasksController.getTaskById);
+
 
 router.put(
   '/:id',

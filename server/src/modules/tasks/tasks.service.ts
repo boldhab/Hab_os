@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client';
 import prisma from '../../config/db';
 import ApiError from '../../common/apiError';
 import { invalidateDashboardCache } from '../dashboard/dashboard.service';
+import { recalculateGoalProgress } from '../goals/goals.service';
 
 export interface CreateTaskDTO {
   title: string;
@@ -12,7 +13,9 @@ export interface CreateTaskDTO {
   estimatedMinutes?: number | null;
   projectId?: string | null;
   goalId?: string | null;
+  milestoneId?: string | null;
   categoryId?: string | null;
+  courseId?: string | null;
   parentTaskId?: string | null;
   isRecurring?: boolean;
   recurrenceRule?: string | null;
@@ -28,7 +31,9 @@ export interface UpdateTaskDTO {
   estimatedMinutes?: number | null;
   projectId?: string | null;
   goalId?: string | null;
+  milestoneId?: string | null;
   categoryId?: string | null;
+  courseId?: string | null;
   parentTaskId?: string | null;
   isRecurring?: boolean;
   recurrenceRule?: string | null;
@@ -41,6 +46,7 @@ export interface GetTasksQuery {
   projectId?: string;
   goalId?: string;
   categoryId?: string;
+  courseId?: string;
   search?: string;
   parentTaskId?: string;
   page?: number | string;
@@ -61,28 +67,6 @@ const recalculateProjectProgress = async (projectId: string) => {
   const progress = Number(((completedTasks / totalTasks) * 100).toFixed(1));
   await prisma.project.update({
     where: { id: projectId },
-    data: { progress },
-  });
-};
-
-/**
- * Helper: Downstream recalculation of goal progress (UC-117)
- */
-const recalculateGoalProgress = async (goalId: string) => {
-  const totalMilestones = await prisma.milestone.count({ where: { goalId } });
-  const totalTasks = await prisma.task.count({ where: { goalId } });
-
-  const totalItems = totalMilestones + totalTasks;
-  if (totalItems === 0) return;
-
-  const [completedMilestones, completedTasks] = await Promise.all([
-    prisma.milestone.count({ where: { goalId, isCompleted: true } }),
-    prisma.task.count({ where: { goalId, isCompleted: true } }),
-  ]);
-
-  const progress = Number((((completedMilestones + completedTasks) / totalItems) * 100).toFixed(1));
-  await prisma.goal.update({
-    where: { id: goalId },
     data: { progress },
   });
 };
@@ -210,14 +194,18 @@ export const createTask = async (userId: string, data: CreateTaskDTO) => {
       userId,
       projectId: data.projectId,
       goalId: data.goalId,
+      milestoneId: data.milestoneId || null,
       categoryId: data.categoryId,
+      courseId: data.courseId,
     },
     include: {
       project: { select: { id: true, title: true, color: true } },
       goal: { select: { id: true, title: true } },
       category: { select: { id: true, name: true, color: true, icon: true } },
+      course: { select: { id: true, name: true, color: true } },
     },
   });
+
 
   if (data.projectId) await recalculateProjectProgress(data.projectId);
   if (data.goalId) await recalculateGoalProgress(data.goalId);
@@ -234,7 +222,7 @@ export const getTasks = async (userId: string, query: GetTasksQuery) => {
   const limit = Math.min(100, Math.max(1, Number(query.limit) || 20));
   const skip = (page - 1) * limit;
 
-  const { view, status, priority, projectId, goalId, categoryId, search, parentTaskId } = query;
+  const { view, status, priority, projectId, goalId, categoryId, courseId, search, parentTaskId } = query;
 
   const now = new Date();
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -262,10 +250,19 @@ export const getTasks = async (userId: string, query: GetTasksQuery) => {
   if (projectId) where.projectId = projectId;
   if (goalId) where.goalId = goalId;
   if (categoryId) where.categoryId = categoryId;
+  if (courseId) where.courseId = courseId;
 
   if (parentTaskId !== undefined) {
-    where.parentTaskId = parentTaskId === 'null' || parentTaskId === '' ? null : parentTaskId;
+    if (parentTaskId === 'all') {
+      // Do not filter by parentTaskId
+    } else {
+      where.parentTaskId = parentTaskId === 'null' || parentTaskId === '' ? null : parentTaskId;
+    }
+  } else {
+    // Top-level task list excludes child subtasks by default
+    where.parentTaskId = null;
   }
+
 
   if (search && search.trim() !== '') {
     where.AND = [
@@ -293,6 +290,8 @@ export const getTasks = async (userId: string, query: GetTasksQuery) => {
         project: { select: { id: true, title: true, color: true } },
         goal: { select: { id: true, title: true } },
         category: { select: { id: true, name: true, color: true, icon: true } },
+        course: { select: { id: true, name: true, color: true } },
+
         subtasks: {
           select: {
             id: true,
@@ -360,16 +359,28 @@ export const getTaskById = async (userId: string, taskId: string) => {
       project: true,
       goal: true,
       category: true,
-      subtasks: true,
+      subtasks: {
+        orderBy: [{ isCompleted: 'asc' }, { createdAt: 'asc' }],
+      },
       blockedBy: {
         include: {
-          blockingTask: true,
+          blockingTask: {
+            select: { id: true, title: true, isCompleted: true, priority: true, status: true },
+          },
+        },
+      },
+      blocking: {
+        include: {
+          blockedTask: {
+            select: { id: true, title: true, isCompleted: true, priority: true, status: true },
+          },
         },
       },
       timeEntries: { orderBy: { startTime: 'desc' } },
       focusSessions: { orderBy: { startTime: 'desc' } },
     },
   });
+
 
   if (!task) {
     throw new ApiError(404, 'Task not found');
@@ -405,10 +416,27 @@ export const updateTask = async (userId: string, taskId: string, data: UpdateTas
 
   if (data.isCompleted !== undefined || data.status !== undefined) {
     const isCompleted = data.isCompleted !== undefined ? data.isCompleted : data.status === 'COMPLETED';
+    if (isCompleted && !existingTask.isCompleted) {
+      const blockers = await prisma.taskDependency.findMany({
+        where: {
+          blockedTaskId: taskId,
+          blockingTask: { isCompleted: false },
+        },
+        include: {
+          blockingTask: { select: { title: true } },
+        },
+      });
+
+      if (blockers.length > 0) {
+        const titles = blockers.map((b) => `"${b.blockingTask.title}"`).join(', ');
+        throw new ApiError(400, `Cannot complete task: blocked by unfinished prerequisite(s): ${titles}`);
+      }
+    }
     updateData.isCompleted = isCompleted;
     updateData.status = data.status || (isCompleted ? 'COMPLETED' : 'TODO');
     updateData.completedAt = isCompleted ? (existingTask.completedAt || new Date()) : null;
   }
+
 
   if (data.projectId !== undefined) {
     updateData.project = data.projectId ? { connect: { id: data.projectId } } : { disconnect: true };
@@ -416,8 +444,14 @@ export const updateTask = async (userId: string, taskId: string, data: UpdateTas
   if (data.goalId !== undefined) {
     updateData.goal = data.goalId ? { connect: { id: data.goalId } } : { disconnect: true };
   }
+  if (data.milestoneId !== undefined) {
+    updateData.milestone = data.milestoneId ? { connect: { id: data.milestoneId } } : { disconnect: true };
+  }
   if (data.categoryId !== undefined) {
     updateData.category = data.categoryId ? { connect: { id: data.categoryId } } : { disconnect: true };
+  }
+  if (data.courseId !== undefined) {
+    updateData.course = data.courseId ? { connect: { id: data.courseId } } : { disconnect: true };
   }
 
   const updatedTask = await prisma.task.update({
@@ -427,8 +461,10 @@ export const updateTask = async (userId: string, taskId: string, data: UpdateTas
       project: { select: { id: true, title: true, color: true } },
       goal: { select: { id: true, title: true } },
       category: { select: { id: true, name: true, color: true, icon: true } },
+      course: { select: { id: true, name: true, color: true } },
     },
   });
+
 
   if (existingTask.parentTaskId) {
     await evaluateParentCompletion(userId, existingTask.parentTaskId);
@@ -468,7 +504,25 @@ export const toggleTaskComplete = async (userId: string, taskId: string) => {
   const status = isCompleted ? 'COMPLETED' : 'TODO';
   const completedAt = isCompleted ? new Date() : null;
 
+  if (isCompleted) {
+    const blockers = await prisma.taskDependency.findMany({
+      where: {
+        blockedTaskId: taskId,
+        blockingTask: { isCompleted: false },
+      },
+      include: {
+        blockingTask: { select: { title: true } },
+      },
+    });
+
+    if (blockers.length > 0) {
+      const titles = blockers.map((b) => `"${b.blockingTask.title}"`).join(', ');
+      throw new ApiError(400, `Cannot complete task: blocked by unfinished prerequisite(s): ${titles}`);
+    }
+  }
+
   const updatedTask = await prisma.task.update({
+
     where: { id: taskId },
     data: {
       isCompleted,
@@ -720,6 +774,98 @@ export const getEisenhowerMatrix = async (userId: string) => {
   };
 };
 
+/**
+ * Daily Workload Capacity calculation
+ */
+export const getDailyWorkload = async (userId: string) => {
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const endOf7Days = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 7, 23, 59, 59, 999);
+
+  const tasks = await prisma.task.findMany({
+    where: {
+      userId,
+      isCompleted: false,
+      parentTaskId: null,
+      dueDate: {
+        lte: endOf7Days,
+      },
+    },
+    select: {
+      id: true,
+      title: true,
+      dueDate: true,
+      estimatedMinutes: true,
+      priority: true,
+    },
+  });
+
+  const getCapacityStatus = (totalMinutes: number) => {
+    if (totalMinutes > 300) return 'HEAVY';
+    if (totalMinutes >= 120) return 'OPTIMAL';
+    return 'LIGHT';
+  };
+
+  const formatDay = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+
+  const todayStr = formatDay(startOfToday);
+
+  let todayMinutes = 0;
+  let todayCount = 0;
+  let overdueMinutes = 0;
+  let overdueCount = 0;
+
+  const dayBuckets: Record<string, { date: string; count: number; totalMinutes: number }> = {};
+  for (let i = 0; i <= 7; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + i);
+    const dateStr = formatDay(d);
+    dayBuckets[dateStr] = { date: dateStr, count: 0, totalMinutes: 0 };
+  }
+
+  for (const t of tasks) {
+    if (!t.dueDate) continue;
+    const est = t.estimatedMinutes || 30;
+    const d = new Date(t.dueDate);
+    const dateStr = formatDay(d);
+
+    if (d < startOfToday) {
+      overdueMinutes += est;
+      overdueCount += 1;
+      todayMinutes += est;
+      todayCount += 1;
+    } else if (dateStr === todayStr) {
+      todayMinutes += est;
+      todayCount += 1;
+    }
+
+    if (dayBuckets[dateStr]) {
+      dayBuckets[dateStr].count += 1;
+      dayBuckets[dateStr].totalMinutes += est;
+    }
+  }
+
+  const upcoming = Object.values(dayBuckets).map((b) => ({
+    ...b,
+    status: getCapacityStatus(b.totalMinutes),
+  }));
+
+  return {
+    today: {
+      count: todayCount,
+      totalMinutes: todayMinutes,
+      status: getCapacityStatus(todayMinutes),
+      overdueCount,
+      overdueMinutes,
+    },
+    upcoming,
+  };
+};
+
 export default {
   createTask,
   getTasks,
@@ -733,4 +879,6 @@ export default {
   addDependency,
   removeDependency,
   getEisenhowerMatrix,
+  getDailyWorkload,
 };
+
