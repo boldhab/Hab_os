@@ -47,6 +47,17 @@ export const syncLeetCode = asyncHandler(async (req: Request, res: Response) => 
   return ApiResponse.success(res, result, 'LeetCode integration synced successfully');
 });
 
+export const registerWebhook = asyncHandler(async (req: Request, res: Response) => {
+  const authReq = req as AuthRequest;
+  const { owner, repo } = req.params;
+  const { projectId, webhookSecret } = req.body;
+  const result = await integrationsService.registerWebhook(authReq.user!.id, owner, repo, {
+    projectId: projectId ?? null,
+    webhookSecret: webhookSecret ?? null,
+  });
+  return ApiResponse.success(res, result, result.message);
+});
+
 export default {
   getGitHubStats,
   syncGitHub,
@@ -55,4 +66,5 @@ export default {
   analyzeRepository,
   getLeetCodeStats,
   syncLeetCode,
+  registerWebhook,
 };

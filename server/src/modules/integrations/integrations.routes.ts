@@ -10,7 +10,9 @@ import {
   importRepoSchema,
   syncLeetCodeSchema,
   analyzeRepoParamSchema,
+  registerWebhookSchema,
 } from './integrations.validation';
+
 
 const router = Router();
 
@@ -58,8 +60,16 @@ router.get(
   integrationsController.analyzeRepository
 );
 
+// Register webhook on a GitHub repo (requires stored access token)
+router.post(
+  '/github/repos/:owner/:repo/webhook',
+  validate(registerWebhookSchema),
+  integrationsController.registerWebhook
+);
+
 // --- LeetCode Integration ---
 router.get('/leetcode/stats', integrationsController.getLeetCodeStats);
 router.post('/leetcode/sync', validate(syncLeetCodeSchema), integrationsController.syncLeetCode);
 
 export default router;
+

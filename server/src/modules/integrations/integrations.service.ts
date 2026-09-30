@@ -628,6 +628,88 @@ export const handleWebhook = async (event: string, payload: any, rawBody?: Buffe
   };
 };
 
+// ==========================================
+// 7. REGISTER GITHUB WEBHOOK (AUTO-REGISTRATION)
+// ==========================================
+
+export const registerWebhook = async (
+  userId: string,
+  owner: string,
+  repo: string,
+  options: { projectId?: string | null; webhookSecret?: string | null }
+) => {
+  const integration = await prisma.gitHubIntegration.findUnique({ where: { userId } });
+
+  if (!integration || !integration.accessToken) {
+    throw new ApiError(400, 'GitHub account not connected. Please sync your GitHub token first.');
+  }
+
+  const decryptedToken = decryptToken(integration.accessToken);
+  if (!decryptedToken) {
+    throw new ApiError(400, 'Could not decrypt GitHub access token. Please re-sync your account.');
+  }
+
+  const secret = options.webhookSecret || crypto.randomBytes(20).toString('hex');
+  const webhookUrl = process.env.WEBHOOK_BASE_URL
+    ? `${process.env.WEBHOOK_BASE_URL}/api/v1/integrations/github/webhook`
+    : `${process.env.BASE_URL || 'https://your-domain.com'}/api/v1/integrations/github/webhook`;
+
+  const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/hooks`, {
+    method: 'POST',
+    headers: {
+      ...getGitHubHeaders(decryptedToken),
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      name: 'web',
+      active: true,
+      events: ['push', 'pull_request', 'issues'],
+      config: {
+        url: webhookUrl,
+        content_type: 'json',
+        secret,
+        insecure_ssl: '0',
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    const errBody = await response.json().catch(() => ({})) as any;
+    // 422 means a hook with this URL already exists
+    if (response.status === 422) {
+      return {
+        registered: false,
+        alreadyExists: true,
+        message: 'Webhook already registered on this repository.',
+        webhookUrl,
+      };
+    }
+    throw new ApiError(
+      response.status,
+      `GitHub API error: ${errBody?.message || response.statusText}`
+    );
+  }
+
+  const hook = await response.json() as any;
+
+  // If a projectId was provided, persist the generated secret so HMAC checks work
+  if (options.projectId) {
+    await prisma.project.update({
+      where: { id: options.projectId },
+      data: { webhookSecret: secret },
+    });
+  }
+
+  return {
+    registered: true,
+    hookId: hook.id,
+    webhookUrl,
+    webhookSecret: secret,
+    events: hook.events,
+    message: `Webhook successfully registered on ${owner}/${repo}. Store the secret safely.`,
+  };
+};
+
 export default {
   getGitHubStats,
   syncGitHub,
@@ -641,4 +723,5 @@ export default {
   syncLeetCode,
   verifyWebhookSignature,
   handleWebhook,
+  registerWebhook,
 };
