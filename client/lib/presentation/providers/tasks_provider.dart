@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/models/task_model.dart';
 import '../../data/repositories/task_repository.dart';
@@ -95,7 +96,7 @@ class TasksNotifier extends StateNotifier<TasksState> {
     loadTasks(showLoading: false);
   }
 
-  Future<void> toggleTaskComplete(TaskModel task) async {
+  Future<String?> toggleTaskComplete(TaskModel task) async {
     final newCompletedState = !task.isCompleted;
 
     // Optimistic UI update
@@ -115,8 +116,15 @@ class TasksNotifier extends StateNotifier<TasksState> {
       await _repository.toggleComplete(task.id);
       await loadTasks(showLoading: false);
       _ref.read(dashboardProvider.notifier).load(showLoading: false);
-    } catch (_) {
-      loadTasks(showLoading: false);
+      _ref.invalidate(tasksWorkloadProvider);
+      return null;
+    } catch (e) {
+      await loadTasks(showLoading: false);
+      final errorMsg = e is DioException && e.response?.data != null
+          ? (e.response!.data['message']?.toString() ?? e.message ?? 'Failed to update status')
+          : e.toString();
+      state = state.copyWith(errorMessage: errorMsg);
+      return errorMsg;
     }
   }
 
@@ -125,6 +133,7 @@ class TasksNotifier extends StateNotifier<TasksState> {
       await _repository.createTask(payload);
       await loadTasks(showLoading: false);
       _ref.read(dashboardProvider.notifier).load(showLoading: false);
+      _ref.invalidate(tasksWorkloadProvider);
       return true;
     } catch (e) {
       state = state.copyWith(errorMessage: e.toString());
@@ -137,6 +146,7 @@ class TasksNotifier extends StateNotifier<TasksState> {
       await _repository.updateTask(id, payload);
       await loadTasks(showLoading: false);
       _ref.read(dashboardProvider.notifier).load(showLoading: false);
+      _ref.invalidate(tasksWorkloadProvider);
       return true;
     } catch (e) {
       state = state.copyWith(errorMessage: e.toString());
@@ -149,6 +159,7 @@ class TasksNotifier extends StateNotifier<TasksState> {
       await _repository.deleteTask(id);
       await loadTasks(showLoading: false);
       _ref.read(dashboardProvider.notifier).load(showLoading: false);
+      _ref.invalidate(tasksWorkloadProvider);
     } catch (e) {
       state = state.copyWith(errorMessage: e.toString());
     }
@@ -159,3 +170,9 @@ final tasksProvider = StateNotifierProvider<TasksNotifier, TasksState>((ref) {
   final repository = ref.watch(taskRepositoryProvider);
   return TasksNotifier(repository, ref);
 });
+
+final tasksWorkloadProvider = FutureProvider.autoDispose<TaskWorkloadData>((ref) async {
+  final repo = ref.watch(taskRepositoryProvider);
+  return repo.getWorkload();
+});
+
