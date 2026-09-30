@@ -7,17 +7,23 @@ export const createGoalSchema = Joi.object({
   }),
   description: Joi.string().trim().allow('', null),
   category: Joi.string()
-    .valid('CAREER', 'FITNESS', 'FINANCIAL', 'LEARNING', 'PERSONAL')
+    .valid('CAREER', 'HEALTH', 'EDUCATION', 'PERSONAL', 'FINANCIAL', 'FITNESS', 'LEARNING')
     .default('PERSONAL'),
+  priority: Joi.string().valid('LOW', 'MEDIUM', 'HIGH', 'CRITICAL').default('MEDIUM'),
   targetDate: Joi.date().iso().allow(null),
   progress: Joi.number().min(0).max(100).default(0.0),
+  targetAmount: Joi.number().min(0).allow(null),
+  currentAmount: Joi.number().min(0).default(0.0),
   color: Joi.string().trim().default('#3B82F6'),
   milestones: Joi.array()
     .items(
       Joi.object({
         title: Joi.string().trim().required(),
+        description: Joi.string().trim().allow('', null),
         targetDate: Joi.date().iso().allow(null),
         isCompleted: Joi.boolean().default(false),
+        weight: Joi.number().min(0.1).default(1.0),
+        order: Joi.number().default(0.0),
       })
     )
     .default([]),
@@ -26,9 +32,13 @@ export const createGoalSchema = Joi.object({
 export const updateGoalSchema = Joi.object({
   title: Joi.string().trim().min(1).max(255),
   description: Joi.string().trim().allow('', null),
-  category: Joi.string().valid('CAREER', 'FITNESS', 'FINANCIAL', 'LEARNING', 'PERSONAL'),
+  category: Joi.string().valid('CAREER', 'HEALTH', 'EDUCATION', 'PERSONAL', 'FINANCIAL', 'FITNESS', 'LEARNING'),
+  priority: Joi.string().valid('LOW', 'MEDIUM', 'HIGH', 'CRITICAL'),
+  status: Joi.string().valid('NOT_STARTED', 'IN_PROGRESS', 'COMPLETED', 'ARCHIVED'),
   targetDate: Joi.date().iso().allow(null),
   progress: Joi.number().min(0).max(100),
+  targetAmount: Joi.number().min(0).allow(null),
+  currentAmount: Joi.number().min(0),
   color: Joi.string().trim(),
 });
 
@@ -37,14 +47,30 @@ export const createMilestoneSchema = Joi.object({
     'string.empty': 'Milestone title is required',
     'any.required': 'Milestone title is required',
   }),
+  description: Joi.string().trim().allow('', null),
   targetDate: Joi.date().iso().allow(null),
   isCompleted: Joi.boolean().default(false),
+  weight: Joi.number().min(0.1).default(1.0),
+  order: Joi.number().default(0.0),
 });
 
 export const updateMilestoneSchema = Joi.object({
   title: Joi.string().trim().min(1).max(255),
+  description: Joi.string().trim().allow('', null),
   targetDate: Joi.date().iso().allow(null),
+  status: Joi.string().valid('NOT_STARTED', 'IN_PROGRESS', 'COMPLETED'),
   isCompleted: Joi.boolean(),
+  weight: Joi.number().min(0.1),
+  order: Joi.number(),
+});
+
+export const createCheckInSchema = Joi.object({
+  confidence: Joi.string().valid('ON_TRACK', 'BEHIND', 'AT_RISK').default('ON_TRACK'),
+  note: Joi.string().trim().allow('', null),
+});
+
+export const contributeGoalSchema = Joi.object({
+  amount: Joi.number().positive().required(),
 });
 
 export const uuidParamSchema = Joi.object({
