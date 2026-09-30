@@ -8,6 +8,8 @@ enum HabitsStatus { initial, loading, loaded, error }
 class HabitsState {
   final HabitsStatus status;
   final List<HabitModel> habits;
+  final List<RoutineModel> routines;
+  final List<HabitCorrelationModel> correlations;
   final bool filterActiveOnly;
   final String? errorMessage;
   final Map<String, List<HabitLogModel>> habitHistories;
@@ -15,6 +17,8 @@ class HabitsState {
   const HabitsState({
     this.status = HabitsStatus.initial,
     this.habits = const [],
+    this.routines = const [],
+    this.correlations = const [],
     this.filterActiveOnly = true,
     this.errorMessage,
     this.habitHistories = const {},
@@ -30,6 +34,8 @@ class HabitsState {
   HabitsState copyWith({
     HabitsStatus? status,
     List<HabitModel>? habits,
+    List<RoutineModel>? routines,
+    List<HabitCorrelationModel>? correlations,
     bool? filterActiveOnly,
     String? errorMessage,
     Map<String, List<HabitLogModel>>? habitHistories,
@@ -37,6 +43,8 @@ class HabitsState {
     return HabitsState(
       status: status ?? this.status,
       habits: habits ?? this.habits,
+      routines: routines ?? this.routines,
+      correlations: correlations ?? this.correlations,
       filterActiveOnly: filterActiveOnly ?? this.filterActiveOnly,
       errorMessage: errorMessage ?? this.errorMessage,
       habitHistories: habitHistories ?? this.habitHistories,
@@ -50,6 +58,8 @@ class HabitsNotifier extends StateNotifier<HabitsState> {
 
   HabitsNotifier(this._repository, this._ref) : super(const HabitsState()) {
     loadHabits();
+    loadRoutines();
+    loadCorrelations();
   }
 
   Future<void> loadHabits({bool showLoading = true}) async {
@@ -65,6 +75,20 @@ class HabitsNotifier extends StateNotifier<HabitsState> {
         errorMessage: e.toString(),
       );
     }
+  }
+
+  Future<void> loadRoutines() async {
+    try {
+      final routines = await _repository.getRoutines();
+      state = state.copyWith(routines: routines);
+    } catch (_) {}
+  }
+
+  Future<void> loadCorrelations() async {
+    try {
+      final correlations = await _repository.getHabitCorrelations();
+      state = state.copyWith(correlations: correlations);
+    } catch (_) {}
   }
 
   void toggleFilterActive(bool activeOnly) {
@@ -89,12 +113,10 @@ class HabitsNotifier extends StateNotifier<HabitsState> {
         habit.id,
         isCompleted: newCompletedState,
       );
-      // Reload in background to refresh streak numbers from server calculation
       await loadHabits(showLoading: false);
-      // Also silently reload dashboard feed
+      await loadRoutines();
       _ref.read(dashboardProvider.notifier).load(showLoading: false);
     } catch (e) {
-      // Rollback on error
       loadHabits(showLoading: false);
     }
   }
@@ -131,6 +153,7 @@ class HabitsNotifier extends StateNotifier<HabitsState> {
     try {
       await _repository.deleteHabit(id);
       await loadHabits(showLoading: false);
+      await loadRoutines();
       _ref.read(dashboardProvider.notifier).load(showLoading: false);
     } catch (e) {
       state = state.copyWith(errorMessage: e.toString());
@@ -146,6 +169,58 @@ class HabitsNotifier extends StateNotifier<HabitsState> {
       return logs;
     } catch (e) {
       return [];
+    }
+  }
+
+  Future<void> refillStreakFreeze(String habitId, {int count = 1}) async {
+    try {
+      await _repository.refillStreakFreeze(habitId, count: count);
+      await loadHabits(showLoading: false);
+    } catch (e) {
+      state = state.copyWith(errorMessage: e.toString());
+    }
+  }
+
+  // --- Routines ---
+  Future<bool> createRoutine(Map<String, dynamic> payload) async {
+    try {
+      await _repository.createRoutine(payload);
+      await loadRoutines();
+      return true;
+    } catch (e) {
+      state = state.copyWith(errorMessage: e.toString());
+      return false;
+    }
+  }
+
+  Future<bool> updateRoutine(String id, Map<String, dynamic> payload) async {
+    try {
+      await _repository.updateRoutine(id, payload);
+      await loadRoutines();
+      return true;
+    } catch (e) {
+      state = state.copyWith(errorMessage: e.toString());
+      return false;
+    }
+  }
+
+  Future<void> deleteRoutine(String id) async {
+    try {
+      await _repository.deleteRoutine(id);
+      await loadRoutines();
+    } catch (e) {
+      state = state.copyWith(errorMessage: e.toString());
+    }
+  }
+
+  Future<void> completeRoutine(String id) async {
+    try {
+      await _repository.completeRoutine(id);
+      await loadHabits(showLoading: false);
+      await loadRoutines();
+      _ref.read(dashboardProvider.notifier).load(showLoading: false);
+    } catch (e) {
+      state = state.copyWith(errorMessage: e.toString());
     }
   }
 }
