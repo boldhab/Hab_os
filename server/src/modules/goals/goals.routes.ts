@@ -7,6 +7,8 @@ import {
   updateGoalSchema,
   createMilestoneSchema,
   updateMilestoneSchema,
+  createCheckInSchema,
+  contributeGoalSchema,
   uuidParamSchema,
   goalMilestoneParamSchema,
 } from './goals.validation';
@@ -16,13 +18,15 @@ const router = Router();
 // All goals routes require authentication
 router.use(authenticate);
 
-// --- Roadmap View (UC-119, UC-120) ---
+// --- Roadmap & Health (Special Views) ---
 router.get('/roadmap', goalsController.getRoadmap);
+router.get('/health', goalsController.getGoalsHealth);
 
-// --- Goals (UC-112 to UC-114) ---
+// --- Goals ---
 router.post('/', validate(createGoalSchema), goalsController.createGoal);
 router.get('/', goalsController.getGoals);
 router.get('/:id', validate(uuidParamSchema, 'params'), goalsController.getGoalById);
+router.get('/:id/tree', validate(uuidParamSchema, 'params'), goalsController.getGoalTree);
 router.put(
   '/:id',
   validate(uuidParamSchema, 'params'),
@@ -31,7 +35,19 @@ router.put(
 );
 router.delete('/:id', validate(uuidParamSchema, 'params'), goalsController.deleteGoal);
 
-// --- Milestones (UC-115, UC-116) ---
+// --- Financial Contribution ---
+router.post(
+  '/:id/contribute',
+  validate(uuidParamSchema, 'params'),
+  validate(contributeGoalSchema),
+  goalsController.contributeFinancialGoal
+);
+
+// --- Milestones ---
+router.get(
+  '/:goalId/milestones',
+  goalsController.getMilestones
+);
 router.post(
   '/:goalId/milestones',
   validate(createMilestoneSchema),
@@ -47,6 +63,19 @@ router.delete(
   '/:goalId/milestones/:milestoneId',
   validate(goalMilestoneParamSchema, 'params'),
   goalsController.deleteMilestone
+);
+
+// --- Check-Ins ---
+router.get(
+  '/:id/checkins',
+  validate(uuidParamSchema, 'params'),
+  goalsController.getGoalCheckIns
+);
+router.post(
+  '/:id/checkins',
+  validate(uuidParamSchema, 'params'),
+  validate(createCheckInSchema),
+  goalsController.recordCheckIn
 );
 
 export default router;

@@ -67,8 +67,57 @@ class HabitRepository {
   Future<List<HabitLogModel>> getHabitHistory(String id) async {
     final response = await _dio.get(ApiEndpoints.habitHistory(id));
     final data = response.data['data'] ?? response.data;
-    if (data is List) {
+    if (data is Map && data.containsKey('logs')) {
+      final logsList = data['logs'] as List;
+      return logsList.map((i) => HabitLogModel.fromJson(Map<String, dynamic>.from(i))).toList();
+    } else if (data is List) {
       return data.map((i) => HabitLogModel.fromJson(Map<String, dynamic>.from(i))).toList();
+    }
+    return [];
+  }
+
+  Future<void> refillStreakFreeze(String id, {int count = 1}) async {
+    await _dio.post(ApiEndpoints.habitFreeze(id), data: {'count': count});
+  }
+
+  // --- Routines ---
+  Future<List<RoutineModel>> getRoutines() async {
+    final response = await _dio.get(ApiEndpoints.habitRoutines);
+    final data = response.data['data'] ?? response.data;
+    if (data is List) {
+      return data.map((i) => RoutineModel.fromJson(Map<String, dynamic>.from(i))).toList();
+    }
+    return [];
+  }
+
+  Future<RoutineModel> createRoutine(Map<String, dynamic> payload) async {
+    final response = await _dio.post(ApiEndpoints.habitRoutines, data: payload);
+    final data = response.data['data'] ?? response.data;
+    return RoutineModel.fromJson(Map<String, dynamic>.from(data));
+  }
+
+  Future<RoutineModel> updateRoutine(String id, Map<String, dynamic> payload) async {
+    final response = await _dio.put(ApiEndpoints.habitRoutineById(id), data: payload);
+    final data = response.data['data'] ?? response.data;
+    return RoutineModel.fromJson(Map<String, dynamic>.from(data));
+  }
+
+  Future<void> deleteRoutine(String id) async {
+    await _dio.delete(ApiEndpoints.habitRoutineById(id));
+  }
+
+  Future<void> completeRoutine(String id, {String? date}) async {
+    await _dio.post(ApiEndpoints.habitRoutineComplete(id), data: {
+      if (date != null) 'date': date,
+    });
+  }
+
+  // --- Behavioral Correlations ---
+  Future<List<HabitCorrelationModel>> getHabitCorrelations() async {
+    final response = await _dio.get(ApiEndpoints.habitCorrelations);
+    final data = response.data['data'] ?? response.data;
+    if (data is List) {
+      return data.map((i) => HabitCorrelationModel.fromJson(Map<String, dynamic>.from(i))).toList();
     }
     return [];
   }

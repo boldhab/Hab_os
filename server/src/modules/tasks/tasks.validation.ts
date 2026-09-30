@@ -12,7 +12,12 @@ export const createTaskSchema = Joi.object({
   estimatedMinutes: Joi.number().integer().min(1).max(1440).allow(null),
   projectId: Joi.string().uuid().allow(null),
   goalId: Joi.string().uuid().allow(null),
+  milestoneId: Joi.string().uuid().allow(null),
   categoryId: Joi.string().uuid().allow(null),
+  courseId: Joi.string().uuid().allow(null),
+  parentTaskId: Joi.string().uuid().allow(null),
+  isRecurring: Joi.boolean().default(false),
+  recurrenceRule: Joi.string().allow('', null),
 });
 
 export const updateTaskSchema = Joi.object({
@@ -25,7 +30,12 @@ export const updateTaskSchema = Joi.object({
   estimatedMinutes: Joi.number().integer().min(1).max(1440).allow(null),
   projectId: Joi.string().uuid().allow(null),
   goalId: Joi.string().uuid().allow(null),
+  milestoneId: Joi.string().uuid().allow(null),
   categoryId: Joi.string().uuid().allow(null),
+  courseId: Joi.string().uuid().allow(null),
+  parentTaskId: Joi.string().uuid().allow(null),
+  isRecurring: Joi.boolean(),
+  recurrenceRule: Joi.string().allow('', null),
 });
 
 export const getTasksQuerySchema = Joi.object({
@@ -35,10 +45,12 @@ export const getTasksQuerySchema = Joi.object({
   projectId: Joi.string().uuid(),
   goalId: Joi.string().uuid(),
   categoryId: Joi.string().uuid(),
+  courseId: Joi.string().uuid(),
   search: Joi.string().trim().allow(''),
   page: Joi.number().integer().min(1).default(1),
   limit: Joi.number().integer().min(1).max(100).default(20),
 });
+
 
 export const taskIdParamSchema = Joi.object({
   id: Joi.string().uuid().required().messages({

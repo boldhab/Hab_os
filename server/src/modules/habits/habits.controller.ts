@@ -41,6 +41,17 @@ export const getHabitsSummary = asyncHandler(async (req: Request, res: Response)
 });
 
 /**
+ * @desc    Get behavioral correlation insights
+ * @route   GET /api/v1/habits/correlations
+ * @access  Private
+ */
+export const getHabitCorrelations = asyncHandler(async (req: Request, res: Response) => {
+  const authReq = req as AuthRequest;
+  const correlations = await habitsService.getHabitCorrelations(authReq.user!.id);
+  return ApiResponse.success(res, correlations, 'Habit correlations retrieved successfully');
+});
+
+/**
  * @desc    Get single habit with recent logs
  * @route   GET /api/v1/habits/:id
  * @access  Private
@@ -91,6 +102,18 @@ export const getHabitHistory = asyncHandler(async (req: Request, res: Response) 
 });
 
 /**
+ * @desc    Equip / refill streak freeze
+ * @route   POST /api/v1/habits/:id/freeze
+ * @access  Private
+ */
+export const refillStreakFreeze = asyncHandler(async (req: Request, res: Response) => {
+  const authReq = req as AuthRequest;
+  const count = req.body.count ? parseInt(req.body.count, 10) : 1;
+  const result = await habitsService.refillStreakFreeze(authReq.user!.id, req.params.id, count);
+  return ApiResponse.success(res, result, 'Streak freeze added successfully');
+});
+
+/**
  * @desc    Delete a habit
  * @route   DELETE /api/v1/habits/:id
  * @access  Private
@@ -101,13 +124,61 @@ export const deleteHabit = asyncHandler(async (req: Request, res: Response) => {
   return ApiResponse.success(res, result, 'Habit deleted successfully');
 });
 
+// ==========================================
+// ROUTINES
+// ==========================================
+
+export const createRoutine = asyncHandler(async (req: Request, res: Response) => {
+  const authReq = req as AuthRequest;
+  const routine = await habitsService.createRoutine(authReq.user!.id, req.body);
+  return ApiResponse.success(res, routine, 'Routine created successfully', 201);
+});
+
+export const getRoutines = asyncHandler(async (req: Request, res: Response) => {
+  const authReq = req as AuthRequest;
+  const routines = await habitsService.getRoutines(authReq.user!.id);
+  return ApiResponse.success(res, routines, 'Routines retrieved successfully');
+});
+
+export const getRoutineById = asyncHandler(async (req: Request, res: Response) => {
+  const authReq = req as AuthRequest;
+  const routine = await habitsService.getRoutineById(authReq.user!.id, req.params.id);
+  return ApiResponse.success(res, routine, 'Routine retrieved successfully');
+});
+
+export const updateRoutine = asyncHandler(async (req: Request, res: Response) => {
+  const authReq = req as AuthRequest;
+  const routine = await habitsService.updateRoutine(authReq.user!.id, req.params.id, req.body);
+  return ApiResponse.success(res, routine, 'Routine updated successfully');
+});
+
+export const deleteRoutine = asyncHandler(async (req: Request, res: Response) => {
+  const authReq = req as AuthRequest;
+  const result = await habitsService.deleteRoutine(authReq.user!.id, req.params.id);
+  return ApiResponse.success(res, result, 'Routine deleted successfully');
+});
+
+export const completeRoutine = asyncHandler(async (req: Request, res: Response) => {
+  const authReq = req as AuthRequest;
+  const result = await habitsService.completeRoutine(authReq.user!.id, req.params.id, req.body.date);
+  return ApiResponse.success(res, result, 'Routine completed successfully');
+});
+
 export default {
   createHabit,
   getHabits,
   getHabitsSummary,
+  getHabitCorrelations,
   getHabitById,
   updateHabit,
   logHabitCompletion,
   getHabitHistory,
+  refillStreakFreeze,
   deleteHabit,
+  createRoutine,
+  getRoutines,
+  getRoutineById,
+  updateRoutine,
+  deleteRoutine,
+  completeRoutine,
 };

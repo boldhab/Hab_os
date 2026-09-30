@@ -36,6 +36,13 @@ export const analyzeRepoParamSchema = Joi.object({
   repo: Joi.string().trim().required(),
 });
 
+export const registerWebhookSchema = Joi.object({
+  owner: Joi.string().trim().min(1).max(100).required(),
+  repo: Joi.string().trim().min(1).max(100).required(),
+  projectId: Joi.string().uuid().allow(null),
+  webhookSecret: Joi.string().trim().min(8).allow(null),
+});
+
 export const syncLeetCodeSchema = Joi.object({
   username: Joi.string().trim().min(1).max(100).required().messages({
     'string.empty': 'LeetCode username is required',

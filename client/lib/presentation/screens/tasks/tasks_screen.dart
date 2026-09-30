@@ -101,6 +101,9 @@ class TasksScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 4),
 
+          // Workload Capacity Indicator (Today / Upcoming)
+          _buildWorkloadBanner(context, ref, state.currentViewFilter),
+
           // Task List
           Expanded(
             child: _buildBody(context, ref, state),
@@ -112,6 +115,132 @@ class TasksScreen extends ConsumerWidget {
         icon: const Icon(Icons.add_rounded),
         label: const Text('New Task'),
       ),
+    );
+  }
+
+  Future<void> _handleToggleComplete(BuildContext context, WidgetRef ref, TaskModel task) async {
+    final err = await ref.read(tasksProvider.notifier).toggleTaskComplete(task);
+    if (err != null && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(err),
+          backgroundColor: Colors.redAccent,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  Widget _buildWorkloadBanner(BuildContext context, WidgetRef ref, String view) {
+    if (view != 'today' && view != 'upcoming') return const SizedBox.shrink();
+
+    final workloadAsync = ref.watch(tasksWorkloadProvider);
+    return workloadAsync.when(
+      data: (data) {
+        if (view == 'today') {
+          final today = data.today;
+          final color = switch (today.status) {
+            'HEAVY' => Colors.redAccent,
+            'OPTIMAL' => Colors.teal,
+            _ => Colors.blueGrey,
+          };
+          final label = switch (today.status) {
+            'HEAVY' => 'Heavy Load (>5h)',
+            'OPTIMAL' => 'Optimal Load (2-5h)',
+            _ => 'Light Load (<2h)',
+          };
+
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: color.withAlpha(25),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: color.withAlpha(80)),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.speed_rounded, size: 18, color: color),
+                  const SizedBox(width: 8),
+                  Text(
+                    '${today.totalMinutes}m planned (${today.count} tasks)',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                      color: color,
+                    ),
+                  ),
+                  const Spacer(),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: color.withAlpha(50),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: color,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        } else {
+          final upcomingDays = data.upcoming.take(5).toList();
+          if (upcomingDays.isEmpty) return const SizedBox.shrink();
+
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: upcomingDays.map((d) {
+                  final color = switch (d.status) {
+                    'HEAVY' => Colors.redAccent,
+                    'OPTIMAL' => Colors.teal,
+                    _ => Colors.blueGrey,
+                  };
+                  final dateParts = d.date.split('-');
+                  final shortDate =
+                      dateParts.length >= 3 ? '${dateParts[1]}/${dateParts[2]}' : d.date;
+
+                  return Container(
+                    margin: const EdgeInsets.only(right: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: color.withAlpha(20),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: color.withAlpha(60)),
+                    ),
+                    child: Row(
+                      children: [
+                        Text(
+                          shortDate,
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          '${d.totalMinutes}m',
+                          style: TextStyle(
+                              fontSize: 11, color: color, fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          );
+        }
+      },
+      loading: () => const SizedBox.shrink(),
+      error: (_, __) => const SizedBox.shrink(),
     );
   }
 
@@ -151,8 +280,7 @@ class TasksScreen extends ConsumerWidget {
               final task = state.tasks[index];
               return _TaskCard(
                 task: task,
-                onToggle: () =>
-                    ref.read(tasksProvider.notifier).toggleTaskComplete(task),
+                onToggle: () => _handleToggleComplete(context, ref, task),
                 onEdit: () => _openEditDialog(context, ref, task),
                 onDelete: () => _confirmDelete(context, ref, task),
               );
@@ -296,7 +424,7 @@ class TasksScreen extends ConsumerWidget {
             else
               ...tasks.map((t) => _TaskCard(
                     task: t,
-                    onToggle: () => ref.read(tasksProvider.notifier).toggleTaskComplete(t),
+                    onToggle: () => _handleToggleComplete(context, ref, t),
                     onEdit: () => _openEditDialog(context, ref, t),
                     onDelete: () => _confirmDelete(context, ref, t),
                   )),
@@ -588,8 +716,31 @@ class _TaskCard extends StatelessWidget {
 
                       // Recurring Task Indicator
                       if (task.isRecurring) ...[
-                        Icon(Icons.repeat_rounded,
-                            size: 13, color: colorScheme.secondary),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: colorScheme.secondaryContainer.withAlpha(120),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.repeat_rounded,
+                                  size: 11, color: colorScheme.secondary),
+                              if (task.recurrenceRule != null) ...[
+                                const SizedBox(width: 3),
+                                Text(
+                                  task.recurrenceRule!,
+                                  style: TextStyle(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.bold,
+                                    color: colorScheme.secondary,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
                       ],
 
                       // Project tag

@@ -32,6 +32,8 @@ export const createAssignmentSchema = Joi.object({
   dueDate: Joi.date().iso().required().messages({
     'any.required': 'Due date is required',
   }),
+  type: Joi.string().valid('HOMEWORK', 'ESSAY', 'PROJECT', 'LAB', 'QUIZ').default('HOMEWORK'),
+  weight: Joi.number().min(0).max(100).default(10.0),
   status: Joi.string().valid('NOT_STARTED', 'IN_PROGRESS', 'SUBMITTED', 'GRADED').default('NOT_STARTED'),
   grade: Joi.number().min(0).allow(null),
   maxGrade: Joi.number().min(1).default(100.0),
@@ -41,6 +43,8 @@ export const updateAssignmentSchema = Joi.object({
   title: Joi.string().trim().min(1).max(255),
   description: Joi.string().trim().allow('', null),
   dueDate: Joi.date().iso(),
+  type: Joi.string().valid('HOMEWORK', 'ESSAY', 'PROJECT', 'LAB', 'QUIZ'),
+  weight: Joi.number().min(0).max(100).allow(null),
   status: Joi.string().valid('NOT_STARTED', 'IN_PROGRESS', 'SUBMITTED', 'GRADED'),
   grade: Joi.number().min(0).allow(null),
   maxGrade: Joi.number().min(1),
@@ -77,6 +81,28 @@ export const recordAttendanceSchema = Joi.object({
   notes: Joi.string().trim().allow('', null),
 });
 
+export const addClassScheduleSchema = Joi.object({
+  dayOfWeek: Joi.number().integer().min(1).max(7).required().messages({
+    'any.required': 'Day of week (1=Mon..7=Sun) is required',
+  }),
+  startTime: Joi.string().pattern(/^([01]\d|2[0-3]):([0-5]\d)$/).required().messages({
+    'string.pattern.base': 'Start time must be HH:MM format (24h)',
+    'any.required': 'Start time is required',
+  }),
+  endTime: Joi.string().pattern(/^([01]\d|2[0-3]):([0-5]\d)$/).required().messages({
+    'string.pattern.base': 'End time must be HH:MM format (24h)',
+    'any.required': 'End time is required',
+  }),
+  room: Joi.string().trim().allow('', null),
+});
+
+export const whatIfFinalGradeSchema = Joi.object({
+  targetPercentage: Joi.number().min(0).max(100).required().messages({
+    'any.required': 'Target percentage is required',
+  }),
+  finalExamWeight: Joi.number().min(1).max(100).default(30.0),
+});
+
 export const uuidParamSchema = Joi.object({
   id: Joi.string().uuid().required(),
 });
@@ -89,4 +115,9 @@ export const courseAssignmentParamSchema = Joi.object({
 export const courseExamParamSchema = Joi.object({
   courseId: Joi.string().uuid().required(),
   examId: Joi.string().uuid().required(),
+});
+
+export const courseScheduleParamSchema = Joi.object({
+  courseId: Joi.string().uuid().required(),
+  scheduleId: Joi.string().uuid().required(),
 });

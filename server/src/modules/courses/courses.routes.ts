@@ -10,9 +10,12 @@ import {
   createExamSchema,
   updateExamSchema,
   recordAttendanceSchema,
+  addClassScheduleSchema,
+  whatIfFinalGradeSchema,
   uuidParamSchema,
   courseAssignmentParamSchema,
   courseExamParamSchema,
+  courseScheduleParamSchema,
 } from './courses.validation';
 
 const router = Router();
@@ -20,10 +23,12 @@ const router = Router();
 // All courses routes require authentication
 router.use(authenticate);
 
-// --- Academic Overview (UC-77, UC-79, UC-81) ---
+// --- Academic Overview & GPA Engine ---
 router.get('/summary', coursesController.getAcademicSummary);
+router.get('/gpa', coursesController.getGpaOverview);
+router.get('/schedules', coursesController.getClassSchedules);
 
-// --- Courses (UC-70 to UC-74) ---
+// --- Courses CRUD ---
 router.post('/', validate(createCourseSchema), coursesController.createCourse);
 router.get('/', coursesController.getCourses);
 router.get('/:id', validate(uuidParamSchema, 'params'), coursesController.getCourseById);
@@ -35,7 +40,7 @@ router.put(
 );
 router.delete('/:id', validate(uuidParamSchema, 'params'), coursesController.deleteCourse);
 
-// --- Assignments (UC-75 to UC-77) ---
+// --- Assignments ---
 router.post(
   '/:courseId/assignments',
   validate(createAssignmentSchema),
@@ -53,7 +58,7 @@ router.delete(
   coursesController.deleteAssignment
 );
 
-// --- Exams (UC-78 to UC-80) ---
+// --- Exams ---
 router.post(
   '/:courseId/exams',
   validate(createExamSchema),
@@ -71,14 +76,34 @@ router.delete(
   coursesController.deleteExam
 );
 
-// --- Attendance (UC-82 to UC-83) ---
+// --- Attendance ---
 router.post(
   '/:courseId/attendance',
   validate(recordAttendanceSchema),
   coursesController.recordAttendance
 );
 
-// --- Study Sessions (UC-84 to UC-90) ---
+// --- Class Schedules (Weekly Timetable) ---
+router.get('/:courseId/schedules', coursesController.getClassSchedules);
+router.post(
+  '/:courseId/schedules',
+  validate(addClassScheduleSchema),
+  coursesController.addClassSchedule
+);
+router.delete(
+  '/:courseId/schedules/:scheduleId',
+  validate(courseScheduleParamSchema, 'params'),
+  coursesController.deleteClassSchedule
+);
+
+// --- What-If Final Exam Calculator ---
+router.post(
+  '/:courseId/what-if',
+  validate(whatIfFinalGradeSchema),
+  coursesController.calculateWhatIfFinalGrade
+);
+
+// --- Study Sessions ---
 router.post('/:courseId/study', coursesController.recordStudySession);
 router.get('/:courseId/study', coursesController.getStudySessions);
 

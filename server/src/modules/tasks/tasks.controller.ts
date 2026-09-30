@@ -81,6 +81,17 @@ export const deleteTask = asyncHandler(async (req: Request, res: Response) => {
   return ApiResponse.success(res, result, 'Task deleted successfully');
 });
 
+/**
+ * @desc    Get daily workload capacity
+ * @route   GET /api/v1/tasks/workload
+ * @access  Private
+ */
+export const getDailyWorkload = asyncHandler(async (req: Request, res: Response) => {
+  const authReq = req as AuthRequest;
+  const workload = await tasksService.getDailyWorkload(authReq.user!.id);
+  return ApiResponse.success(res, workload, 'Daily workload retrieved successfully');
+});
+
 export default {
   createTask,
   getTasks,
@@ -89,4 +100,6 @@ export default {
   updateTask,
   toggleTaskComplete,
   deleteTask,
+  getDailyWorkload,
 };
+

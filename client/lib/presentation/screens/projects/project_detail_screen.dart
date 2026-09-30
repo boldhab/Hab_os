@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:fl_chart/fl_chart.dart';
 import '../../widgets/app_error_state.dart';
 import 'controllers/projects_controller.dart';
 import 'models/project_models.dart';
@@ -289,17 +290,112 @@ class _KanbanBoardTab extends ConsumerWidget {
             itemCount: items.length,
             itemBuilder: (context, index) {
               final card = items[index];
-              return _KanbanCard(
-                card: card,
-                projectId: projectId,
-                onMove: (targetStatus) {
+              return DragTarget<KanbanCardModel>(
+                onWillAcceptWithDetails: (details) => details.data.id != card.id,
+                onAcceptWithDetails: (details) {
+                  final incoming = details.data;
+                  double? prevOrder;
+                  final double nextOrder = card.order;
+                  if (index > 0) {
+                    final prev = items[index - 1];
+                    if (prev.id == incoming.id) {
+                      prevOrder = index > 1 ? items[index - 2].order : null;
+                    } else {
+                      prevOrder = prev.order;
+                    }
+                  }
                   ref.read(projectsControllerProvider).moveBoardItem(
                         projectId: projectId,
-                        entityType: card.type,
-                        entityId: card.id,
-                        targetStatus: targetStatus,
+                        entityType: incoming.type,
+                        entityId: incoming.id,
+                        targetStatus: statusKey,
+                        prevOrder: prevOrder,
+                        nextOrder: nextOrder,
                       );
                 },
+                builder: (context, candidateData, rejectedData) {
+                  final isHovered = candidateData.isNotEmpty;
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (isHovered)
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 6),
+                          height: 3,
+                          decoration: BoxDecoration(
+                            color: colorScheme.primary,
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                      _KanbanCard(
+                        card: card,
+                        projectId: projectId,
+                        onMove: (targetStatus) {
+                          ref.read(projectsControllerProvider).moveBoardItem(
+                                projectId: projectId,
+                                entityType: card.type,
+                                entityId: card.id,
+                                targetStatus: targetStatus,
+                              );
+                        },
+                      ),
+                    ],
+                  );
+                },
+              );
+            },
+          ),
+          // Column drop target for appending or dropping into empty column
+          DragTarget<KanbanCardModel>(
+            onWillAcceptWithDetails: (details) {
+              if (items.isNotEmpty && items.last.id == details.data.id && details.data.status == statusKey) {
+                return false;
+              }
+              return true;
+            },
+            onAcceptWithDetails: (details) {
+              final incoming = details.data;
+              double? prevOrder = items.isNotEmpty ? items.last.order : null;
+              if (items.isNotEmpty && items.last.id == incoming.id) {
+                prevOrder = items.length > 1 ? items[items.length - 2].order : null;
+              }
+              ref.read(projectsControllerProvider).moveBoardItem(
+                    projectId: projectId,
+                    entityType: incoming.type,
+                    entityId: incoming.id,
+                    targetStatus: statusKey,
+                    prevOrder: prevOrder,
+                    nextOrder: null,
+                  );
+            },
+            builder: (context, candidateData, rejectedData) {
+              final isHovered = candidateData.isNotEmpty;
+              return AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding: EdgeInsets.symmetric(vertical: items.isEmpty ? 24 : 8),
+                decoration: BoxDecoration(
+                  color: isHovered
+                      ? colorScheme.primary.withAlpha(35)
+                      : (items.isEmpty ? colorScheme.surfaceContainerHighest.withAlpha(80) : Colors.transparent),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: isHovered
+                        ? colorScheme.primary
+                        : (items.isEmpty ? colorScheme.outlineVariant.withAlpha(60) : Colors.transparent),
+                    width: isHovered ? 1.5 : 1,
+                  ),
+                ),
+                child: Center(
+                  child: Text(
+                    items.isEmpty ? 'Drop cards here' : (isHovered ? 'Drop to place at end' : ''),
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: isHovered ? FontWeight.bold : FontWeight.w500,
+                      color: isHovered ? colorScheme.primary : colorScheme.onSurfaceVariant.withAlpha(160),
+                    ),
+                  ),
+                ),
               );
             },
           ),
@@ -425,7 +521,7 @@ class _KanbanCard extends StatelessWidget {
         typeIcon = Icons.check_circle_outline_rounded;
     }
 
-    return Card(
+    final cardContent = Card(
       elevation: 0,
       margin: const EdgeInsets.only(bottom: 8),
       shape: RoundedRectangleBorder(
@@ -526,14 +622,43 @@ class _KanbanCard extends StatelessWidget {
                     ],
                   ),
                 ],
+                const Spacer(),
+                Icon(
+                  Icons.drag_indicator_rounded,
+                  size: 16,
+                  color: colorScheme.onSurfaceVariant.withAlpha(90),
+                ),
               ],
             ),
           ],
         ),
       ),
     );
+
+    return LongPressDraggable<KanbanCardModel>(
+      data: card,
+      delay: const Duration(milliseconds: 140),
+      feedback: Material(
+        color: Colors.transparent,
+        elevation: 8,
+        borderRadius: BorderRadius.circular(12),
+        child: SizedBox(
+          width: 260,
+          child: Opacity(
+            opacity: 0.95,
+            child: cardContent,
+          ),
+        ),
+      ),
+      childWhenDragging: Opacity(
+        opacity: 0.25,
+        child: cardContent,
+      ),
+      child: cardContent,
+    );
   }
 }
+
 
 // ==========================================
 // TAB 2: FEATURES & BUGS
@@ -901,10 +1026,18 @@ class _GitHubCommitsTab extends ConsumerWidget {
                           fontWeight: FontWeight.w600,
                         ),
                   ),
+                  if (repoUrl != null && repoUrl!.contains('github.com/')) ...[
+                    const SizedBox(height: 12),
+                    _RegisterWebhookButton(
+                      projectId: projectId,
+                      repoUrl: repoUrl!,
+                    ),
+                  ],
                 ],
               ),
             ),
           ),
+
           const SizedBox(height: 20),
           Text(
             'Recent Commit Activity',
@@ -977,7 +1110,80 @@ class _GitHubCommitsTab extends ConsumerWidget {
   }
 }
 
+class _RegisterWebhookButton extends ConsumerStatefulWidget {
+  final String projectId;
+  final String repoUrl;
+  const _RegisterWebhookButton({
+    required this.projectId,
+    required this.repoUrl,
+  });
+
+  @override
+  ConsumerState<_RegisterWebhookButton> createState() => _RegisterWebhookButtonState();
+}
+
+class _RegisterWebhookButtonState extends ConsumerState<_RegisterWebhookButton> {
+  bool _isLoading = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return FilledButton.tonalIcon(
+      icon: _isLoading
+          ? const SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : const Icon(Icons.bolt_rounded, size: 16),
+      label: Text(_isLoading ? 'Registering...' : '1-Click Auto-Register Webhook'),
+      onPressed: _isLoading ? null : _handleRegister,
+    );
+  }
+
+  Future<void> _handleRegister() async {
+    final match = RegExp(r'github\.com/([^/]+)/([^/]+)').firstMatch(widget.repoUrl);
+    if (match == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Invalid GitHub repository URL.')),
+      );
+      return;
+    }
+
+    final owner = match.group(1)!;
+    final repo = match.group(2)!.replaceAll(RegExp(r'\.git$'), '');
+
+    setState(() => _isLoading = true);
+    try {
+      final res = await ref.read(projectsControllerProvider).registerGithubWebhook(
+            owner: owner,
+            repo: repo,
+            projectId: widget.projectId,
+          );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: Colors.green.shade700,
+            content: Text(res['message'] ?? 'Webhook successfully registered!'),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: Colors.red.shade700,
+            content: Text('Failed: ${e.toString()}'),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+}
+
 // ==========================================
+
 // TAB 4: METRICS & VELOCITY
 // ==========================================
 
@@ -1002,13 +1208,13 @@ class _ProjectAnalyticsTab extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // High Level KPI Row
+              // KPI Row
               Row(
                 children: [
                   Expanded(
                     child: _buildMetricCard(
                       context,
-                      label: 'Focus Hours Logged',
+                      label: 'Focus Hours',
                       value: '${an.totalFocusHours}h',
                       icon: Icons.timer_outlined,
                       color: Colors.blueAccent,
@@ -1018,8 +1224,8 @@ class _ProjectAnalyticsTab extends ConsumerWidget {
                   Expanded(
                     child: _buildMetricCard(
                       context,
-                      label: 'Project Health',
-                      value: an.healthStatus,
+                      label: 'Health',
+                      value: an.healthStatus.replaceAll('_', ' '),
                       icon: Icons.health_and_safety_outlined,
                       color: an.healthStatus == 'HEALTHY'
                           ? Colors.green
@@ -1036,7 +1242,7 @@ class _ProjectAnalyticsTab extends ConsumerWidget {
                   Expanded(
                     child: _buildMetricCard(
                       context,
-                      label: 'Velocity Trend',
+                      label: 'Velocity',
                       value: an.velocityTrend,
                       icon: an.velocityTrend == 'UP'
                           ? Icons.trending_up
@@ -1050,8 +1256,8 @@ class _ProjectAnalyticsTab extends ConsumerWidget {
                   Expanded(
                     child: _buildMetricCard(
                       context,
-                      label: 'Firefighting Mode',
-                      value: an.isFirefighting ? 'YES (Bugs > Feat)' : 'NO (Normal)',
+                      label: 'Firefighting',
+                      value: an.isFirefighting ? 'YES' : 'NO',
                       icon: Icons.warning_amber_rounded,
                       color: an.isFirefighting ? Colors.redAccent : Colors.green,
                     ),
@@ -1059,7 +1265,8 @@ class _ProjectAnalyticsTab extends ConsumerWidget {
                 ],
               ),
               const SizedBox(height: 20),
-              // Progress breakdown formula
+
+              // Auto progress formula card
               Card(
                 elevation: 0,
                 color: colorScheme.surfaceContainerHighest,
@@ -1070,69 +1277,80 @@ class _ProjectAnalyticsTab extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Auto Progress Calculation',
-                        style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+                        'Auto Progress Formula',
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleSmall
+                            ?.copyWith(fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        an.formula.isNotEmpty ? an.formula : 'Derived from completed tasks & features minus bug penalties',
-                        style: TextStyle(fontFamily: 'monospace', fontSize: 12, color: colorScheme.primary),
+                        an.formula.isNotEmpty
+                            ? an.formula
+                            : 'Derived from tasks + features minus bug penalties',
+                        style: TextStyle(
+                          fontFamily: 'monospace',
+                          fontSize: 12,
+                          color: colorScheme.primary,
+                        ),
                       ),
                     ],
                   ),
                 ),
               ),
-              const SizedBox(height: 20),
-              Text(
-                'Weekly Velocity (Past 8 Weeks)',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 10),
-              ListView.separated(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: an.weeklyVelocity.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 8),
-                itemBuilder: (context, i) {
-                  final w = an.weeklyVelocity[i];
-                  final hours = (w.focusMinutes / 60.0).toStringAsFixed(1);
-                  final deliverables = w.tasksCompleted + w.featuresCompleted;
+              const SizedBox(height: 24),
 
-                  return Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: colorScheme.surface,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: colorScheme.outlineVariant.withAlpha(60)),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text('Week of ${w.weekStart}', style: const TextStyle(fontWeight: FontWeight.w600)),
-                        Row(
-                          children: [
-                            Chip(
-                              label: Text('${hours}h focus'),
-                              visualDensity: VisualDensity.compact,
-                              padding: EdgeInsets.zero,
-                            ),
-                            const SizedBox(width: 6),
-                            Chip(
-                              label: Text('$deliverables done'),
-                              visualDensity: VisualDensity.compact,
-                              padding: EdgeInsets.zero,
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  );
-                },
+              // Chart header + legend
+              Text(
+                'Weekly Velocity — Past 8 Weeks',
+                style: Theme.of(context)
+                    .textTheme
+                    .titleMedium
+                    ?.copyWith(fontWeight: FontWeight.bold),
               ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  _legendDot(Colors.blueAccent, 'Focus hours'),
+                  const SizedBox(width: 16),
+                  _legendDot(Colors.green, 'Deliverables done'),
+                  const SizedBox(width: 16),
+                  _legendDot(Colors.redAccent.withAlpha(180), 'Bugs resolved'),
+                ],
+              ),
+              const SizedBox(height: 12),
+
+              // Bar chart
+              if (an.weeklyVelocity.isEmpty)
+                Container(
+                  height: 160,
+                  alignment: Alignment.center,
+                  child: Text(
+                    'No activity data yet.',
+                    style: TextStyle(color: colorScheme.onSurfaceVariant),
+                  ),
+                )
+              else
+                _VelocityBarChart(weeks: an.weeklyVelocity),
             ],
           ),
         );
       },
+    );
+  }
+
+  Widget _legendDot(Color color, String label) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 4),
+        Text(label, style: const TextStyle(fontSize: 11)),
+      ],
     );
   }
 
@@ -1144,7 +1362,6 @@ class _ProjectAnalyticsTab extends ConsumerWidget {
     required Color color,
   }) {
     final colorScheme = Theme.of(context).colorScheme;
-
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -1177,6 +1394,167 @@ class _ProjectAnalyticsTab extends ConsumerWidget {
                 ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ==========================================
+// VELOCITY BAR CHART WIDGET
+// ==========================================
+
+class _VelocityBarChart extends StatelessWidget {
+  final List<VelocityWeekModel> weeks;
+  const _VelocityBarChart({required this.weeks});
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    // Find max values for axis scaling
+    double maxHours = 0;
+    int maxDeliverables = 0;
+    for (final w in weeks) {
+      final h = w.focusMinutes / 60.0;
+      final d = w.tasksCompleted + w.featuresCompleted;
+      if (h > maxHours) maxHours = h;
+      if (d > maxDeliverables) maxDeliverables = d;
+    }
+    // Normalise deliverables to same axis as hours for visual grouping
+    // Scale deliverables so that maxDeliverables maps to maxHours on chart
+    final deliverableScale = maxHours > 0 && maxDeliverables > 0
+        ? maxHours / maxDeliverables
+        : 1.0;
+    final maxY = (maxHours * 1.25).ceilToDouble().clamp(1.0, double.infinity);
+
+    final barGroups = <BarChartGroupData>[];
+    for (int i = 0; i < weeks.length; i++) {
+      final w = weeks[i];
+      final focusHours = w.focusMinutes / 60.0;
+      final deliverables = (w.tasksCompleted + w.featuresCompleted) * deliverableScale;
+      final bugsResolved = w.bugsResolved * deliverableScale * 0.7;
+
+      barGroups.add(
+        BarChartGroupData(
+          x: i,
+          barsSpace: 3,
+          barRods: [
+            BarChartRodData(
+              toY: focusHours,
+              color: Colors.blueAccent,
+              width: 10,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+            ),
+            BarChartRodData(
+              toY: deliverables,
+              color: Colors.green,
+              width: 10,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+            ),
+            if (w.bugsResolved > 0)
+              BarChartRodData(
+                toY: bugsResolved,
+                color: Colors.redAccent.withAlpha(180),
+                width: 10,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+              ),
+          ],
+        ),
+      );
+    }
+
+    // Abbreviate week label to "Sep 1" style
+    String weekLabel(String isoDate) {
+      if (isoDate.length < 10) return isoDate;
+      final parts = isoDate.split('-');
+      if (parts.length < 3) return isoDate;
+      const months = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      final m = int.tryParse(parts[1]) ?? 0;
+      final d = int.tryParse(parts[2]) ?? 0;
+      return '${months[m]} $d';
+    }
+
+    final chartWidth = (weeks.length * 72.0).clamp(300.0, double.infinity);
+
+    return SizedBox(
+      height: 220,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: SizedBox(
+          width: chartWidth,
+          child: BarChart(
+            BarChartData(
+              maxY: maxY,
+              minY: 0,
+              barGroups: barGroups,
+              gridData: FlGridData(
+                show: true,
+                drawVerticalLine: false,
+                horizontalInterval: maxY / 4,
+                getDrawingHorizontalLine: (_) => FlLine(
+                  color: colorScheme.outlineVariant.withAlpha(80),
+                  strokeWidth: 1,
+                ),
+              ),
+              borderData: FlBorderData(show: false),
+              titlesData: FlTitlesData(
+                leftTitles: AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: true,
+                    reservedSize: 36,
+                    interval: maxY / 4,
+                    getTitlesWidget: (val, _) => Text(
+                      val.toStringAsFixed(val >= 10 ? 0 : 1),
+                      style: TextStyle(fontSize: 10, color: colorScheme.onSurfaceVariant),
+                    ),
+                  ),
+                ),
+                rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                bottomTitles: AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: true,
+                    reservedSize: 32,
+                    getTitlesWidget: (val, _) {
+                      final idx = val.toInt();
+                      if (idx < 0 || idx >= weeks.length) return const SizedBox.shrink();
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Text(
+                          weekLabel(weeks[idx].weekStart),
+                          style: TextStyle(
+                            fontSize: 9,
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+              barTouchData: BarTouchData(
+                touchTooltipData: BarTouchTooltipData(
+                  getTooltipColor: (_) => colorScheme.surfaceContainerHighest,
+                  getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                    final w = weeks[group.x];
+                    final labels = ['Focus hrs', 'Deliverables', 'Bugs fixed'];
+                    final label = rodIndex < labels.length ? labels[rodIndex] : '';
+                    final rawVal = rodIndex == 0
+                        ? rod.toY.toStringAsFixed(1)
+                        : (rod.toY / (rodIndex == 2 ? deliverableScale * 0.7 : deliverableScale))
+                            .round()
+                            .toString();
+                    return BarTooltipItem(
+                      '$label: $rawVal\n${weekLabel(w.weekStart)}',
+                      TextStyle(fontSize: 11, color: colorScheme.onSurface),
+                    );
+                  },
+                ),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

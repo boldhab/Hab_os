@@ -108,17 +108,21 @@ export const calculateLifeScore = async (userId: string): Promise<LifeScoreBreak
     recommendations.push(`Clear ${overdueTasks} overdue task(s) to restore your Task component score.`);
   }
 
-  // 2. Habit Score (Weight: 0.20)
+  // 2. Habit Score (Weight: 0.20, Difficulty Weighted)
   let habitScore = 80;
   if (habits.length > 0) {
-    const completed = habits.filter((h) => h.logs.length > 0 && h.logs[0].isCompleted).length;
-    const rate = (completed / habits.length) * 100;
+    const totalWeight = habits.reduce((sum, h) => sum + (h.weight || 1.0), 0);
+    const completedWeight = habits
+      .filter((h) => h.logs.length > 0 && h.logs[0].isCompleted)
+      .reduce((sum, h) => sum + (h.weight || 1.0), 0);
+    const rate = totalWeight > 0 ? (completedWeight / totalWeight) * 100 : 0;
     const avgStreak = habits.reduce((sum, h) => sum + h.currentStreak, 0) / habits.length;
     const streakBonus = Math.min(15, avgStreak * 2);
     habitScore = Math.min(100, rate * 0.85 + streakBonus);
 
-    if (rate < 100) {
-      recommendations.push(`Complete remaining ${habits.length - completed} habit(s) today to maximize habit consistency.`);
+    const completedCount = habits.filter((h) => h.logs.length > 0 && h.logs[0].isCompleted).length;
+    if (completedCount < habits.length) {
+      recommendations.push(`Complete remaining ${habits.length - completedCount} habit(s) today to maximize habit consistency.`);
     }
   }
 

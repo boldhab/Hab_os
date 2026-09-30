@@ -45,10 +45,13 @@ model User {
   transactions         Transaction[]
   budgets              Budget[]
   goals                Goal[]
+  goalCheckIns         GoalCheckIn[]
   vaultNotes           VaultNote[]
   lifeScoreLogs        LifeScoreLog[]
   notifications        Notification[]
   googleCalendarSync   GoogleCalendarSync?
+  routines             Routine[]
+  habitCorrelations    HabitCorrelation[]
 
   @@map("users")
 }
@@ -162,8 +165,14 @@ model Task {
   order            Float            @default(0.0)
   githubIssueNumber Int?
   
+  courseId         String?
+  course           Course?          @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  
   goalId           String?
   goal             Goal?            @relation(fields: [goalId], references: [id], onDelete: SetNull)
+  
+  milestoneId      String?
+  milestone        Milestone?       @relation(fields: [milestoneId], references: [id], onDelete: SetNull)
   
   categoryId       String?
   category         Category?        @relation(fields: [categoryId], references: [id], onDelete: SetNull)
@@ -178,6 +187,7 @@ model Task {
   @@index([userId, status])
   @@index([userId, dueDate])
   @@index([parentTaskId])
+  @@index([milestoneId])
   @@map("tasks")
 }
 
@@ -238,6 +248,9 @@ model FocusSession {
   taskId          String?
   task            Task?     @relation(fields: [taskId], references: [id], onDelete: SetNull)
   
+  courseId        String?
+  course          Course?   @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  
   userId          String
   user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   
@@ -269,26 +282,33 @@ model TimeEntry {
 // ==========================================
 
 model Habit {
-  id            String     @id @default(uuid())
-  name          String
-  description   String?
-  frequency     String     @default("DAILY")    // DAILY, WEEKLY, CUSTOM
-  targetType    String     @default("CHECKBOX") // CHECKBOX, DURATION, COUNT
-  targetValue   Int        @default(1)
-  reminderTime  String?    // e.g. "08:00"
-  currentStreak Int        @default(0)
-  longestStreak Int        @default(0)
-  isActive      Boolean    @default(true)
+  id                    String        @id @default(uuid())
+  name                  String
+  description           String?
+  frequency             String        @default("DAILY")    // DAILY, WEEKLY, CUSTOM
+  targetFrequencyCount  Int?          @default(1)          // e.g. 3 (for 3x per week)
+  targetFrequencyPeriod String?       @default("WEEK")     // "DAY", "WEEK", "MONTH"
+  targetType            String        @default("CHECKBOX") // CHECKBOX, DURATION, COUNT
+  targetValue           Int           @default(1)
+  reminderTime          String?       // e.g. "08:00"
+  currentStreak         Int           @default(0)
+  longestStreak         Int           @default(0)
+  streakFreezes         Int           @default(2)          // Available protective freezes
+  lastEvaluatedDate     DateTime?
+  difficulty            String        @default("MEDIUM")   // TRIVIAL, EASY, MEDIUM, HARD, EPIC
+  weight                Float         @default(1.0)
+  isActive              Boolean       @default(true)
   
-  categoryId    String?
-  category      Category?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  categoryId            String?
+  category              Category?     @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   
-  userId        String
-  user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId                String
+  user                  User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   
-  logs          HabitLog[]
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
+  logs                  HabitLog[]
+  routineItems          RoutineItem[]
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
 
   @@index([userId, isActive])
   @@map("habits")
@@ -298,6 +318,7 @@ model HabitLog {
   id          String   @id @default(uuid())
   date        DateTime @default(now())
   isCompleted Boolean  @default(true)
+  wasFrozen   Boolean  @default(false)
   value       Int      @default(1)
   notes       String?
   
@@ -309,6 +330,56 @@ model HabitLog {
   @@unique([habitId, date])
   @@index([habitId])
   @@map("habit_logs")
+}
+
+model Routine {
+  id          String        @id @default(uuid())
+  name        String
+  description String?
+  icon        String?       @default("routine")
+  color       String?       @default("#3B82F6")
+  targetTime  String?       // e.g. "07:30"
+  
+  userId      String
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  items       RoutineItem[]
+  
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([userId])
+  @@map("routines")
+}
+
+model RoutineItem {
+  id        String   @id @default(uuid())
+  order     Int      @default(0)
+  
+  routineId String
+  routine   Routine  @relation(fields: [routineId], references: [id], onDelete: Cascade)
+  
+  habitId   String
+  habit     Habit    @relation(fields: [habitId], references: [id], onDelete: Cascade)
+
+  @@unique([routineId, habitId])
+  @@index([routineId, order])
+  @@map("routine_items")
+}
+
+model HabitCorrelation {
+  id                String   @id @default(uuid())
+  habitAId          String
+  habitBId          String
+  correlationScore  Float
+  supportCount      Int
+  insightText       String
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  updatedAt         DateTime @default(now())
+
+  @@unique([userId, habitAId, habitBId])
+  @@map("habit_correlations")
 }
 
 // ==========================================
@@ -461,28 +532,46 @@ model TechLearning {
 // ==========================================
 
 model Course {
-  id            String         @id @default(uuid())
+  id            String          @id @default(uuid())
   name          String
   code          String?
   semester      String
   instructor    String?
-  credits       Int?           @default(3)
-  progress      Float          @default(0.0)
-  color         String?        @default("#8B5CF6")
+  credits       Int?            @default(3)
+  progress      Float           @default(0.0)
+  color         String?         @default("#8B5CF6")
   
   userId        String
-  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   
   assignments   Assignment[]
   exams         Exam[]
   attendances   Attendance[]
   studySessions StudySession[]
+  tasks         Task[]
+  focusSessions FocusSession[]
+  vaultNotes    VaultNote[]
+  classSchedules ClassSchedule[]
   
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
 
   @@index([userId, semester])
   @@map("courses")
+}
+
+model ClassSchedule {
+  id         String   @id @default(uuid())
+  courseId   String
+  course     Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  dayOfWeek  Int      // 1 = Monday ... 7 = Sunday
+  startTime  String   // "09:30"
+  endTime    String   // "10:50"
+  room       String?
+  createdAt  DateTime @default(now())
+
+  @@index([courseId])
+  @@map("class_schedules")
 }
 
 model Assignment {
@@ -490,6 +579,8 @@ model Assignment {
   title       String
   description String?
   dueDate     DateTime
+  type        String    @default("HOMEWORK") // HOMEWORK, ESSAY, PROJECT, LAB, QUIZ
+  weight      Float?    @default(10.0)       // Percentage of course grade
   status      String    @default("NOT_STARTED") // NOT_STARTED, IN_PROGRESS, SUBMITTED, GRADED
   grade       Float?
   maxGrade    Float?    @default(100.0)
@@ -503,6 +594,7 @@ model Assignment {
   @@index([courseId, dueDate])
   @@map("assignments")
 }
+
 
 model Exam {
   id        String    @id @default(uuid())
@@ -768,25 +860,30 @@ model Budget {
 // ==========================================
 
 model Goal {
-  id          String      @id @default(uuid())
-  title       String
-  description String?
-  targetDate  DateTime?
-  priority    String      @default("MEDIUM")    // LOW, MEDIUM, HIGH
-  category    String      @default("PERSONAL")  // CAREER, HEALTH, EDUCATION, PERSONAL, FINANCIAL
-  status      String      @default("IN_PROGRESS") // NOT_STARTED, IN_PROGRESS, COMPLETED, ARCHIVED
-  progress    Float       @default(0.0)
+  id            String         @id @default(uuid())
+  title         String
+  description   String?
+  targetDate    DateTime?
+  priority      String         @default("MEDIUM")    // LOW, MEDIUM, HIGH, CRITICAL
+  category      String         @default("PERSONAL")  // CAREER, HEALTH, EDUCATION, PERSONAL, FINANCIAL
+  status        String         @default("IN_PROGRESS") // NOT_STARTED, IN_PROGRESS, COMPLETED, ARCHIVED
+  progress      Float          @default(0.0)
   
-  userId      String
-  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  targetAmount  Float?
+  currentAmount Float?         @default(0.0)
   
-  milestones  Milestone[]
-  tasks       Task[]
+  userId        String
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  milestones    Milestone[]
+  tasks         Task[]
+  checkIns      GoalCheckIn[]
+  
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
 
   @@index([userId, status])
+  @@index([userId, category])
   @@map("goals")
 }
 
@@ -797,15 +894,38 @@ model Milestone {
   targetDate  DateTime?
   status      String    @default("NOT_STARTED") // NOT_STARTED, IN_PROGRESS, COMPLETED
   isCompleted Boolean   @default(false)
+  order       Float     @default(0.0)
+  weight      Float     @default(1.0)
   
   goalId      String
   goal        Goal      @relation(fields: [goalId], references: [id], onDelete: Cascade)
   
+  tasks       Task[]
+  
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  @@index([goalId])
+  @@index([goalId, order])
   @@map("milestones")
+}
+
+model GoalCheckIn {
+  id         String   @id @default(uuid())
+  date       DateTime @default(now())
+  confidence String   @default("ON_TRACK") // ON_TRACK, BEHIND, AT_RISK
+  note       String?
+  
+  goalId     String
+  goal       Goal     @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  createdAt  DateTime @default(now())
+
+  @@index([goalId, date])
+  @@index([userId])
+  @@map("goal_check_ins")
 }
 
 // ==========================================
@@ -822,6 +942,9 @@ model VaultNote {
   
   categoryId        String?
   category          Category?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  
+  courseId          String?
+  course            Course?    @relation(fields: [courseId], references: [id], onDelete: SetNull)
   
   userId            String
   user              User       @relation(fields: [userId], references: [id], onDelete: Cascade)
