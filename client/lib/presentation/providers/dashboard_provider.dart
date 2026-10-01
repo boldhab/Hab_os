@@ -3,6 +3,7 @@ import '../../core/network/api_client.dart';
 import '../../core/storage/secure_storage_service.dart';
 import '../../data/models/dashboard_feed_model.dart';
 import '../../data/repositories/dashboard_repository.dart';
+import 'auth_provider.dart';
 
 // ---------------------------------------------------------------------------
 // State
@@ -41,16 +42,36 @@ class DashboardState {
 class DashboardNotifier extends StateNotifier<DashboardState> {
   final DashboardRepository _repository;
   final SecureStorageService _storage;
+  final AuthState _authState;
 
-  DashboardNotifier(this._repository, this._storage)
+  DashboardNotifier(this._repository, this._storage, this._authState)
       : super(const DashboardState()) {
-    load();
+    if (_authState.status == AuthStatus.authenticated) {
+      load();
+    }
   }
 
   Future<void> load({bool showLoading = true}) async {
-    // Don't hit the API if the user has no token yet (avoids 401 on boot)
     final token = await _storage.getAccessToken();
-    if (token == null || token.isEmpty) return;
+    if (token == null || token.isEmpty) {
+      if (_authState.status == AuthStatus.authenticated) {
+        // Small delay in case token write is in-flight on Web IndexedDB
+        await Future.delayed(const Duration(milliseconds: 200));
+        final retryToken = await _storage.getAccessToken();
+        if (retryToken == null || retryToken.isEmpty) {
+          state = state.copyWith(
+            status: DashboardStatus.error,
+            errorMessage:
+                'Authentication token not found. Please log in again.',
+          );
+          return;
+        }
+      } else {
+        // User is not authenticated yet
+        state = const DashboardState(status: DashboardStatus.initial);
+        return;
+      }
+    }
 
     if (showLoading) {
       state = state.copyWith(status: DashboardStatus.loading);
@@ -61,7 +82,7 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
     } catch (e) {
       state = state.copyWith(
         status: DashboardStatus.error,
-        errorMessage: e.toString(),
+        errorMessage: e.toString().replaceAll('Exception: ', ''),
       );
     }
   }
@@ -77,8 +98,7 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
       return h;
     }).toList();
 
-    final completedCount =
-        updatedItems.where((h) => h.isCompletedToday).length;
+    final completedCount = updatedItems.where((h) => h.isCompletedToday).length;
 
     final updatedHabits = DashboardHabitsSection(
       total: current.habits.total,
@@ -87,17 +107,7 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
     );
 
     state = state.copyWith(
-      feed: DashboardFeedModel(
-        userName: current.userName,
-        userAvatarUrl: current.userAvatarUrl,
-        lifeScore: current.lifeScore,
-        habits: updatedHabits,
-        tasksDueToday: current.tasksDueToday,
-        fitness: current.fitness,
-        finance: current.finance,
-        aiRecommendation: current.aiRecommendation,
-        generatedAt: current.generatedAt,
-      ),
+      feed: current.copyWith(habits: updatedHabits),
     );
 
     // 2. Fire API call (no await — fire & forget; silent refresh on success)
@@ -118,30 +128,13 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
     final newValue = !currentValue;
     final updatedTasks = current.tasksDueToday.map((t) {
       if (t.id == taskId) {
-        return DashboardTaskItem(
-          id: t.id,
-          title: t.title,
-          priority: t.priority,
-          status: t.status,
-          isCompleted: newValue,
-          dueDate: t.dueDate,
-        );
+        return t.copyWith(isCompleted: newValue);
       }
       return t;
     }).toList();
 
     state = state.copyWith(
-      feed: DashboardFeedModel(
-        userName: current.userName,
-        userAvatarUrl: current.userAvatarUrl,
-        lifeScore: current.lifeScore,
-        habits: current.habits,
-        tasksDueToday: updatedTasks,
-        fitness: current.fitness,
-        finance: current.finance,
-        aiRecommendation: current.aiRecommendation,
-        generatedAt: current.generatedAt,
-      ),
+      feed: current.copyWith(tasksDueToday: updatedTasks),
     );
 
     try {
@@ -161,5 +154,6 @@ final dashboardProvider =
     StateNotifierProvider<DashboardNotifier, DashboardState>((ref) {
   final repo = ref.watch(dashboardRepositoryProvider);
   final storage = ref.watch(secureStorageProvider);
-  return DashboardNotifier(repo, storage);
+  final authState = ref.watch(authProvider);
+  return DashboardNotifier(repo, storage, authState);
 });

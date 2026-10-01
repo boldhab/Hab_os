@@ -39,12 +39,31 @@ class LifeScoreModel extends Equatable {
   });
 
   factory LifeScoreModel.fromJson(Map<String, dynamic> json) {
-    final comps = (json['components'] as List<dynamic>? ?? [])
-        .map((c) => LifeScoreComponentModel.fromJson(Map<String, dynamic>.from(c)))
-        .toList();
+    List<LifeScoreComponentModel> comps = [];
+    final rawComps = json['components'];
+    if (rawComps is List) {
+      comps = rawComps
+          .map((c) =>
+              LifeScoreComponentModel.fromJson(Map<String, dynamic>.from(c)))
+          .toList();
+    } else if (rawComps is Map) {
+      comps = rawComps.entries.map((e) {
+        final val = e.value is Map
+            ? Map<String, dynamic>.from(e.value)
+            : <String, dynamic>{};
+        return LifeScoreComponentModel(
+          name: val['label']?.toString() ??
+              val['name']?.toString() ??
+              e.key.toString().toUpperCase(),
+          score: (val['score'] as num?)?.toDouble() ?? 0.0,
+          weight: (val['weight'] as num?)?.toDouble() ?? 0.0,
+        );
+      }).toList();
+    }
+
     return LifeScoreModel(
       overallScore: (json['overallScore'] as num?)?.toDouble() ?? 0.0,
-      level: json['level'] ?? 'Beginner',
+      level: json['level']?.toString() ?? 'Beginner',
       components: comps,
     );
   }
@@ -93,7 +112,8 @@ class DashboardHabitItem extends Equatable {
   }
 
   @override
-  List<Object?> get props => [id, name, frequency, currentStreak, isCompletedToday];
+  List<Object?> get props =>
+      [id, name, frequency, currentStreak, isCompletedToday];
 }
 
 class DashboardHabitsSection extends Equatable {
@@ -108,12 +128,15 @@ class DashboardHabitsSection extends Equatable {
   });
 
   factory DashboardHabitsSection.fromJson(Map<String, dynamic> json) {
-    final items = (json['items'] as List<dynamic>? ?? [])
-        .map((i) => DashboardHabitItem.fromJson(Map<String, dynamic>.from(i)))
+    final rawItems = json['items'];
+    final items = (rawItems is List ? rawItems : [])
+        .map((i) => DashboardHabitItem.fromJson(
+            Map<String, dynamic>.from(i is Map ? i : {})))
         .toList();
     return DashboardHabitsSection(
-      total: json['total'] ?? 0,
-      completedToday: json['completedToday'] ?? 0,
+      total: (json['total'] as num?)?.toInt() ?? items.length,
+      completedToday: (json['completedToday'] as num?)?.toInt() ??
+          items.where((h) => h.isCompletedToday).length,
       items: items,
     );
   }
@@ -148,18 +171,39 @@ class DashboardTaskItem extends Equatable {
   factory DashboardTaskItem.fromJson(Map<String, dynamic> json) {
     final project = json['project'] as Map<String, dynamic>?;
     return DashboardTaskItem(
-      id: json['id'] ?? '',
-      title: json['title'] ?? '',
-      priority: json['priority'] ?? 'MEDIUM',
-      status: json['status'] ?? 'TODO',
-      isCompleted: json['isCompleted'] ?? false,
-      dueDate: json['dueDate'],
-      projectTitle: project?['title'],
+      id: json['id']?.toString() ?? '',
+      title: json['title']?.toString() ?? '',
+      priority: json['priority']?.toString() ?? 'MEDIUM',
+      status: json['status']?.toString() ?? 'TODO',
+      isCompleted: json['isCompleted'] == true,
+      dueDate: json['dueDate']?.toString(),
+      projectTitle: project?['title']?.toString(),
+    );
+  }
+
+  DashboardTaskItem copyWith({
+    String? id,
+    String? title,
+    String? priority,
+    String? status,
+    bool? isCompleted,
+    String? dueDate,
+    String? projectTitle,
+  }) {
+    return DashboardTaskItem(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      priority: priority ?? this.priority,
+      status: status ?? this.status,
+      isCompleted: isCompleted ?? this.isCompleted,
+      dueDate: dueDate ?? this.dueDate,
+      projectTitle: projectTitle ?? this.projectTitle,
     );
   }
 
   @override
-  List<Object?> get props => [id, title, priority, status, isCompleted, dueDate, projectTitle];
+  List<Object?> get props =>
+      [id, title, priority, status, isCompleted, dueDate, projectTitle];
 }
 
 // ==========================================
@@ -188,12 +232,14 @@ class DashboardProjectItem extends Equatable {
   });
 
   factory DashboardProjectItem.fromJson(Map<String, dynamic> json) {
-    final counts = json['_count'] as Map<String, dynamic>? ?? {};
+    final counts = json['_count'] is Map
+        ? Map<String, dynamic>.from(json['_count'])
+        : <String, dynamic>{};
     return DashboardProjectItem(
-      id: json['id'] ?? '',
-      title: json['title'] ?? '',
-      description: json['description'],
-      status: json['status'] ?? 'IN_PROGRESS',
+      id: json['id']?.toString() ?? '',
+      title: json['title']?.toString() ?? '',
+      description: json['description']?.toString(),
+      status: json['status']?.toString() ?? 'IN_PROGRESS',
       progress: (json['progress'] as num?)?.toDouble() ?? 0.0,
       taskCount: (counts['tasks'] as num?)?.toInt() ?? 0,
       featureCount: (counts['features'] as num?)?.toInt() ?? 0,
@@ -202,7 +248,16 @@ class DashboardProjectItem extends Equatable {
   }
 
   @override
-  List<Object?> get props => [id, title, description, status, progress, taskCount, featureCount, bugCount];
+  List<Object?> get props => [
+        id,
+        title,
+        description,
+        status,
+        progress,
+        taskCount,
+        featureCount,
+        bugCount
+      ];
 }
 
 // ==========================================
@@ -223,17 +278,25 @@ class DashboardFitnessSection extends Equatable {
   });
 
   factory DashboardFitnessSection.fromJson(Map<String, dynamic> json) {
-    final latest = json['latestWorkout'] as Map<String, dynamic>?;
+    final latest = json['latestWorkout'] is Map
+        ? Map<String, dynamic>.from(json['latestWorkout'])
+        : null;
     return DashboardFitnessSection(
-      workoutsThisWeekCount: json['workoutsThisWeekCount'] ?? 0,
-      targetWorkouts: json['targetWorkouts'] ?? 4,
-      workedOutToday: json['workedOutToday'] ?? false,
-      latestWorkoutName: latest?['name'],
+      workoutsThisWeekCount:
+          (json['workoutsThisWeekCount'] as num?)?.toInt() ?? 0,
+      targetWorkouts: (json['targetWorkouts'] as num?)?.toInt() ?? 4,
+      workedOutToday: json['workedOutToday'] == true,
+      latestWorkoutName: latest?['name']?.toString(),
     );
   }
 
   @override
-  List<Object?> get props => [workoutsThisWeekCount, targetWorkouts, workedOutToday, latestWorkoutName];
+  List<Object?> get props => [
+        workoutsThisWeekCount,
+        targetWorkouts,
+        workedOutToday,
+        latestWorkoutName
+      ];
 }
 
 // ==========================================
@@ -263,7 +326,8 @@ class DashboardFinanceSection extends Equatable {
   }
 
   @override
-  List<Object?> get props => [spentThisMonth, totalBudgetCap, budgetRemaining, isWarning];
+  List<Object?> get props =>
+      [spentThisMonth, totalBudgetCap, budgetRemaining, isWarning];
 }
 
 // ==========================================
@@ -327,7 +391,9 @@ class DashboardFeedModel extends Equatable {
       list.add(GlobalActivityItem(
         id: 'task-${task.id}',
         title: 'Completed task: ${task.title}',
-        subtitle: task.projectTitle != null ? 'Project: ${task.projectTitle}' : 'Task completed',
+        subtitle: task.projectTitle != null
+            ? 'Project: ${task.projectTitle}'
+            : 'Task completed',
         category: 'TASK',
         timestamp: now,
       ));
@@ -348,8 +414,10 @@ class DashboardFeedModel extends Equatable {
     if (fitness.workedOutToday) {
       list.add(GlobalActivityItem(
         id: 'fitness-today',
-        title: 'Completed workout${fitness.latestWorkoutName != null ? ': ${fitness.latestWorkoutName}' : ''}',
-        subtitle: '${fitness.workoutsThisWeekCount}/${fitness.targetWorkouts} workouts this week',
+        title:
+            'Completed workout${fitness.latestWorkoutName != null ? ': ${fitness.latestWorkoutName}' : ''}',
+        subtitle:
+            '${fitness.workoutsThisWeekCount}/${fitness.targetWorkouts} workouts this week',
         category: 'FITNESS',
         timestamp: now,
       ));
@@ -358,36 +426,88 @@ class DashboardFeedModel extends Equatable {
     return list;
   }
 
+  DashboardFeedModel copyWith({
+    String? userName,
+    String? userAvatarUrl,
+    LifeScoreModel? lifeScore,
+    DashboardHabitsSection? habits,
+    List<DashboardTaskItem>? tasksDueToday,
+    List<DashboardProjectItem>? activeProjects,
+    DashboardFitnessSection? fitness,
+    DashboardFinanceSection? finance,
+    String? aiRecommendation,
+    DateTime? generatedAt,
+  }) {
+    return DashboardFeedModel(
+      userName: userName ?? this.userName,
+      userAvatarUrl: userAvatarUrl ?? this.userAvatarUrl,
+      lifeScore: lifeScore ?? this.lifeScore,
+      habits: habits ?? this.habits,
+      tasksDueToday: tasksDueToday ?? this.tasksDueToday,
+      activeProjects: activeProjects ?? this.activeProjects,
+      fitness: fitness ?? this.fitness,
+      finance: finance ?? this.finance,
+      aiRecommendation: aiRecommendation ?? this.aiRecommendation,
+      generatedAt: generatedAt ?? this.generatedAt,
+    );
+  }
+
   factory DashboardFeedModel.fromJson(Map<String, dynamic> json) {
-    final user = json['user'] as Map<String, dynamic>? ?? {};
-    final timeline = json['timeline'] as Map<String, dynamic>? ?? {};
-    final tasksList = (timeline['tasksDueToday'] as List<dynamic>? ?? [])
+    final user = json['user'] is Map
+        ? Map<String, dynamic>.from(json['user'])
+        : <String, dynamic>{};
+    final timeline = json['timeline'] is Map
+        ? Map<String, dynamic>.from(json['timeline'])
+        : <String, dynamic>{};
+    final rawTasks = timeline['tasksDueToday'] ?? json['tasksDueToday'];
+    final tasksList = (rawTasks is List ? rawTasks : [])
         .map((t) => DashboardTaskItem.fromJson(Map<String, dynamic>.from(t)))
         .toList();
-    final projectsList = (json['projects'] as List<dynamic>? ?? [])
+    final rawProjects = json['projects'] ?? json['activeProjects'];
+    final projectsList = (rawProjects is List ? rawProjects : [])
         .map((p) => DashboardProjectItem.fromJson(Map<String, dynamic>.from(p)))
         .toList();
 
+    String? recommendationText;
+    final rawRec = json['aiRecommendation'];
+    if (rawRec is String) {
+      recommendationText = rawRec;
+    } else if (rawRec is Map) {
+      final title = rawRec['title']?.toString() ?? '';
+      final reasoning = rawRec['reasoning']?.toString() ?? '';
+      if (title.isNotEmpty && reasoning.isNotEmpty) {
+        recommendationText = '$title — $reasoning';
+      } else if (title.isNotEmpty) {
+        recommendationText = title;
+      } else if (reasoning.isNotEmpty) {
+        recommendationText = reasoning;
+      }
+    }
+
     return DashboardFeedModel(
-      userName: user['name'] ?? 'User',
-      userAvatarUrl: user['avatarUrl'],
+      userName: user['name']?.toString() ?? 'User',
+      userAvatarUrl: user['avatarUrl']?.toString(),
       lifeScore: LifeScoreModel.fromJson(
-        Map<String, dynamic>.from(json['lifeScore'] ?? {}),
+        json['lifeScore'] is Map
+            ? Map<String, dynamic>.from(json['lifeScore'])
+            : {},
       ),
       habits: DashboardHabitsSection.fromJson(
-        Map<String, dynamic>.from(json['habits'] ?? {}),
+        json['habits'] is Map ? Map<String, dynamic>.from(json['habits']) : {},
       ),
       tasksDueToday: tasksList,
       activeProjects: projectsList,
       fitness: DashboardFitnessSection.fromJson(
-        Map<String, dynamic>.from(json['fitness'] ?? {}),
+        json['fitness'] is Map
+            ? Map<String, dynamic>.from(json['fitness'])
+            : {},
       ),
       finance: DashboardFinanceSection.fromJson(
-        Map<String, dynamic>.from(json['finance'] ?? {}),
+        json['finance'] is Map
+            ? Map<String, dynamic>.from(json['finance'])
+            : {},
       ),
-      aiRecommendation: json['aiRecommendation'] is String
-          ? json['aiRecommendation']
-          : null,
+      aiRecommendation: recommendationText,
       generatedAt: json['generatedAt'] != null
           ? DateTime.tryParse(json['generatedAt'].toString())
           : null,

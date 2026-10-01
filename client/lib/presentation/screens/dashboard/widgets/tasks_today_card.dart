@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
+import '../../../../app/theme/app_spacing.dart';
 import '../../../../data/models/dashboard_feed_model.dart';
+import '../../../widgets/app_animated_check.dart';
+import '../../../widgets/common/app_card.dart';
+import '../../../widgets/common/section_header.dart';
 
 /// Tasks due today with tap-to-complete toggle and priority chips.
 class TasksTodayCard extends StatelessWidget {
@@ -15,75 +19,67 @@ class TasksTodayCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+    final primaryRed = colorScheme.primary;
     final remaining = tasks.where((t) => !t.isCompleted).length;
 
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      color: colorScheme.surfaceContainerHighest,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header
-            Row(
-              children: [
-                Icon(Icons.task_alt_rounded,
-                    color: colorScheme.primary, size: 20),
-                const SizedBox(width: 8),
-                Text(
-                  'Tasks Due Today',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                ),
-                const Spacer(),
-                if (remaining > 0)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 2),
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          SectionHeader(
+            icon: Icons.task_alt_rounded,
+            title: 'Tasks Due Today',
+            action: remaining > 0
+                ? Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
-                      color: colorScheme.errorContainer,
+                      color: primaryRed.withAlpha(25),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
                       '$remaining left',
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                            color: colorScheme.onErrorContainer,
-                            fontWeight: FontWeight.bold,
-                          ),
+                      style: textTheme.labelSmall?.copyWith(
+                        color: primaryRed,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 12,
+                      ),
+                    ),
+                  )
+                : null,
+          ),
+          AppSpacing.verticalGapSm,
+
+          if (tasks.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.check_circle_outline_rounded,
+                    color: Color(0xFF34A853),
+                    size: 18,
+                  ),
+                  AppSpacing.horizontalGapSm,
+                  Text(
+                    'Nothing due today!',
+                    style: textTheme.bodyMedium?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                      fontSize: 14,
                     ),
                   ),
-              ],
-            ),
-            const SizedBox(height: 12),
-
-            if (tasks.isEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Row(
-                  children: [
-                    Icon(Icons.check_circle_outline_rounded,
-                        color: colorScheme.tertiary, size: 18),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Nothing due today!',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: colorScheme.onSurfaceVariant,
-                          ),
-                    ),
-                  ],
-                ),
-              )
-            else
-              ...tasks.map((t) => _TaskRow(
-                    task: t,
-                    onToggle: onToggle,
-                    colorScheme: colorScheme,
-                  )),
-          ],
-        ),
+                ],
+              ),
+            )
+          else
+            ...tasks.map((t) => _TaskRow(
+                  task: t,
+                  onToggle: onToggle,
+                  colorScheme: colorScheme,
+                )),
+        ],
       ),
     );
   }
@@ -100,73 +96,78 @@ class _TaskRow extends StatelessWidget {
     required this.colorScheme,
   });
 
-  Color _priorityColor(String priority, ColorScheme cs) {
+  Color _priorityColor(String priority) {
     return switch (priority.toUpperCase()) {
-      'HIGH' || 'URGENT' => cs.error,
-      'MEDIUM' => cs.tertiary,
-      _ => cs.outline,
+      'HIGH' || 'URGENT' || 'CRITICAL' => const Color(0xFFEA4335),
+      'MEDIUM' => const Color(0xFFFBBC05),
+      _ => const Color(0xFF4285F4),
     };
   }
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: () => onToggle(task.id, task.isCompleted),
-      borderRadius: BorderRadius.circular(12),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 6),
-        child: Row(
-          children: [
-            // Checkbox
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              width: 22,
-              height: 22,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(6),
-                color: task.isCompleted
-                    ? colorScheme.primary
-                    : Colors.transparent,
-                border: Border.all(
-                  color: task.isCompleted
-                      ? colorScheme.primary
-                      : colorScheme.outline,
-                  width: 2,
+    final textTheme = Theme.of(context).textTheme;
+    final priorityColor = _priorityColor(task.priority);
+
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 48),
+      child: InkWell(
+        onTap: () => onToggle(task.id, task.isCompleted),
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+          child: Row(
+            children: [
+              // Checkbox
+              AppAnimatedCheck(
+                value: task.isCompleted,
+                onChanged: (_) => onToggle(task.id, task.isCompleted),
+                size: 22,
+                activeColor: colorScheme.primary,
+              ),
+              AppSpacing.horizontalGapMd,
+
+              // Title
+              Expanded(
+                child: Text(
+                  task.title,
+                  style: textTheme.bodyMedium?.copyWith(
+                    fontWeight:
+                        task.isCompleted ? FontWeight.w400 : FontWeight.w600,
+                    fontSize: 14,
+                    decoration:
+                        task.isCompleted ? TextDecoration.lineThrough : null,
+                    color: task.isCompleted
+                        ? colorScheme.onSurfaceVariant.withAlpha(150)
+                        : colorScheme.onSurface,
+                  ),
                 ),
               ),
-              child: task.isCompleted
-                  ? Icon(Icons.check_rounded,
-                      size: 13, color: colorScheme.onPrimary)
-                  : null,
-            ),
-            const SizedBox(width: 12),
 
-            // Title
-            Expanded(
-              child: Text(
-                task.title,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      decoration: task.isCompleted
-                          ? TextDecoration.lineThrough
-                          : null,
-                      color: task.isCompleted
-                          ? colorScheme.onSurfaceVariant
-                          : colorScheme.onSurface,
-                    ),
+              // Priority Pill Tag
+              AppSpacing.horizontalGapSm,
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: priorityColor.withAlpha(25),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: priorityColor.withAlpha(50),
+                    width: 1,
+                  ),
+                ),
+                child: Text(
+                  task.priority.toUpperCase(),
+                  style: TextStyle(
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w800,
+                    color: priorityColor,
+                    letterSpacing: 0.5,
+                  ),
+                ),
               ),
-            ),
-
-            // Priority dot
-            const SizedBox(width: 8),
-            Container(
-              width: 8,
-              height: 8,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: _priorityColor(task.priority, colorScheme),
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

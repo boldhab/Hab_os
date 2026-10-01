@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../app/theme/app_theme.dart';
 import '../../widgets/app_error_state.dart';
 import '../../widgets/app_empty_state.dart';
 import 'controllers/projects_controller.dart';
 import 'models/project_models.dart';
+import 'widgets/project_time_by_stack_card.dart';
+import 'widgets/project_card.dart';
+import 'widgets/project_form_dialog.dart';
+import 'project_detail_screen.dart';
 
 export 'controllers/projects_controller.dart';
 export 'models/project_models.dart';
@@ -12,441 +17,477 @@ export 'models/project_models.dart';
 typedef ProjectItemModel = ProjectOverviewModel;
 final projectsProvider = projectsListProvider;
 
-class ProjectsScreen extends ConsumerWidget {
+class ProjectsScreen extends ConsumerStatefulWidget {
   const ProjectsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final projectsAsync = ref.watch(projectsListProvider);
-    final techInsightsAsync = ref.watch(techStackInsightsProvider);
-    final colorScheme = Theme.of(context).colorScheme;
-
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Developer Hub & Projects'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh_rounded),
-            onPressed: () {
-              ref.invalidate(projectsListProvider);
-              ref.invalidate(techStackInsightsProvider);
-            },
-          ),
-        ],
-      ),
-      body: projectsAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, _) => AppErrorState(
-          message: err.toString(),
-          onRetry: () {
-            ref.invalidate(projectsListProvider);
-            ref.invalidate(techStackInsightsProvider);
-          },
-        ),
-        data: (projects) {
-          return RefreshIndicator(
-            onRefresh: () async {
-              ref.invalidate(projectsListProvider);
-              ref.invalidate(techStackInsightsProvider);
-            },
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 80),
-              children: [
-                // 1. Tech Stack Insights Carousel
-                techInsightsAsync.when(
-                  loading: () => const SizedBox.shrink(),
-                  error: (_, __) => const SizedBox.shrink(),
-                  data: (insights) {
-                    if (insights.isEmpty) return const SizedBox.shrink();
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(Icons.pie_chart_outline_rounded,
-                                size: 16, color: colorScheme.primary),
-                            const SizedBox(width: 6),
-                            Text(
-                              'Coding Focus Distribution',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .labelMedium
-                                  ?.copyWith(fontWeight: FontWeight.bold),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        SizedBox(
-                          height: 38,
-                          child: ListView.separated(
-                            scrollDirection: Axis.horizontal,
-                            itemCount: insights.length,
-                            separatorBuilder: (_, __) =>
-                                const SizedBox(width: 8),
-                            itemBuilder: (context, i) {
-                              final item = insights[i];
-                              return Chip(
-                                avatar: CircleAvatar(
-                                  backgroundColor:
-                                      colorScheme.primary.withAlpha(40),
-                                  child: Text(
-                                    item.technology.isNotEmpty
-                                        ? item.technology[0].toUpperCase()
-                                        : 'T',
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.bold,
-                                      color: colorScheme.primary,
-                                    ),
-                                  ),
-                                ),
-                                label: Text(
-                                  '${item.technology} ${item.percentage.toStringAsFixed(0)}% (${item.totalHours}h)',
-                                  style: const TextStyle(
-                                      fontSize: 11, fontWeight: FontWeight.w600),
-                                ),
-                                visualDensity: VisualDensity.compact,
-                                padding: EdgeInsets.zero,
-                              );
-                            },
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                      ],
-                    );
-                  },
-                ),
-
-                // 2. Projects List or Empty State
-                if (projects.isEmpty)
-                  AppEmptyState(
-                    icon: Icons.folder_outlined,
-                    title: 'No projects found',
-                    description:
-                        'Tap "+ New Project" to initialize your developer workspace.',
-                    actionLabel: 'New Project',
-                    onAction: () => _openCreateProjectDialog(context, ref),
-                  )
-                else
-                  ...projects.map((p) => _ProjectCard(project: p)),
-              ],
-            ),
-          );
-        },
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _openCreateProjectDialog(context, ref),
-        icon: const Icon(Icons.add_rounded),
-        label: const Text('New Project'),
-      ),
-    );
-  }
-
-  Future<void> _openCreateProjectDialog(
-      BuildContext context, WidgetRef ref) async {
-    final titleController = TextEditingController();
-    final descController = TextEditingController();
-    final repoUrlController = TextEditingController();
-    final techController = TextEditingController(text: 'TypeScript, Flutter');
-    String status = 'IN_PROGRESS';
-
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setState) => AlertDialog(
-          title: const Text('New Developer Project'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: titleController,
-                  decoration: const InputDecoration(
-                    labelText: 'Project Title *',
-                    hintText: 'e.g. HABos Developer Hub',
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: descController,
-                  decoration: const InputDecoration(
-                    labelText: 'Description (optional)',
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: repoUrlController,
-                  decoration: const InputDecoration(
-                    labelText: 'GitHub Repo URL (optional)',
-                    hintText: 'https://github.com/owner/repo',
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: techController,
-                  decoration: const InputDecoration(
-                    labelText: 'Technologies (comma-separated)',
-                    hintText: 'TypeScript, Node.js, Flutter',
-                  ),
-                ),
-                const SizedBox(height: 16),
-                DropdownButtonFormField<String>(
-                  initialValue: status,
-                  decoration: const InputDecoration(labelText: 'Status'),
-                  items: const [
-                    DropdownMenuItem(
-                        value: 'IN_PROGRESS', child: Text('In Progress')),
-                    DropdownMenuItem(
-                        value: 'PLANNING', child: Text('Planning')),
-                    DropdownMenuItem(
-                        value: 'ON_HOLD', child: Text('On Hold')),
-                    DropdownMenuItem(
-                        value: 'COMPLETED', child: Text('Completed')),
-                  ],
-                  onChanged: (val) {
-                    if (val != null) setState(() => status = val);
-                  },
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Create'),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    if (result == true && titleController.text.trim().isNotEmpty) {
-      final techs = techController.text
-          .split(',')
-          .map((s) => s.trim())
-          .filter((s) => s.isNotEmpty)
-          .toList();
-
-      await ref.read(projectsControllerProvider).createProject(
-            title: titleController.text.trim(),
-            description: descController.text.trim(),
-            status: status,
-            repoUrl: repoUrlController.text.trim(),
-            technologies: techs,
-          );
-    }
-  }
+  ConsumerState<ProjectsScreen> createState() => _ProjectsScreenState();
 }
 
-class _ProjectCard extends StatelessWidget {
-  final ProjectOverviewModel project;
-  const _ProjectCard({required this.project});
+class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
+  bool _isSearching = false;
+  String _searchQuery = '';
+  String _selectedFilter =
+      'ALL'; // 'ALL', 'ACTIVE', 'NEEDS_ATTENTION', 'COMPLETED'
+  String? _selectedProjectId;
+
+  static const _filters = [
+    {'id': 'ALL', 'label': 'All'},
+    {'id': 'ACTIVE', 'label': 'Active'},
+    {'id': 'NEEDS_ATTENTION', 'label': 'Needs Attention'},
+    {'id': 'COMPLETED', 'label': 'Completed'},
+  ];
 
   @override
   Widget build(BuildContext context) {
+    final projectsAsync = ref.watch(projectsListProvider);
+    final techInsightsAsync = ref.watch(techStackInsightsProvider);
     final colorScheme = Theme.of(context).colorScheme;
-    final pct = (project.progress / 100.0).clamp(0.0, 1.0);
+    final primaryRed = colorScheme.primary;
 
-    Color healthColor;
-    switch (project.healthStatus) {
-      case 'HEALTHY':
-        healthColor = Colors.green;
-        break;
-      case 'NEEDS_ATTENTION':
-        healthColor = Colors.orange;
-        break;
-      case 'AT_RISK':
-        healthColor = Colors.redAccent;
-        break;
-      default:
-        healthColor = colorScheme.primary;
-    }
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isWide = constraints.maxWidth > 850;
 
-    return Card(
-      elevation: 0,
-      margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: colorScheme.outlineVariant.withAlpha(60)),
-      ),
-      color: colorScheme.surfaceContainerHighest,
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: () => context.push('/more/projects/${project.id}'),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header row
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      project.title,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
+        final mainListContent = Scaffold(
+          backgroundColor: colorScheme.surface,
+          appBar: AppBar(
+            backgroundColor: colorScheme.surface,
+            elevation: 0,
+            scrolledUnderElevation: 0,
+            title: _isSearching
+                ? TextField(
+                    autofocus: true,
+                    onChanged: (val) =>
+                        setState(() => _searchQuery = val.trim().toLowerCase()),
+                    decoration: InputDecoration(
+                      hintText: 'Filter projects or tech stack...',
+                      border: InputBorder.none,
+                      hintStyle: TextStyle(
+                          color: colorScheme.onSurfaceVariant.withAlpha(140)),
                     ),
-                  ),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: healthColor.withAlpha(30),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.shield_outlined,
-                            size: 12, color: healthColor),
-                        const SizedBox(width: 4),
-                        Text(
-                          project.healthStatus.replaceAll('_', ' '),
+                  )
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Projects',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 24,
+                          letterSpacing: -0.5,
+                          color: colorScheme.onSurface,
+                        ),
+                      ),
+                      projectsAsync.when(
+                        data: (projects) {
+                          final activeCount = projects
+                              .where(
+                                  (p) => p.status.toUpperCase() != 'COMPLETED')
+                              .length;
+                          final atRiskCount = projects
+                              .where((p) =>
+                                  p.healthStatus.toUpperCase() == 'AT_RISK' ||
+                                  p.healthStatus.toUpperCase() ==
+                                      'NEEDS_ATTENTION')
+                              .length;
+
+                          return Text(
+                            '$activeCount active · $atRiskCount need attention',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color:
+                                  colorScheme.onSurfaceVariant.withAlpha(180),
+                            ),
+                          );
+                        },
+                        loading: () => Text(
+                          'Developer Hub',
                           style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            color: healthColor,
+                            fontSize: 12,
+                            color: colorScheme.onSurfaceVariant.withAlpha(160),
                           ),
                         ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-
-              if (project.description != null &&
-                  project.description!.isNotEmpty) ...[
-                const SizedBox(height: 6),
-                Text(
-                  project.description!,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
+                        error: (_, __) => const SizedBox.shrink(),
                       ),
-                ),
-              ],
-
-              const SizedBox(height: 12),
-
-              // Progress Bar
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Progress (${project.completedTasksCount + project.completedFeaturesCount}/${project.tasksCount + project.featuresCount} items)',
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          color: colorScheme.onSurfaceVariant,
-                        ),
+                    ],
                   ),
-                  Text(
-                    '${project.progress.toStringAsFixed(0)}%',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
-                      color: colorScheme.primary,
-                    ),
-                  ),
-                ],
+            actions: [
+              IconButton(
+                icon: Icon(
+                    _isSearching ? Icons.close_rounded : Icons.search_rounded),
+                onPressed: () {
+                  setState(() {
+                    _isSearching = !_isSearching;
+                    if (!_isSearching) _searchQuery = '';
+                  });
+                },
               ),
-              const SizedBox(height: 4),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(4),
-                child: LinearProgressIndicator(
-                  value: pct,
-                  minHeight: 6,
-                  backgroundColor: colorScheme.primary.withAlpha(30),
-                  valueColor: AlwaysStoppedAnimation<Color>(colorScheme.primary),
-                ),
+              IconButton(
+                icon: Icon(Icons.refresh_rounded,
+                    color: colorScheme.onSurfaceVariant),
+                tooltip: 'Refresh',
+                onPressed: () {
+                  AppHaptics.light();
+                  ref.invalidate(projectsListProvider);
+                  ref.invalidate(techStackInsightsProvider);
+                },
               ),
-
-              const SizedBox(height: 12),
-
-              // Bottom Metadata Row: Tech Tags, Focus Hours, Bugs
-              Wrap(
-                spacing: 6,
-                runSpacing: 4,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: colorScheme.surface,
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.timer_outlined,
-                            size: 12, color: Colors.blueAccent),
-                        const SizedBox(width: 4),
-                        Text(
-                          '${project.totalFocusHours}h logged',
-                          style: const TextStyle(
-                              fontSize: 11, fontWeight: FontWeight.w600),
-                        ),
-                      ],
+              const SizedBox(width: 8),
+            ],
+          ),
+          body: Column(
+            children: [
+              // Underline Segmented Filter Controls
+              Container(
+                height: 44,
+                decoration: BoxDecoration(
+                  border: Border(
+                    bottom: BorderSide(
+                      color: colorScheme.outlineVariant.withAlpha(40),
+                      width: 1,
                     ),
                   ),
-                  if (project.openBugsCount > 0)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: Colors.red.withAlpha(25),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.bug_report_outlined,
-                              size: 12, color: Colors.redAccent),
-                          const SizedBox(width: 4),
-                          Text(
-                            '${project.openBugsCount} open bugs',
-                            style: const TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.redAccent,
+                ),
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  itemCount: _filters.length,
+                  itemBuilder: (context, index) {
+                    final f = _filters[index];
+                    final selected = _selectedFilter == f['id'];
+
+                    return InkWell(
+                      onTap: () {
+                        AppHaptics.selection();
+                        setState(() => _selectedFilter = f['id']!);
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14),
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          border: Border(
+                            bottom: BorderSide(
+                              color: selected ? primaryRed : Colors.transparent,
+                              width: 2.5,
                             ),
                           ),
+                        ),
+                        child: Text(
+                          f['label']!,
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight:
+                                selected ? FontWeight.w800 : FontWeight.w500,
+                            color: selected
+                                ? primaryRed
+                                : colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+
+              // Main Projects Body
+              Expanded(
+                child: projectsAsync.when(
+                  loading: () => Column(
+                    children: List.generate(
+                      3,
+                      (_) => Container(
+                        height: 110,
+                        margin: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color:
+                              colorScheme.surfaceContainerHighest.withAlpha(40),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                    ),
+                  ),
+                  error: (err, _) => AppErrorState(
+                    message: err.toString(),
+                    onRetry: () {
+                      ref.invalidate(projectsListProvider);
+                      ref.invalidate(techStackInsightsProvider);
+                    },
+                  ),
+                  data: (projects) {
+                    // Filter projects by status & search query
+                    var filtered = projects.where((p) {
+                      if (_selectedFilter == 'ACTIVE') {
+                        return p.status.toUpperCase() != 'COMPLETED';
+                      } else if (_selectedFilter == 'NEEDS_ATTENTION') {
+                        return p.healthStatus.toUpperCase() ==
+                                'NEEDS_ATTENTION' ||
+                            p.healthStatus.toUpperCase() == 'AT_RISK';
+                      } else if (_selectedFilter == 'COMPLETED') {
+                        return p.status.toUpperCase() == 'COMPLETED';
+                      }
+                      return true;
+                    }).toList();
+
+                    if (_searchQuery.isNotEmpty) {
+                      filtered = filtered.where((p) {
+                        final titleMatch =
+                            p.title.toLowerCase().contains(_searchQuery);
+                        final techMatch = p.technologies
+                            .any((t) => t.toLowerCase().contains(_searchQuery));
+                        return titleMatch || techMatch;
+                      }).toList();
+                    }
+
+                    return RefreshIndicator(
+                      onRefresh: () async {
+                        ref.invalidate(projectsListProvider);
+                        ref.invalidate(techStackInsightsProvider);
+                      },
+                      color: primaryRed,
+                      child: ListView(
+                        padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
+                        children: [
+                          _buildPortfolioOverview(context, projects),
+                          const SizedBox(height: 16),
+
+                          // 1. Time By Tech Stack Card
+                          techInsightsAsync.when(
+                            data: (insights) =>
+                                ProjectTimeByStackCard(insights: insights),
+                            loading: () => const SizedBox.shrink(),
+                            error: (_, __) => const SizedBox.shrink(),
+                          ),
+
+                          // 2. Project List Header
+                          Text(
+                            'ENGINEERING PROJECTS (${filtered.length})',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.8,
+                              color:
+                                  colorScheme.onSurfaceVariant.withAlpha(160),
+                            ),
+                          ),
+                          AppSpacing.verticalGapSm,
+
+                          // 3. Projects List or Empty State
+                          if (filtered.isEmpty)
+                            AppEmptyState(
+                              icon: Icons.folder_outlined,
+                              title: 'No engineering projects found',
+                              description:
+                                  'Tap "+ New Project" to track your code, tasks, and commits.',
+                              actionLabel: 'New Project',
+                              onAction: () => _openCreateProject(context),
+                            )
+                          else
+                            ...filtered.map((project) {
+                              return ProjectCard(
+                                project: project,
+                                onTap: () {
+                                  if (isWide) {
+                                    setState(
+                                        () => _selectedProjectId = project.id);
+                                  } else {
+                                    context
+                                        .push('/more/projects/${project.id}');
+                                  }
+                                },
+                                onDelete: () {
+                                  ref
+                                      .read(projectsControllerProvider)
+                                      .deleteProject(project.id);
+                                },
+                              );
+                            }),
                         ],
                       ),
-                    ),
-                  ...project.technologies.take(3).map(
-                        (t) => Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: colorScheme.surface,
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            t,
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        ),
-                      ),
-                ],
+                    );
+                  },
+                ),
               ),
             ],
           ),
+          floatingActionButton: FloatingActionButton.extended(
+            onPressed: () => _openCreateProject(context),
+            backgroundColor: primaryRed,
+            foregroundColor: Colors.white,
+            elevation: 4,
+            icon: const Icon(Icons.add_rounded),
+            label: const Text('New Project',
+                style: TextStyle(fontWeight: FontWeight.w700)),
+          ),
+        );
+
+        if (isWide) {
+          return Row(
+            children: [
+              SizedBox(width: 420, child: mainListContent),
+              VerticalDivider(
+                  width: 1, color: colorScheme.outlineVariant.withAlpha(40)),
+              Expanded(
+                child: _selectedProjectId == null
+                    ? Scaffold(
+                        backgroundColor: colorScheme.surfaceContainerLowest,
+                        body: const Center(
+                          child: Text(
+                            'Select a project to view Developer Hub details',
+                            style: TextStyle(color: Colors.grey),
+                          ),
+                        ),
+                      )
+                    : ProjectDetailScreen(projectId: _selectedProjectId!),
+              ),
+            ],
+          );
+        }
+
+        return mainListContent;
+      },
+    );
+  }
+
+  Widget _buildPortfolioOverview(
+      BuildContext context, List<ProjectOverviewModel> projects) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final active = projects
+        .where((project) => project.status.toUpperCase() != 'COMPLETED')
+        .toList();
+    final needsAttention = projects.where((project) {
+      final health = project.healthStatus.toUpperCase();
+      return health == 'AT_RISK' || health == 'NEEDS_ATTENTION';
+    }).length;
+    final averageProgress = projects.isEmpty
+        ? 0.0
+        : projects.map((project) => project.progress).reduce((a, b) => a + b) /
+            projects.length;
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            colorScheme.primary.withAlpha(20),
+            colorScheme.primaryContainer.withAlpha(105),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: colorScheme.primary.withAlpha(42)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Project portfolio',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    color: colorScheme.onSurface,
+                  ),
+                ),
+              ),
+              Icon(Icons.folder_special_outlined,
+                  size: 20, color: colorScheme.primary),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            projects.isEmpty
+                ? 'Your engineering workspace is ready for its first project.'
+                : '${active.length} active projects in motion',
+            style: TextStyle(
+              fontSize: 12,
+              color: colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 14),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(999),
+            child: LinearProgressIndicator(
+              value: (averageProgress / 100).clamp(0.0, 1.0),
+              minHeight: 7,
+              backgroundColor: colorScheme.outlineVariant.withAlpha(70),
+              valueColor: AlwaysStoppedAnimation<Color>(colorScheme.primary),
+            ),
+          ),
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 22,
+            runSpacing: 10,
+            children: [
+              _portfolioMetric(
+                context,
+                value: '${averageProgress.toInt()}%',
+                label: 'average progress',
+              ),
+              _portfolioMetric(
+                context,
+                value: '${projects.length}',
+                label: 'total projects',
+              ),
+              _portfolioMetric(
+                context,
+                value: '$needsAttention',
+                label: 'need attention',
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
-}
 
-extension _ListFilter<T> on Iterable<T> {
-  Iterable<T> filter(bool Function(T) test) => where(test);
+  Widget _portfolioMetric(BuildContext context,
+      {required String value, required String label}) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w800,
+            color: colorScheme.onSurface,
+          ),
+        ),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 10,
+            color: colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _openCreateProject(BuildContext context) {
+    ProjectFormDialog.show(
+      context,
+      onSubmit: ({
+        required title,
+        description,
+        required status,
+        repoUrl,
+        required technologies,
+      }) async {
+        await ref.read(projectsControllerProvider).createProject(
+              title: title,
+              description: description,
+              status: status,
+              repoUrl: repoUrl,
+              technologies: technologies,
+            );
+      },
+    );
+  }
 }

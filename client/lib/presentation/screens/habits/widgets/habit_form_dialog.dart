@@ -29,8 +29,10 @@ class _HabitFormDialogState extends State<HabitFormDialog> {
     final h = widget.habit;
     _nameController = TextEditingController(text: h?.name ?? '');
     _descController = TextEditingController(text: h?.description ?? '');
-    _targetValueController = TextEditingController(text: (h?.targetValue ?? 1).toString());
-    _freqCountController = TextEditingController(text: (h?.targetFrequencyCount ?? 3).toString());
+    _targetValueController =
+        TextEditingController(text: (h?.targetValue ?? 1).toString());
+    _freqCountController =
+        TextEditingController(text: (h?.targetFrequencyCount ?? 3).toString());
     _frequency = h?.frequency ?? 'DAILY';
     _targetFrequencyPeriod = h?.targetFrequencyPeriod ?? 'WEEK';
     _targetType = h?.targetType ?? 'CHECKBOX';
@@ -79,9 +81,12 @@ class _HabitFormDialogState extends State<HabitFormDialog> {
 
     final payload = <String, dynamic>{
       'name': _nameController.text.trim(),
-      'description': _descController.text.trim().isEmpty ? null : _descController.text.trim(),
+      'description': _descController.text.trim().isEmpty
+          ? null
+          : _descController.text.trim(),
       'frequency': _frequency,
-      'targetFrequencyCount': isCustom ? (int.tryParse(_freqCountController.text.trim()) ?? 3) : 1,
+      'targetFrequencyCount':
+          isCustom ? (int.tryParse(_freqCountController.text.trim()) ?? 3) : 1,
       'targetFrequencyPeriod': isCustom ? _targetFrequencyPeriod : 'DAY',
       'targetType': _targetType,
       'targetValue': int.tryParse(_targetValueController.text.trim()) ?? 1,
@@ -111,8 +116,9 @@ class _HabitFormDialogState extends State<HabitFormDialog> {
                   labelText: 'Habit Name *',
                   hintText: 'e.g. Read 20 pages or Go to gym',
                 ),
-                validator: (val) =>
-                    val == null || val.trim().isEmpty ? 'Name is required' : null,
+                validator: (val) => val == null || val.trim().isEmpty
+                    ? 'Name is required'
+                    : null,
               ),
               const SizedBox(height: 12),
               TextFormField(
@@ -127,11 +133,16 @@ class _HabitFormDialogState extends State<HabitFormDialog> {
               // Frequency
               DropdownButtonFormField<String>(
                 initialValue: _frequency,
-                decoration: const InputDecoration(labelText: 'Frequency Cadence'),
+                decoration:
+                    const InputDecoration(labelText: 'Frequency Cadence'),
                 items: const [
-                  DropdownMenuItem(value: 'DAILY', child: Text('Daily (Everyday)')),
-                  DropdownMenuItem(value: 'CUSTOM', child: Text('Flexible (e.g. 3x per week)')),
-                  DropdownMenuItem(value: 'WEEKLY', child: Text('Weekly (Specific day)')),
+                  DropdownMenuItem(
+                      value: 'DAILY', child: Text('Daily (Everyday)')),
+                  DropdownMenuItem(
+                      value: 'CUSTOM',
+                      child: Text('Flexible (e.g. 3x per week)')),
+                  DropdownMenuItem(
+                      value: 'WEEKLY', child: Text('Weekly (Specific day)')),
                 ],
                 onChanged: (val) {
                   if (val != null) setState(() => _frequency = val);
@@ -167,10 +178,12 @@ class _HabitFormDialogState extends State<HabitFormDialog> {
                         initialValue: _targetFrequencyPeriod,
                         items: const [
                           DropdownMenuItem(value: 'WEEK', child: Text('Week')),
-                          DropdownMenuItem(value: 'MONTH', child: Text('Month')),
+                          DropdownMenuItem(
+                              value: 'MONTH', child: Text('Month')),
                         ],
                         onChanged: (val) {
-                          if (val != null) setState(() => _targetFrequencyPeriod = val);
+                          if (val != null)
+                            setState(() => _targetFrequencyPeriod = val);
                         },
                       ),
                     ),
@@ -185,9 +198,12 @@ class _HabitFormDialogState extends State<HabitFormDialog> {
                 initialValue: _targetType,
                 decoration: const InputDecoration(labelText: 'Target Type'),
                 items: const [
-                  DropdownMenuItem(value: 'CHECKBOX', child: Text('Simple Checkbox')),
-                  DropdownMenuItem(value: 'COUNT', child: Text('Count (Repetitions)')),
-                  DropdownMenuItem(value: 'DURATION', child: Text('Duration (Minutes)')),
+                  DropdownMenuItem(
+                      value: 'CHECKBOX', child: Text('Simple Checkbox')),
+                  DropdownMenuItem(
+                      value: 'COUNT', child: Text('Count (Repetitions)')),
+                  DropdownMenuItem(
+                      value: 'DURATION', child: Text('Duration (Minutes)')),
                 ],
                 onChanged: (val) {
                   if (val != null) setState(() => _targetType = val);
@@ -221,11 +237,18 @@ class _HabitFormDialogState extends State<HabitFormDialog> {
                   helperText: 'Harder habits contribute more to your score',
                 ),
                 items: const [
-                  DropdownMenuItem(value: 'TRIVIAL', child: Text('Trivial (0.5x) - Drink water')),
-                  DropdownMenuItem(value: 'EASY', child: Text('Easy (0.8x) - Vitamins')),
-                  DropdownMenuItem(value: 'MEDIUM', child: Text('Medium (1.0x) - Standard')),
-                  DropdownMenuItem(value: 'HARD', child: Text('Hard (1.5x) - Gym, Coding')),
-                  DropdownMenuItem(value: 'EPIC', child: Text('Epic (2.0x) - 10km run, Deep study')),
+                  DropdownMenuItem(
+                      value: 'TRIVIAL',
+                      child: Text('Trivial (0.5x) - Drink water')),
+                  DropdownMenuItem(
+                      value: 'EASY', child: Text('Easy (0.8x) - Vitamins')),
+                  DropdownMenuItem(
+                      value: 'MEDIUM', child: Text('Medium (1.0x) - Standard')),
+                  DropdownMenuItem(
+                      value: 'HARD', child: Text('Hard (1.5x) - Gym, Coding')),
+                  DropdownMenuItem(
+                      value: 'EPIC',
+                      child: Text('Epic (2.0x) - 10km run, Deep study')),
                 ],
                 onChanged: (val) {
                   if (val != null) setState(() => _difficulty = val);

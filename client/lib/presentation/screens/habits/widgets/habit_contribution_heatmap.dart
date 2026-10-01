@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../data/models/habit_model.dart';
+import '../../../../app/theme/app_theme.dart';
 
 class HabitContributionHeatmap extends StatelessWidget {
   final List<HabitLogModel> logs;
@@ -16,6 +17,7 @@ class HabitContributionHeatmap extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final semantics = AppSemanticColors.of(context);
 
     // Build a map of YYYY-MM-DD -> HabitLogModel
     final logMap = <String, HabitLogModel>{};
@@ -59,11 +61,12 @@ class HabitContributionHeatmap extends StatelessWidget {
             ),
             Row(
               children: [
-                _buildLegendItem(colorScheme.surfaceContainerHighest, 'Missed'),
+                _buildLegendItem(
+                    colorScheme, colorScheme.surfaceContainerHighest, 'Missed'),
                 const SizedBox(width: 8),
-                _buildLegendItem(Colors.lightBlue.shade300, 'Frozen ❄️'),
+                _buildLegendItem(colorScheme, semantics.info, 'Frozen ❄️'),
                 const SizedBox(width: 8),
-                _buildLegendItem(primaryColor, 'Done'),
+                _buildLegendItem(colorScheme, primaryColor, 'Done'),
               ],
             ),
           ],
@@ -90,9 +93,9 @@ class HabitContributionHeatmap extends StatelessWidget {
                     if (isFuture) {
                       cellColor = Colors.transparent;
                     } else if (log != null && log.wasFrozen) {
-                      cellColor = Colors.lightBlue.withAlpha(80);
-                      innerIcon = const Icon(Icons.ac_unit_rounded,
-                          size: 9, color: Colors.blueAccent);
+                      cellColor = semantics.info.withAlpha(80);
+                      innerIcon = Icon(Icons.ac_unit_rounded,
+                          size: 9, color: semantics.info);
                     } else if (log != null && log.isCompleted) {
                       cellColor = primaryColor;
                     } else {
@@ -113,7 +116,8 @@ class HabitContributionHeatmap extends StatelessWidget {
                           border: isFuture
                               ? null
                               : Border.all(
-                                  color: colorScheme.outlineVariant.withAlpha(40),
+                                  color:
+                                      colorScheme.outlineVariant.withAlpha(40),
                                   width: 0.5,
                                 ),
                         ),
@@ -130,7 +134,7 @@ class HabitContributionHeatmap extends StatelessWidget {
     );
   }
 
-  Widget _buildLegendItem(Color color, String label) {
+  Widget _buildLegendItem(ColorScheme colorScheme, Color color, String label) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -145,7 +149,7 @@ class HabitContributionHeatmap extends StatelessWidget {
         const SizedBox(width: 4),
         Text(
           label,
-          style: const TextStyle(fontSize: 10, color: Colors.grey),
+          style: TextStyle(fontSize: 10, color: colorScheme.onSurfaceVariant),
         ),
       ],
     );

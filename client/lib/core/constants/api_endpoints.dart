@@ -43,7 +43,8 @@ class ApiEndpoints {
   static const String habitCorrelations = '/habits/correlations';
   static const String habitRoutines = '/habits/routines';
   static String habitRoutineById(String id) => '/habits/routines/$id';
-  static String habitRoutineComplete(String id) => '/habits/routines/$id/complete';
+  static String habitRoutineComplete(String id) =>
+      '/habits/routines/$id/complete';
   static const String habitsSummary = '/habits/summary';
   static String taskById(String taskId) => '/tasks/$taskId';
   static String taskComplete(String taskId) => '/tasks/$taskId/complete';
@@ -51,8 +52,10 @@ class ApiEndpoints {
   static const String taskWorkload = '/tasks/workload';
   static const String taskMatrix = '/tasks/matrix';
   static String taskSubtasks(String taskId) => '/tasks/$taskId/subtasks';
-  static String taskDependencies(String taskId) => '/tasks/$taskId/dependencies';
-  static String taskDependency(String taskId, String blockingId) => '/tasks/$taskId/dependencies/$blockingId';
+  static String taskDependencies(String taskId) =>
+      '/tasks/$taskId/dependencies';
+  static String taskDependency(String taskId, String blockingId) =>
+      '/tasks/$taskId/dependencies/$blockingId';
 
   // Focus
   static const String focusStart = '/focus/start';
@@ -63,7 +66,8 @@ class ApiEndpoints {
 
   // Finance
   static const String financeTransactions = '/finance/transactions';
-  static String financeTransactionById(String id) => '/finance/transactions/$id';
+  static String financeTransactionById(String id) =>
+      '/finance/transactions/$id';
   static const String financeBudgets = '/finance/budgets';
   static const String financeAnalytics = '/finance/analytics';
 
@@ -73,9 +77,11 @@ class ApiEndpoints {
   // Developer Hub & Projects
   static String projectById(String id) => '/projects/$id';
   static String projectFeatures(String id) => '/projects/$id/features';
-  static String projectFeatureById(String id, String featId) => '/projects/$id/features/$featId';
+  static String projectFeatureById(String id, String featId) =>
+      '/projects/$id/features/$featId';
   static String projectBugs(String id) => '/projects/$id/bugs';
-  static String projectBugById(String id, String bugId) => '/projects/$id/bugs/$bugId';
+  static String projectBugById(String id, String bugId) =>
+      '/projects/$id/bugs/$bugId';
   static String projectBoard(String id) => '/projects/$id/board';
   static String projectBoardMove(String id) => '/projects/$id/board/move';
   static String projectAnalytics(String id) => '/projects/$id/analytics';
@@ -87,18 +93,20 @@ class ApiEndpoints {
   // Academic & Courses
   static String courseById(String id) => '/courses/$id';
   static String courseAssignments(String id) => '/courses/$id/assignments';
-  static String courseAssignmentById(String id, String aId) => '/courses/$id/assignments/$aId';
+  static String courseAssignmentById(String id, String aId) =>
+      '/courses/$id/assignments/$aId';
   static String courseExams(String id) => '/courses/$id/exams';
-  static String courseExamById(String id, String eId) => '/courses/$id/exams/$eId';
+  static String courseExamById(String id, String eId) =>
+      '/courses/$id/exams/$eId';
   static String courseAttendance(String id) => '/courses/$id/attendance';
   static String courseSchedules(String id) => '/courses/$id/schedules';
-  static String courseScheduleById(String id, String sId) => '/courses/$id/schedules/$sId';
+  static String courseScheduleById(String id, String sId) =>
+      '/courses/$id/schedules/$sId';
   static String courseWhatIf(String id) => '/courses/$id/what-if';
   static String courseStudy(String id) => '/courses/$id/study';
   static const String academicSummary = '/courses/summary';
   static const String academicGpa = '/courses/gpa';
   static const String academicSchedules = '/courses/schedules';
-
 
   // Gym & Fitness
   static const String gymWorkouts = '/gym/workouts';

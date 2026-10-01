@@ -163,7 +163,8 @@ class HabitsNotifier extends StateNotifier<HabitsState> {
   Future<List<HabitLogModel>> fetchHistory(String habitId) async {
     try {
       final logs = await _repository.getHabitHistory(habitId);
-      final updatedHistories = Map<String, List<HabitLogModel>>.from(state.habitHistories);
+      final updatedHistories =
+          Map<String, List<HabitLogModel>>.from(state.habitHistories);
       updatedHistories[habitId] = logs;
       state = state.copyWith(habitHistories: updatedHistories);
       return logs;
@@ -225,7 +226,8 @@ class HabitsNotifier extends StateNotifier<HabitsState> {
   }
 }
 
-final habitsProvider = StateNotifierProvider<HabitsNotifier, HabitsState>((ref) {
+final habitsProvider =
+    StateNotifierProvider<HabitsNotifier, HabitsState>((ref) {
   final repository = ref.watch(habitRepositoryProvider);
   return HabitsNotifier(repository, ref);
 });

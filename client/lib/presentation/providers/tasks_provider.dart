@@ -9,7 +9,8 @@ enum TasksStatus { initial, loading, loaded, error }
 class TasksState {
   final TasksStatus status;
   final List<TaskModel> tasks;
-  final String currentViewFilter; // 'all', 'today', 'upcoming', 'overdue', 'completed'
+  final String
+      currentViewFilter; // 'all', 'today', 'upcoming', 'overdue', 'completed'
   final String? priorityFilter; // null, 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL'
   final String searchQuery;
   final String? errorMessage;
@@ -121,7 +122,9 @@ class TasksNotifier extends StateNotifier<TasksState> {
     } catch (e) {
       await loadTasks(showLoading: false);
       final errorMsg = e is DioException && e.response?.data != null
-          ? (e.response!.data['message']?.toString() ?? e.message ?? 'Failed to update status')
+          ? (e.response!.data['message']?.toString() ??
+              e.message ??
+              'Failed to update status')
           : e.toString();
       state = state.copyWith(errorMessage: errorMsg);
       return errorMsg;
@@ -171,8 +174,8 @@ final tasksProvider = StateNotifierProvider<TasksNotifier, TasksState>((ref) {
   return TasksNotifier(repository, ref);
 });
 
-final tasksWorkloadProvider = FutureProvider.autoDispose<TaskWorkloadData>((ref) async {
+final tasksWorkloadProvider =
+    FutureProvider.autoDispose<TaskWorkloadData>((ref) async {
   final repo = ref.watch(taskRepositoryProvider);
   return repo.getWorkload();
 });
-

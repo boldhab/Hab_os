@@ -21,8 +21,8 @@ class FinanceRepository {
       if (year != null) 'year': year,
       if (search != null && search.isNotEmpty) 'search': search,
     };
-    final response =
-        await _dio.get(ApiEndpoints.financeTransactions, queryParameters: query);
+    final response = await _dio.get(ApiEndpoints.financeTransactions,
+        queryParameters: query);
     final data = response.data['data'];
     List items = [];
     if (data is Map && data.containsKey('data')) {
@@ -35,7 +35,8 @@ class FinanceRepository {
         .toList();
   }
 
-  Future<TransactionModel> createTransaction(Map<String, dynamic> payload) async {
+  Future<TransactionModel> createTransaction(
+      Map<String, dynamic> payload) async {
     final response =
         await _dio.post(ApiEndpoints.financeTransactions, data: payload);
     final data = response.data['data'] ?? response.data;

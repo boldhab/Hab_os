@@ -10,14 +10,15 @@ final selectedSemesterProvider = StateProvider<String?>((ref) => 'Fall 2026');
 // DATA PROVIDERS
 // ==========================================
 
-final academicCoursesListProvider =
-    FutureProvider.autoDispose.family<List<CourseOverviewModel>, String?>((ref, semester) async {
+final academicCoursesListProvider = FutureProvider.autoDispose
+    .family<List<CourseOverviewModel>, String?>((ref, semester) async {
   final dio = ref.watch(dioProvider);
   final response = await dio.get(
     ApiEndpoints.courses,
-    queryParameters: semester != null && semester.isNotEmpty && semester != 'ALL'
-        ? {'semester': semester}
-        : null,
+    queryParameters:
+        semester != null && semester.isNotEmpty && semester != 'ALL'
+            ? {'semester': semester}
+            : null,
   );
   final data = response.data['data'];
   List items = [];
@@ -26,29 +27,34 @@ final academicCoursesListProvider =
   } else if (data is Map && data.containsKey('data')) {
     items = data['data'] as List;
   }
-  return items.map((i) => CourseOverviewModel.fromJson(Map<String, dynamic>.from(i))).toList();
+  return items
+      .map((i) => CourseOverviewModel.fromJson(Map<String, dynamic>.from(i)))
+      .toList();
 });
 
-final academicSummaryProvider = FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
+final academicSummaryProvider =
+    FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
   final dio = ref.watch(dioProvider);
   final response = await dio.get(ApiEndpoints.academicSummary);
   return Map<String, dynamic>.from(response.data['data']);
 });
 
-final academicGpaProvider =
-    FutureProvider.autoDispose.family<GpaOverviewModel, String?>((ref, semester) async {
+final academicGpaProvider = FutureProvider.autoDispose
+    .family<GpaOverviewModel, String?>((ref, semester) async {
   final dio = ref.watch(dioProvider);
   final response = await dio.get(
     ApiEndpoints.academicGpa,
-    queryParameters: semester != null && semester.isNotEmpty && semester != 'ALL'
-        ? {'semester': semester}
-        : null,
+    queryParameters:
+        semester != null && semester.isNotEmpty && semester != 'ALL'
+            ? {'semester': semester}
+            : null,
   );
-  return GpaOverviewModel.fromJson(Map<String, dynamic>.from(response.data['data']));
+  return GpaOverviewModel.fromJson(
+      Map<String, dynamic>.from(response.data['data']));
 });
 
-final courseDetailProvider =
-    FutureProvider.autoDispose.family<Map<String, dynamic>, String>((ref, id) async {
+final courseDetailProvider = FutureProvider.autoDispose
+    .family<Map<String, dynamic>, String>((ref, id) async {
   final dio = ref.watch(dioProvider);
   final response = await dio.get(ApiEndpoints.courseById(id));
   return Map<String, dynamic>.from(response.data['data']);
@@ -101,7 +107,8 @@ class AcademicController {
     final dio = ref.read(dioProvider);
     await dio.post(ApiEndpoints.courseAssignments(courseId), data: {
       'title': title,
-      if (description != null && description.isNotEmpty) 'description': description,
+      if (description != null && description.isNotEmpty)
+        'description': description,
       'dueDate': dueDate.toIso8601String(),
       'type': type,
       'weight': weight,
@@ -118,7 +125,8 @@ class AcademicController {
     required Map<String, dynamic> data,
   }) async {
     final dio = ref.read(dioProvider);
-    await dio.put(ApiEndpoints.courseAssignmentById(courseId, assignmentId), data: data);
+    await dio.put(ApiEndpoints.courseAssignmentById(courseId, assignmentId),
+        data: data);
     invalidateCourseViews(courseId);
   }
 
@@ -215,7 +223,8 @@ class AcademicController {
       'targetPercentage': targetPercentage,
       'finalExamWeight': finalExamWeight,
     });
-    return WhatIfResultModel.fromJson(Map<String, dynamic>.from(response.data['data']));
+    return WhatIfResultModel.fromJson(
+        Map<String, dynamic>.from(response.data['data']));
   }
 
   Future<void> recordStudySession({

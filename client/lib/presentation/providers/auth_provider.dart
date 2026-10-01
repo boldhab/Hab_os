@@ -1,6 +1,7 @@
 import 'package:equatable/equatable.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/network/api_client.dart';
+import '../../core/storage/secure_storage_service.dart';
 import '../../data/models/user_model.dart';
 import '../../data/repositories/auth_repository.dart';
 
@@ -18,10 +19,14 @@ class AuthState extends Equatable {
   });
 
   factory AuthState.initial() => const AuthState(status: AuthStatus.initial);
-  factory AuthState.authenticating() => const AuthState(status: AuthStatus.authenticating);
-  factory AuthState.authenticated(UserModel user) => AuthState(status: AuthStatus.authenticated, user: user);
-  factory AuthState.unauthenticated() => const AuthState(status: AuthStatus.unauthenticated);
-  factory AuthState.error(String message) => AuthState(status: AuthStatus.unauthenticated, errorMessage: message);
+  factory AuthState.authenticating() =>
+      const AuthState(status: AuthStatus.authenticating);
+  factory AuthState.authenticated(UserModel user) =>
+      AuthState(status: AuthStatus.authenticated, user: user);
+  factory AuthState.unauthenticated() =>
+      const AuthState(status: AuthStatus.unauthenticated);
+  factory AuthState.error(String message) =>
+      AuthState(status: AuthStatus.unauthenticated, errorMessage: message);
 
   @override
   List<Object?> get props => [status, user, errorMessage];
@@ -35,7 +40,7 @@ final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
 
 class AuthNotifier extends StateNotifier<AuthState> {
   final AuthRepository authRepo;
-  final storage;
+  final SecureStorageService storage;
 
   AuthNotifier({required this.authRepo, required this.storage})
       : super(AuthState.initial()) {
@@ -71,7 +76,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
   Future<void> register(String email, String password, {String? name}) async {
     state = AuthState.authenticating();
     try {
-      final user = await authRepo.register(email: email, password: password, name: name);
+      final user =
+          await authRepo.register(email: email, password: password, name: name);
       state = AuthState.authenticated(user);
     } catch (e) {
       state = AuthState.error(e.toString().replaceAll('Exception: ', ''));

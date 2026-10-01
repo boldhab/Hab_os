@@ -139,7 +139,8 @@ class TaskModel extends Equatable {
 
   factory TaskModel.fromJson(Map<String, dynamic> json) {
     final focusList = (json['focusSessions'] as List<dynamic>? ?? [])
-        .map((f) => TaskFocusSessionSummary.fromJson(Map<String, dynamic>.from(f)))
+        .map((f) =>
+            TaskFocusSessionSummary.fromJson(Map<String, dynamic>.from(f)))
         .toList();
     final tagList = (json['tags'] as List<dynamic>? ?? [])
         .map((t) => t.toString())
@@ -172,7 +173,8 @@ class TaskModel extends Equatable {
       milestoneId: json['milestoneId'],
       categoryId: json['categoryId'],
       project: json['project'] != null
-          ? TaskProjectSummary.fromJson(Map<String, dynamic>.from(json['project']))
+          ? TaskProjectSummary.fromJson(
+              Map<String, dynamic>.from(json['project']))
           : null,
       goal: json['goal'] != null
           ? TaskGoalSummary.fromJson(Map<String, dynamic>.from(json['goal']))
@@ -182,8 +184,12 @@ class TaskModel extends Equatable {
       isRecurring: json['isRecurring'] ?? false,
       recurrenceRule: json['recurrenceRule'] ?? json['recurrence'],
       isBlocked: json['isBlocked'] ?? false,
-      subtaskFraction: json['subtaskProgress'] != null ? json['subtaskProgress']['fraction'] : null,
-      subtaskPercent: json['subtaskProgress'] != null ? (json['subtaskProgress']['percent'] ?? 0) : 0,
+      subtaskFraction: json['subtaskProgress'] != null
+          ? json['subtaskProgress']['fraction']
+          : null,
+      subtaskPercent: json['subtaskProgress'] != null
+          ? (json['subtaskProgress']['percent'] ?? 0)
+          : 0,
       blockedByPrerequisites: json['blockedByPrerequisites'] ?? const [],
       subtasks: subtasksList,
       blockedBy: blockedByList,
@@ -319,7 +325,8 @@ class TodayWorkload extends Equatable {
   }
 
   @override
-  List<Object?> get props => [count, totalMinutes, status, overdueCount, overdueMinutes];
+  List<Object?> get props =>
+      [count, totalMinutes, status, overdueCount, overdueMinutes];
 }
 
 class TaskWorkloadData extends Equatable {
@@ -345,4 +352,3 @@ class TaskWorkloadData extends Equatable {
   @override
   List<Object?> get props => [today, upcoming];
 }
-

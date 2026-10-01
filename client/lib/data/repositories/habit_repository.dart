@@ -23,7 +23,9 @@ class HabitRepository {
     } else if (data is List) {
       items = data;
     }
-    return items.map((i) => HabitModel.fromJson(Map<String, dynamic>.from(i))).toList();
+    return items
+        .map((i) => HabitModel.fromJson(Map<String, dynamic>.from(i)))
+        .toList();
   }
 
   Future<HabitModel> getHabitById(String id) async {
@@ -38,7 +40,8 @@ class HabitRepository {
     return HabitModel.fromJson(Map<String, dynamic>.from(data));
   }
 
-  Future<HabitModel> updateHabit(String id, Map<String, dynamic> payload) async {
+  Future<HabitModel> updateHabit(
+      String id, Map<String, dynamic> payload) async {
     final response = await _dio.put(ApiEndpoints.habitById(id), data: payload);
     final data = response.data['data'] ?? response.data;
     return HabitModel.fromJson(Map<String, dynamic>.from(data));
@@ -69,9 +72,13 @@ class HabitRepository {
     final data = response.data['data'] ?? response.data;
     if (data is Map && data.containsKey('logs')) {
       final logsList = data['logs'] as List;
-      return logsList.map((i) => HabitLogModel.fromJson(Map<String, dynamic>.from(i))).toList();
+      return logsList
+          .map((i) => HabitLogModel.fromJson(Map<String, dynamic>.from(i)))
+          .toList();
     } else if (data is List) {
-      return data.map((i) => HabitLogModel.fromJson(Map<String, dynamic>.from(i))).toList();
+      return data
+          .map((i) => HabitLogModel.fromJson(Map<String, dynamic>.from(i)))
+          .toList();
     }
     return [];
   }
@@ -85,7 +92,9 @@ class HabitRepository {
     final response = await _dio.get(ApiEndpoints.habitRoutines);
     final data = response.data['data'] ?? response.data;
     if (data is List) {
-      return data.map((i) => RoutineModel.fromJson(Map<String, dynamic>.from(i))).toList();
+      return data
+          .map((i) => RoutineModel.fromJson(Map<String, dynamic>.from(i)))
+          .toList();
     }
     return [];
   }
@@ -96,8 +105,10 @@ class HabitRepository {
     return RoutineModel.fromJson(Map<String, dynamic>.from(data));
   }
 
-  Future<RoutineModel> updateRoutine(String id, Map<String, dynamic> payload) async {
-    final response = await _dio.put(ApiEndpoints.habitRoutineById(id), data: payload);
+  Future<RoutineModel> updateRoutine(
+      String id, Map<String, dynamic> payload) async {
+    final response =
+        await _dio.put(ApiEndpoints.habitRoutineById(id), data: payload);
     final data = response.data['data'] ?? response.data;
     return RoutineModel.fromJson(Map<String, dynamic>.from(data));
   }
@@ -117,7 +128,10 @@ class HabitRepository {
     final response = await _dio.get(ApiEndpoints.habitCorrelations);
     final data = response.data['data'] ?? response.data;
     if (data is List) {
-      return data.map((i) => HabitCorrelationModel.fromJson(Map<String, dynamic>.from(i))).toList();
+      return data
+          .map((i) =>
+              HabitCorrelationModel.fromJson(Map<String, dynamic>.from(i)))
+          .toList();
     }
     return [];
   }

@@ -160,7 +160,6 @@ final routerProvider = Provider<GoRouter>((ref) {
                       ),
                     ],
                   ),
-
                   GoRoute(
                     path: 'analytics',
                     builder: (context, state) => const AnalyticsScreen(),

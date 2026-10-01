@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../app/theme/app_theme.dart';
 
 class TransactionFormDialog extends StatefulWidget {
   const TransactionFormDialog({super.key});
@@ -45,8 +46,9 @@ class _TransactionFormDialogState extends State<TransactionFormDialog> {
     final payload = <String, dynamic>{
       'amount': amount,
       'type': _type,
-      'description':
-          _descController.text.trim().isEmpty ? null : _descController.text.trim(),
+      'description': _descController.text.trim().isEmpty
+          ? null
+          : _descController.text.trim(),
       'source': _sourceController.text.trim(),
       'date': _date.toIso8601String(),
     };
@@ -56,6 +58,8 @@ class _TransactionFormDialogState extends State<TransactionFormDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final semantics = AppSemanticColors.of(context);
+
     return AlertDialog(
       title: const Text('Add Transaction'),
       content: SingleChildScrollView(
@@ -66,16 +70,18 @@ class _TransactionFormDialogState extends State<TransactionFormDialog> {
             children: [
               // Type Segmented Button
               SegmentedButton<String>(
-                segments: const [
+                segments: [
                   ButtonSegment(
                     value: 'EXPENSE',
-                    label: Text('Expense'),
-                    icon: Icon(Icons.arrow_downward_rounded, color: Colors.red),
+                    label: const Text('Expense'),
+                    icon: Icon(Icons.arrow_downward_rounded,
+                        color: semantics.danger),
                   ),
                   ButtonSegment(
                     value: 'INCOME',
-                    label: Text('Income'),
-                    icon: Icon(Icons.arrow_upward_rounded, color: Colors.green),
+                    label: const Text('Income'),
+                    icon: Icon(Icons.arrow_upward_rounded,
+                        color: semantics.success),
                   ),
                 ],
                 selected: {_type},

@@ -85,7 +85,9 @@ class FocusRepository {
     } else if (data is List) {
       items = data;
     }
-    return items.map((i) => FocusSessionModel.fromJson(Map<String, dynamic>.from(i))).toList();
+    return items
+        .map((i) => FocusSessionModel.fromJson(Map<String, dynamic>.from(i)))
+        .toList();
   }
 
   Future<FocusStatsModel> getFocusStats() async {

@@ -29,7 +29,9 @@ class TaskRepository {
     } else if (data is List) {
       items = data;
     }
-    return items.map((i) => TaskModel.fromJson(Map<String, dynamic>.from(i))).toList();
+    return items
+        .map((i) => TaskModel.fromJson(Map<String, dynamic>.from(i)))
+        .toList();
   }
 
   Future<TaskModel> getTaskById(String id) async {
@@ -69,15 +71,18 @@ class TaskRepository {
     return TaskModel.fromJson(Map<String, dynamic>.from(data));
   }
 
-  Future<void> addDependency(String blockedTaskId, String blockingTaskId) async {
+  Future<void> addDependency(
+      String blockedTaskId, String blockingTaskId) async {
     await _dio.post(
       ApiEndpoints.taskDependencies(blockedTaskId),
       data: {'blockingTaskId': blockingTaskId},
     );
   }
 
-  Future<void> removeDependency(String blockedTaskId, String blockingTaskId) async {
-    await _dio.delete(ApiEndpoints.taskDependency(blockedTaskId, blockingTaskId));
+  Future<void> removeDependency(
+      String blockedTaskId, String blockingTaskId) async {
+    await _dio
+        .delete(ApiEndpoints.taskDependency(blockedTaskId, blockingTaskId));
   }
 
   Future<TaskWorkloadData> getWorkload() async {

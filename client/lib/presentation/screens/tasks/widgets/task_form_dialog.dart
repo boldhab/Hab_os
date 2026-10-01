@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../data/models/task_model.dart';
+import '../../../../app/theme/app_theme.dart';
 import '../../projects/projects_screen.dart';
 import '../../../providers/goals_provider.dart';
 
@@ -34,6 +35,7 @@ class _TaskFormDialogState extends ConsumerState<TaskFormDialog> {
   String? _selectedMilestoneId;
   bool _isRecurring = false;
   String _recurrenceRule = 'WEEKLY';
+  bool _showMoreOptions = false;
 
   DateTime? _detectedDate;
   String? _detectedLabel;
@@ -169,8 +171,9 @@ class _TaskFormDialogState extends ConsumerState<TaskFormDialog> {
 
     final payload = <String, dynamic>{
       'title': _titleController.text.trim(),
-      'description':
-          _descController.text.trim().isEmpty ? null : _descController.text.trim(),
+      'description': _descController.text.trim().isEmpty
+          ? null
+          : _descController.text.trim(),
       'priority': _priority,
       'status': _status,
       'dueDate': _dueDate?.toIso8601String(),
@@ -188,247 +191,468 @@ class _TaskFormDialogState extends ConsumerState<TaskFormDialog> {
   @override
   Widget build(BuildContext context) {
     final isEditing = widget.task != null;
-    final projectsAsync = ref.watch(projectsProvider);
-    final goalsAsync = ref.watch(goalsListProvider);
     final colorScheme = Theme.of(context).colorScheme;
+    final primaryRed = colorScheme.primary;
 
-    return AlertDialog(
-      title: Text(isEditing ? 'Edit Task' : 'New Task'),
-      content: SingleChildScrollView(
-        child: Form(
-          key: _formKey,
+    final formContent = Form(
+      key: _formKey,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Title Field (Large)
+          TextFormField(
+            controller: _titleController,
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+            decoration: InputDecoration(
+              hintText: 'What needs to be done? *',
+              hintStyle: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w500,
+                color: colorScheme.onSurfaceVariant.withAlpha(120),
+              ),
+              border: InputBorder.none,
+              focusedBorder: InputBorder.none,
+              enabledBorder: InputBorder.none,
+              contentPadding: EdgeInsets.zero,
+            ),
+            validator: (val) =>
+                val == null || val.trim().isEmpty ? 'Title is required' : null,
+          ),
+
+          // Smart Date Pill
+          if (_detectedDate != null && _detectedLabel != null) ...[
+            const SizedBox(height: 6),
+            InkWell(
+              onTap: _applyDetectedDate,
+              borderRadius: BorderRadius.circular(AppRadius.pill),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.sm + 4, vertical: AppSpacing.xs),
+                decoration: BoxDecoration(
+                  color: primaryRed.withAlpha(20),
+                  borderRadius: BorderRadius.circular(AppRadius.pill),
+                  border: Border.all(color: primaryRed.withAlpha(60)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.auto_awesome_rounded,
+                        size: 14, color: primaryRed),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Set due date to $_detectedLabel (${_detectedDate!.month}/${_detectedDate!.day})?',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: primaryRed,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Icon(Icons.check_rounded, size: 14, color: primaryRed),
+                  ],
+                ),
+              ),
+            ),
+          ],
+          AppSpacing.verticalGapMd,
+
+          // Description
+          TextFormField(
+            controller: _descController,
+            maxLines: 2,
+            style: const TextStyle(fontSize: 14),
+            decoration: InputDecoration(
+              hintText: 'Add description or notes (optional)',
+              hintStyle:
+                  TextStyle(color: colorScheme.onSurfaceVariant.withAlpha(140)),
+              filled: true,
+              fillColor: colorScheme.surfaceContainerLow,
+              contentPadding: const EdgeInsets.all(12),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none,
+              ),
+            ),
+          ),
+          AppSpacing.verticalGapLg,
+
+          // Priority Selectors (Chips)
+          Text(
+            'PRIORITY',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.8,
+              color: colorScheme.onSurfaceVariant,
+            ),
+          ),
+          AppSpacing.verticalGapSm,
+          Row(
+            children: [
+              _buildPriorityChip('LOW', 'Low', const Color(0xFF4285F4)),
+              const SizedBox(width: 8),
+              _buildPriorityChip('MEDIUM', 'Medium', const Color(0xFFFBBC05)),
+              const SizedBox(width: 8),
+              _buildPriorityChip('HIGH', 'High', const Color(0xFFEA4335)),
+              const SizedBox(width: 8),
+              _buildPriorityChip(
+                  'CRITICAL', 'Critical', const Color(0xFFDC2626)),
+            ],
+          ),
+          AppSpacing.verticalGapLg,
+
+          // Due Date Row
+          InkWell(
+            onTap: _pickDueDate,
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: colorScheme.surfaceContainerLow,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.calendar_today_rounded,
+                      size: 18, color: primaryRed),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      _dueDate == null
+                          ? 'Set Due Date'
+                          : 'Due: ${_dueDate!.year}-${_dueDate!.month.toString().padLeft(2, '0')}-${_dueDate!.day.toString().padLeft(2, '0')}',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                        color: _dueDate == null
+                            ? colorScheme.onSurfaceVariant
+                            : colorScheme.onSurface,
+                      ),
+                    ),
+                  ),
+                  if (_dueDate != null)
+                    IconButton(
+                      icon: const Icon(Icons.clear_rounded, size: 18),
+                      onPressed: () => setState(() => _dueDate = null),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          AppSpacing.verticalGapLg,
+
+          // Collapsible More Options Section
+          InkWell(
+            onTap: () => setState(() => _showMoreOptions = !_showMoreOptions),
+            borderRadius: BorderRadius.circular(10),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              child: Row(
+                children: [
+                  Text(
+                    'More Options',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: primaryRed,
+                    ),
+                  ),
+                  Icon(
+                    _showMoreOptions
+                        ? Icons.keyboard_arrow_up_rounded
+                        : Icons.keyboard_arrow_down_rounded,
+                    color: primaryRed,
+                    size: 20,
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          if (_showMoreOptions) ...[
+            AppSpacing.verticalGapMd,
+            _buildMoreOptions(context),
+          ],
+        ],
+      ),
+    );
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isWide = constraints.maxWidth > 600;
+
+        if (isWide) {
+          return Dialog(
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            child: Container(
+              width: 560,
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        isEditing ? 'Edit Task' : 'New Task',
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close_rounded),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ],
+                  ),
+                  const Divider(height: 20),
+                  Flexible(child: SingleChildScrollView(child: formContent)),
+                  const SizedBox(height: 20),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('Cancel'),
+                      ),
+                      const SizedBox(width: 12),
+                      FilledButton(
+                        onPressed: _submit,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: primaryRed,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: Text(isEditing ? 'Save Changes' : 'Create Task'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
+        // Mobile Draggable Sheet
+        return Container(
+          decoration: BoxDecoration(
+            color: colorScheme.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 16,
+            bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              TextFormField(
-                controller: _titleController,
-                decoration: const InputDecoration(
-                  labelText: 'Task Title *',
-                  hintText: 'e.g. Finish report tomorrow',
-                ),
-                validator: (val) =>
-                    val == null || val.trim().isEmpty ? 'Title is required' : null,
-              ),
-              if (_detectedDate != null && _detectedLabel != null) ...[
-                const SizedBox(height: 6),
-                InkWell(
-                  onTap: _applyDetectedDate,
-                  borderRadius: BorderRadius.circular(20),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: colorScheme.primaryContainer,
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: colorScheme.primary.withAlpha(80)),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.auto_awesome_rounded,
-                            size: 14, color: colorScheme.primary),
-                        const SizedBox(width: 6),
-                        Text(
-                          'Set due date to $_detectedLabel (${_detectedDate!.month}/${_detectedDate!.day})?',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: colorScheme.primary,
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        Icon(Icons.check_rounded,
-                            size: 14, color: colorScheme.primary),
-                      ],
-                    ),
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: colorScheme.outlineVariant.withAlpha(100),
+                    borderRadius: BorderRadius.circular(2),
                   ),
                 ),
-              ],
+              ),
               const SizedBox(height: 12),
-              TextFormField(
-                controller: _descController,
-                maxLines: 2,
-                decoration: const InputDecoration(
-                  labelText: 'Description (optional)',
-                ),
-              ),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<String>(
-                initialValue: _priority,
-                decoration: const InputDecoration(labelText: 'Priority'),
-                items: const [
-                  DropdownMenuItem(value: 'LOW', child: Text('Low')),
-                  DropdownMenuItem(value: 'MEDIUM', child: Text('Medium')),
-                  DropdownMenuItem(value: 'HIGH', child: Text('High')),
-                  DropdownMenuItem(value: 'CRITICAL', child: Text('Critical')),
-                ],
-                onChanged: (val) {
-                  if (val != null) setState(() => _priority = val);
-                },
-              ),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<String>(
-                initialValue: _status,
-                decoration: const InputDecoration(labelText: 'Status'),
-                items: const [
-                  DropdownMenuItem(value: 'TODO', child: Text('To Do')),
-                  DropdownMenuItem(value: 'IN_PROGRESS', child: Text('In Progress')),
-                  DropdownMenuItem(value: 'BLOCKED', child: Text('Blocked')),
-                  DropdownMenuItem(value: 'COMPLETED', child: Text('Completed')),
-                ],
-                onChanged: (val) {
-                  if (val != null) setState(() => _status = val);
-                },
-              ),
-              const SizedBox(height: 16),
-
-              // Project Dropdown
-              projectsAsync.when(
-                data: (projects) => DropdownButtonFormField<String?>(
-                  initialValue: _selectedProjectId,
-                  decoration:
-                      const InputDecoration(labelText: 'Linked Project'),
-                  items: [
-                    const DropdownMenuItem<String?>(
-                        value: null, child: Text('None')),
-                    ...projects.map((p) => DropdownMenuItem<String?>(
-                          value: p.id,
-                          child: Text(p.title),
-                        )),
-                  ],
-                  onChanged: (val) => setState(() => _selectedProjectId = val),
-                ),
-                loading: () => const SizedBox.shrink(),
-                error: (_, __) => const SizedBox.shrink(),
-              ),
-              const SizedBox(height: 16),
-
-              // Goal Dropdown
-              goalsAsync.when(
-                data: (goals) => DropdownButtonFormField<String?>(
-                  initialValue: _selectedGoalId,
-                  decoration: const InputDecoration(labelText: 'Linked Goal'),
-                  items: [
-                    const DropdownMenuItem<String?>(
-                        value: null, child: Text('None')),
-                    ...goals.map((g) => DropdownMenuItem<String?>(
-                          value: g.id,
-                          child: Text(g.title),
-                        )),
-                  ],
-                  onChanged: (val) => setState(() {
-                    _selectedGoalId = val;
-                    _selectedMilestoneId = null;
-                  }),
-                ),
-                loading: () => const SizedBox.shrink(),
-                error: (_, __) => const SizedBox.shrink(),
-              ),
-              const SizedBox(height: 16),
-
-              // Milestone Dropdown (when Goal is selected)
-              if (_selectedGoalId != null) ...[
-                ref.watch(goalDetailsProvider(_selectedGoalId!)).when(
-                  data: (goalDetail) => DropdownButtonFormField<String?>(
-                    initialValue: _selectedMilestoneId,
-                    decoration: const InputDecoration(
-                      labelText: 'Linked Milestone',
-                      hintText: 'Select milestone or leave as direct task',
-                    ),
-                    items: [
-                      const DropdownMenuItem<String?>(
-                          value: null, child: Text('None (Direct Goal Task)')),
-                      ...goalDetail.milestones.map((m) => DropdownMenuItem<String?>(
-                            value: m.id,
-                            child: Text(m.title),
-                          )),
-                    ],
-                    onChanged: (val) =>
-                        setState(() => _selectedMilestoneId = val),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    isEditing ? 'Edit Task' : 'New Task',
+                    style: const TextStyle(
+                        fontSize: 20, fontWeight: FontWeight.w800),
                   ),
-                  loading: () => const SizedBox.shrink(),
-                  error: (_, __) => const SizedBox.shrink(),
-                ),
-                const SizedBox(height: 16),
-              ],
-
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
               const SizedBox(height: 12),
-              TextFormField(
-                controller: _estMinutesController,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Estimated Time (minutes)',
-                  hintText: 'e.g. 45',
+              Flexible(
+                child: SingleChildScrollView(
+                  child: formContent,
                 ),
               ),
               const SizedBox(height: 16),
-
-              // Due date
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Due Date'),
-                subtitle: Text(
-                  _dueDate == null
-                      ? 'No due date set'
-                      : '${_dueDate!.year}-${_dueDate!.month.toString().padLeft(2, '0')}-${_dueDate!.day.toString().padLeft(2, '0')}',
-                ),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (_dueDate != null)
-                      IconButton(
-                        icon: const Icon(Icons.clear_rounded),
-                        onPressed: () => setState(() => _dueDate = null),
-                      ),
-                    IconButton(
-                      icon: const Icon(Icons.calendar_today_rounded),
-                      onPressed: _pickDueDate,
+              SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: FilledButton(
+                  onPressed: _submit,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: primaryRed,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
                     ),
-                  ],
+                  ),
+                  child: Text(
+                    isEditing ? 'Save Changes' : 'Create Task',
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w700, fontSize: 16),
+                  ),
                 ),
               ),
-
-              // Recurrence Section
-              const Divider(height: 24),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Recurring Task'),
-                subtitle: const Text('Repeats automatically upon schedule'),
-                value: _isRecurring,
-                onChanged: (val) => setState(() => _isRecurring = val),
-              ),
-              if (_isRecurring) ...[
-                const SizedBox(height: 8),
-                DropdownButtonFormField<String>(
-                  initialValue: _recurrenceRule,
-                  decoration: const InputDecoration(labelText: 'Repeat Frequency'),
-                  items: const [
-                    DropdownMenuItem(value: 'DAILY', child: Text('Daily')),
-                    DropdownMenuItem(value: 'WEEKDAYS', child: Text('Weekdays (Mon-Fri)')),
-                    DropdownMenuItem(value: 'WEEKLY', child: Text('Weekly')),
-                    DropdownMenuItem(value: 'BIWEEKLY', child: Text('Every 2 Weeks')),
-                    DropdownMenuItem(value: 'MONTHLY', child: Text('Monthly')),
-                  ],
-                  onChanged: (val) {
-                    if (val != null) setState(() => _recurrenceRule = val);
-                  },
-                ),
-              ],
             ],
           ),
-        ),
+        );
+      },
+    );
+  }
+
+  Widget _buildPriorityChip(String id, String label, Color color) {
+    final selected = _priority == id;
+    return ChoiceChip(
+      label: Text(label),
+      selected: selected,
+      selectedColor: color.withAlpha(30),
+      labelStyle: TextStyle(
+        color: selected ? color : Theme.of(context).colorScheme.onSurface,
+        fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
+        fontSize: 12,
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(null),
-          child: const Text('Cancel'),
+      onSelected: (_) => setState(() => _priority = id),
+    );
+  }
+
+  Widget _buildMoreOptions(BuildContext context) {
+    final projectsAsync = ref.watch(projectsProvider);
+    final goalsAsync = ref.watch(goalsListProvider);
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Status Chips
+        Text(
+          'STATUS',
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 0.8,
+            color: colorScheme.onSurfaceVariant,
+          ),
         ),
-        FilledButton(
-          onPressed: _submit,
-          child: Text(isEditing ? 'Save' : 'Create'),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 8,
+          children: [
+            _buildStatusChip('TODO', 'To Do'),
+            _buildStatusChip('IN_PROGRESS', 'In Progress'),
+            _buildStatusChip('BLOCKED', 'Blocked'),
+            _buildStatusChip('COMPLETED', 'Completed'),
+          ],
         ),
+        AppSpacing.verticalGapMd,
+
+        // Linked Project Dropdown
+        projectsAsync.when(
+          data: (projects) => DropdownButtonFormField<String?>(
+            value: _selectedProjectId,
+            decoration: const InputDecoration(labelText: 'Linked Project'),
+            items: [
+              const DropdownMenuItem<String?>(value: null, child: Text('None')),
+              ...projects.map((p) => DropdownMenuItem<String?>(
+                    value: p.id,
+                    child: Text(p.title),
+                  )),
+            ],
+            onChanged: (val) => setState(() => _selectedProjectId = val),
+          ),
+          loading: () => const SizedBox.shrink(),
+          error: (_, __) => const SizedBox.shrink(),
+        ),
+        AppSpacing.verticalGapMd,
+
+        // Linked Goal Dropdown
+        goalsAsync.when(
+          data: (goals) => DropdownButtonFormField<String?>(
+            value: _selectedGoalId,
+            decoration: const InputDecoration(labelText: 'Linked Goal'),
+            items: [
+              const DropdownMenuItem<String?>(value: null, child: Text('None')),
+              ...goals.map((g) => DropdownMenuItem<String?>(
+                    value: g.id,
+                    child: Text(g.title),
+                  )),
+            ],
+            onChanged: (val) => setState(() {
+              _selectedGoalId = val;
+              _selectedMilestoneId = null;
+            }),
+          ),
+          loading: () => const SizedBox.shrink(),
+          error: (_, __) => const SizedBox.shrink(),
+        ),
+        AppSpacing.verticalGapMd,
+
+        // Estimated Time
+        TextFormField(
+          controller: _estMinutesController,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(
+            labelText: 'Estimated Time (minutes)',
+            hintText: 'e.g. 45',
+          ),
+        ),
+        AppSpacing.verticalGapMd,
+
+        // Recurrence Toggle
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Recurring Task'),
+          subtitle: const Text('Repeats automatically on schedule'),
+          value: _isRecurring,
+          onChanged: (val) => setState(() => _isRecurring = val),
+        ),
+        if (_isRecurring) ...[
+          const SizedBox(height: 6),
+          DropdownButtonFormField<String>(
+            value: _recurrenceRule,
+            decoration: const InputDecoration(labelText: 'Repeat Frequency'),
+            items: const [
+              DropdownMenuItem(value: 'DAILY', child: Text('Daily')),
+              DropdownMenuItem(
+                  value: 'WEEKDAYS', child: Text('Weekdays (Mon-Fri)')),
+              DropdownMenuItem(value: 'WEEKLY', child: Text('Weekly')),
+              DropdownMenuItem(value: 'BIWEEKLY', child: Text('Every 2 Weeks')),
+              DropdownMenuItem(value: 'MONTHLY', child: Text('Monthly')),
+            ],
+            onChanged: (val) {
+              if (val != null) setState(() => _recurrenceRule = val);
+            },
+          ),
+        ],
       ],
+    );
+  }
+
+  Widget _buildStatusChip(String id, String label) {
+    final selected = _status == id;
+    final colorScheme = Theme.of(context).colorScheme;
+    return ChoiceChip(
+      label: Text(label),
+      selected: selected,
+      selectedColor: colorScheme.primary.withAlpha(30),
+      labelStyle: TextStyle(
+        color: selected ? colorScheme.primary : colorScheme.onSurface,
+        fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
+        fontSize: 12,
+      ),
+      onSelected: (_) => setState(() => _status = id),
     );
   }
 }

@@ -5,7 +5,10 @@ import '../../../data/models/task_model.dart';
 import '../../../data/repositories/task_repository.dart';
 import '../../providers/tasks_provider.dart';
 import '../../providers/focus_provider.dart';
+import '../../../app/theme/app_theme.dart';
 import '../../widgets/app_error_state.dart';
+import '../../widgets/common/app_card.dart';
+import '../../widgets/common/section_header.dart';
 import 'widgets/task_form_dialog.dart';
 
 final taskDetailsProvider =
@@ -33,12 +36,12 @@ class _TaskDetailsScreenState extends ConsumerState<TaskDetailsScreen> {
     super.dispose();
   }
 
-  Color _priorityColor(String priority, ColorScheme cs) {
+  Color _priorityColor(String priority) {
     return switch (priority.toUpperCase()) {
-      'CRITICAL' => cs.error,
-      'HIGH' => Colors.orange,
-      'MEDIUM' => cs.tertiary,
-      _ => cs.outline,
+      'CRITICAL' => const Color(0xFFDC2626),
+      'HIGH' => const Color(0xFFEA4335),
+      'MEDIUM' => const Color(0xFFFBBC05),
+      _ => const Color(0xFF4285F4),
     };
   }
 
@@ -48,16 +51,19 @@ class _TaskDetailsScreenState extends ConsumerState<TaskDetailsScreen> {
 
     setState(() => _isAddingSubtask = true);
     try {
-      await ref.read(taskRepositoryProvider).createSubtask(widget.taskId, title);
+      await ref
+          .read(taskRepositoryProvider)
+          .createSubtask(widget.taskId, title);
       _subtaskController.clear();
       ref.invalidate(taskDetailsProvider(widget.taskId));
       ref.read(tasksProvider.notifier).loadTasks(showLoading: false);
     } catch (e) {
       if (mounted) {
+        final semantics = AppSemanticColors.of(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to add subtask: $e'),
-            backgroundColor: Colors.redAccent,
+            backgroundColor: semantics.danger,
           ),
         );
       }
@@ -71,14 +77,15 @@ class _TaskDetailsScreenState extends ConsumerState<TaskDetailsScreen> {
     final candidateTasks = allTasks.where((t) {
       if (t.id == currentTask.id) return false;
       if (t.parentTaskId == currentTask.id) return false;
-      final isAlreadyBlocker = currentTask.blockedBy
-          .any((b) => b['blockingTaskId'] == t.id);
+      final isAlreadyBlocker =
+          currentTask.blockedBy.any((b) => b['blockingTaskId'] == t.id);
       return !isAlreadyBlocker;
     }).toList();
 
     if (candidateTasks.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No eligible prerequisite tasks found to link.')),
+        const SnackBar(
+            content: Text('No eligible prerequisite tasks found to link.')),
       );
       return;
     }
@@ -145,10 +152,14 @@ class _TaskDetailsScreenState extends ConsumerState<TaskDetailsScreen> {
   Widget build(BuildContext context) {
     final taskAsync = ref.watch(taskDetailsProvider(widget.taskId));
     final colorScheme = Theme.of(context).colorScheme;
+    final primaryRed = colorScheme.primary;
 
     return Scaffold(
+      backgroundColor: colorScheme.surface,
       appBar: AppBar(
         title: const Text('Task Details'),
+        backgroundColor: colorScheme.surface,
+        elevation: 0,
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh_rounded),
@@ -163,259 +174,217 @@ class _TaskDetailsScreenState extends ConsumerState<TaskDetailsScreen> {
           onRetry: () => ref.invalidate(taskDetailsProvider(widget.taskId)),
         ),
         data: (task) {
-          final totalFocusMins = task.focusSessions
-              .fold(0, (sum, f) => sum + f.durationMinutes);
+          final totalFocusMins =
+              task.focusSessions.fold(0, (sum, f) => sum + f.durationMinutes);
+          final priorityColor = _priorityColor(task.priority);
 
           return SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // ── Header Card ─────────────────────────────────────────────
-                Card(
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20)),
-                  color: colorScheme.primaryContainer,
-                  child: Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: _priorityColor(task.priority, colorScheme)
-                                    .withAlpha(40),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Text(
-                                task.priority,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .labelSmall
-                                    ?.copyWith(
-                                      color: _priorityColor(
-                                          task.priority, colorScheme),
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: task.isCompleted
-                                    ? Colors.green.withAlpha(40)
-                                    : colorScheme.surfaceContainerHigh,
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Text(
-                                task.status.replaceAll('_', ' '),
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .labelSmall
-                                    ?.copyWith(
-                                      color: task.isCompleted
-                                          ? Colors.green.shade700
-                                          : colorScheme.onSurfaceVariant,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                              ),
-                            ),
-                          ],
+                // ── Hero Title & Metadata ────────────────────────────────────
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: priorityColor.withAlpha(30),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        task.priority,
+                        style: TextStyle(
+                          color: priorityColor,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 11,
                         ),
-                        const SizedBox(height: 12),
-                        Text(
-                          task.title,
-                          style: Theme.of(context)
-                              .textTheme
-                              .headlineSmall
-                              ?.copyWith(
-                                fontWeight: FontWeight.bold,
-                                color: colorScheme.onPrimaryContainer,
-                              ),
-                        ),
-                        if (task.description != null &&
-                            task.description!.isNotEmpty) ...[
-                          const SizedBox(height: 8),
-                          Text(
-                            task.description!,
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodyMedium
-                                ?.copyWith(
-                                  color: colorScheme.onPrimaryContainer
-                                      .withAlpha(200),
-                                ),
-                          ),
-                        ],
-                      ],
+                      ),
                     ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: task.isCompleted
+                            ? const Color(0xFF34A853).withAlpha(30)
+                            : colorScheme.surfaceContainerHigh,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        task.status.replaceAll('_', ' '),
+                        style: TextStyle(
+                          color: task.isCompleted
+                              ? const Color(0xFF34A853)
+                              : colorScheme.onSurfaceVariant,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                AppSpacing.verticalGapSm,
+                Text(
+                  task.title,
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.5,
+                    color: colorScheme.onSurface,
                   ),
                 ),
-                const SizedBox(height: 20),
+                if (task.description != null &&
+                    task.description!.isNotEmpty) ...[
+                  AppSpacing.verticalGapSm,
+                  Text(
+                    task.description!,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: colorScheme.onSurfaceVariant.withAlpha(200),
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+                AppSpacing.verticalGapLg,
 
-                // ── Subtasks Checklist (when top-level task) ─────────────────
+                // ── Subtasks Checklist ───────────────────────────────────────
                 if (task.parentTaskId == null) ...[
                   _buildSubtasksSection(context, task),
-                  const SizedBox(height: 20),
+                  AppSpacing.verticalGapLg,
                 ],
 
                 // ── Prerequisites & Blockers ─────────────────────────────────
                 _buildPrerequisitesSection(context, task),
-                const SizedBox(height: 20),
+                AppSpacing.verticalGapLg,
 
-                // ── Hierarchy & Relationships (Goal -> Project -> Task) ──────
-                Text(
-                  'Hierarchy & Context',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
+                // ── Context & Hierarchy Breadcrumbs ─────────────────────────
+                const SectionHeader(
+                  icon: Icons.alt_route_rounded,
+                  title: 'Hierarchy & Context',
                 ),
-                const SizedBox(height: 8),
-                Card(
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16)),
-                  color: colorScheme.surfaceContainerHighest,
+                AppSpacing.verticalGapSm,
+                AppCard(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
                   child: Column(
                     children: [
                       ListTile(
-                        leading: const Icon(Icons.flag_outlined),
-                        title: const Text('Goal'),
-                        subtitle: Text(task.goal?.title ?? 'None linked'),
+                        leading: const Icon(Icons.flag_outlined, size: 20),
+                        title: const Text('Goal',
+                            style: TextStyle(
+                                fontSize: 14, fontWeight: FontWeight.w600)),
+                        subtitle: Text(task.goal?.title ?? 'None linked',
+                            style: const TextStyle(fontSize: 13)),
                       ),
                       const Divider(height: 1),
                       ListTile(
-                        leading: const Icon(Icons.folder_outlined),
-                        title: const Text('Project'),
-                        subtitle: Text(task.project?.title ?? 'None linked'),
+                        leading: const Icon(Icons.folder_outlined, size: 20),
+                        title: const Text('Project',
+                            style: TextStyle(
+                                fontSize: 14, fontWeight: FontWeight.w600)),
+                        subtitle: Text(task.project?.title ?? 'None linked',
+                            style: const TextStyle(fontSize: 13)),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 20),
+                AppSpacing.verticalGapLg,
 
-                // ── Time Tracking Stats ──────────────────────────────────────
-                Text(
-                  'Time & Dates',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
+                // ── Time & Focus 3-Column Stat Row ───────────────────────────
+                const SectionHeader(
+                  icon: Icons.schedule_rounded,
+                  title: 'Time & Metrics',
                 ),
-                const SizedBox(height: 8),
-                Card(
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16)),
-                  color: colorScheme.surfaceContainerHighest,
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('Due Date',
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .labelSmall
-                                      ?.copyWith(
-                                          color: colorScheme.onSurfaceVariant)),
-                              const SizedBox(height: 2),
-                              Text(
-                                task.dueDate != null
-                                    ? task.dueDate!.split('T')[0]
-                                    : 'No due date',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .titleSmall
-                                    ?.copyWith(fontWeight: FontWeight.bold),
+                AppSpacing.verticalGapSm,
+                AppCard(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Due Date',
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    color: colorScheme.onSurfaceVariant)),
+                            const SizedBox(height: 2),
+                            Text(
+                              task.dueDate != null
+                                  ? task.dueDate!.split('T')[0]
+                                  : 'None',
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                fontFeatures: [FontFeature.tabularFigures()],
                               ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('Estimated Time',
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .labelSmall
-                                      ?.copyWith(
-                                          color: colorScheme.onSurfaceVariant)),
-                              const SizedBox(height: 2),
-                              Text(
-                                task.estimatedMinutes != null
-                                    ? '${task.estimatedMinutes}m'
-                                    : 'Unestimated',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .titleSmall
-                                    ?.copyWith(fontWeight: FontWeight.bold),
+                      ),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Estimated',
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    color: colorScheme.onSurfaceVariant)),
+                            const SizedBox(height: 2),
+                            Text(
+                              task.estimatedMinutes != null
+                                  ? '${task.estimatedMinutes}m'
+                                  : 'None',
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                fontFeatures: [FontFeature.tabularFigures()],
                               ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('Focus Spent',
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .labelSmall
-                                      ?.copyWith(
-                                          color: colorScheme.onSurfaceVariant)),
-                              const SizedBox(height: 2),
-                              Text(
-                                '${totalFocusMins}m',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .titleSmall
-                                    ?.copyWith(
-                                      fontWeight: FontWeight.bold,
-                                      color: colorScheme.primary,
-                                    ),
+                      ),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Focus Spent',
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    color: colorScheme.onSurfaceVariant)),
+                            const SizedBox(height: 2),
+                            Text(
+                              '${totalFocusMins}m',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w800,
+                                color: primaryRed,
+                                fontFeatures: const [
+                                  FontFeature.tabularFigures()
+                                ],
                               ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 20),
+                AppSpacing.verticalGapLg,
 
                 // ── Linked Focus Sessions ────────────────────────────────────
-                Text(
-                  'Focus Sessions (${task.focusSessions.length})',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
+                SectionHeader(
+                  icon: Icons.timer_rounded,
+                  title: 'Focus Sessions (${task.focusSessions.length})',
                 ),
-                const SizedBox(height: 8),
+                AppSpacing.verticalGapSm,
                 if (task.focusSessions.isEmpty)
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color:
-                          colorScheme.surfaceContainerHighest.withAlpha(120),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
+                  AppCard(
                     child: Text(
                       'No focus sessions recorded for this task yet.',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: colorScheme.onSurfaceVariant,
-                          ),
+                      style: TextStyle(
+                          fontSize: 12, color: colorScheme.onSurfaceVariant),
                     ),
                   )
                 else
@@ -426,21 +395,25 @@ class _TaskDetailsScreenState extends ConsumerState<TaskDetailsScreen> {
                     separatorBuilder: (_, __) => const SizedBox(height: 6),
                     itemBuilder: (context, i) {
                       final f = task.focusSessions[i];
-                      return Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: colorScheme.surfaceContainerHighest,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
+                      return AppCard(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 10),
                         child: Row(
                           children: [
-                            const Icon(Icons.timer_rounded, size: 18),
+                            const Icon(Icons.timer_rounded, size: 16),
                             const SizedBox(width: 8),
-                            Text(f.category),
-                            const Spacer(),
-                            Text('${f.durationMinutes} min',
+                            Text(f.category,
                                 style: const TextStyle(
-                                    fontWeight: FontWeight.bold)),
+                                    fontWeight: FontWeight.w600, fontSize: 13)),
+                            const Spacer(),
+                            Text(
+                              '${f.durationMinutes} min',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 13,
+                                fontFeatures: [FontFeature.tabularFigures()],
+                              ),
+                            ),
                           ],
                         ),
                       );
@@ -466,24 +439,20 @@ class _TaskDetailsScreenState extends ConsumerState<TaskDetailsScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              'Subtasks ($completedCount/$totalCount)',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
+        SectionHeader(
+          icon: Icons.checklist_rounded,
+          title: 'Subtasks ($completedCount/$totalCount)',
+          action: totalCount > 0
+              ? Text(
+                  '${(progress * 100).toInt()}%',
+                  style: TextStyle(
+                    color: colorScheme.primary,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 12,
+                    fontFeatures: const [FontFeature.tabularFigures()],
                   ),
-            ),
-            if (totalCount > 0)
-              Text(
-                '${(progress * 100).toInt()}%',
-                style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                      color: colorScheme.primary,
-                      fontWeight: FontWeight.bold,
-                    ),
-              ),
-          ],
+                )
+              : null,
         ),
         if (totalCount > 0) ...[
           const SizedBox(height: 6),
@@ -491,20 +460,19 @@ class _TaskDetailsScreenState extends ConsumerState<TaskDetailsScreen> {
             borderRadius: BorderRadius.circular(4),
             child: LinearProgressIndicator(
               value: progress,
-              minHeight: 6,
+              minHeight: 4.5,
             ),
           ),
         ],
-        const SizedBox(height: 8),
-        Card(
-          elevation: 0,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          color: colorScheme.surfaceContainerHighest,
+        AppSpacing.verticalGapSm,
+        AppCard(
+          padding: const EdgeInsets.all(8),
           child: Column(
             children: [
               ...task.subtasks.map((s) => CheckboxListTile(
                     dense: true,
                     value: s.isCompleted,
+                    activeColor: colorScheme.primary,
                     title: Text(
                       s.title,
                       style: TextStyle(
@@ -512,7 +480,7 @@ class _TaskDetailsScreenState extends ConsumerState<TaskDetailsScreen> {
                             s.isCompleted ? TextDecoration.lineThrough : null,
                         color: s.isCompleted
                             ? colorScheme.onSurfaceVariant
-                            : null,
+                            : colorScheme.onSurface,
                       ),
                     ),
                     onChanged: (val) async {
@@ -527,7 +495,7 @@ class _TaskDetailsScreenState extends ConsumerState<TaskDetailsScreen> {
                   )),
               Padding(
                 padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                 child: Row(
                   children: [
                     Expanded(
@@ -543,12 +511,13 @@ class _TaskDetailsScreenState extends ConsumerState<TaskDetailsScreen> {
                     ),
                     _isAddingSubtask
                         ? const SizedBox(
-                            width: 24,
-                            height: 24,
+                            width: 20,
+                            height: 20,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : IconButton(
-                            icon: const Icon(Icons.add_circle_outline_rounded),
+                            icon: const Icon(Icons.add_circle_outline_rounded,
+                                size: 20),
                             onPressed: _addSubtask,
                             tooltip: 'Add subtask',
                           ),
@@ -570,71 +539,50 @@ class _TaskDetailsScreenState extends ConsumerState<TaskDetailsScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Row(
-              children: [
-                Text(
-                  'Prerequisites (${task.blockedBy.length})',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                ),
-                if (hasUnfinishedBlockers) ...[
-                  const SizedBox(width: 8),
-                  const Icon(Icons.lock_rounded, size: 16, color: Colors.amber),
-                ],
-              ],
-            ),
-            TextButton.icon(
-              icon: const Icon(Icons.add_link_rounded, size: 18),
-              label: const Text('Add Blocker'),
-              onPressed: () => _showAddPrerequisiteDialog(task),
-            ),
-          ],
+        SectionHeader(
+          icon: Icons.lock_clock_rounded,
+          title: 'Prerequisites (${task.blockedBy.length})',
+          action: TextButton.icon(
+            icon: const Icon(Icons.add_link_rounded, size: 16),
+            label: const Text('Add Blocker'),
+            onPressed: () => _showAddPrerequisiteDialog(task),
+          ),
         ),
         if (hasUnfinishedBlockers) ...[
-          const SizedBox(height: 4),
+          AppSpacing.verticalGapXs,
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.amber.withAlpha(25),
+              color: const Color(0xFFEA4335).withAlpha(20),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.amber.withAlpha(80)),
+              border: Border.all(color: const Color(0xFFEA4335).withAlpha(60)),
             ),
             child: Row(
               children: [
                 const Icon(Icons.warning_amber_rounded,
-                    color: Colors.amber, size: 20),
-                const SizedBox(width: 10),
-                Expanded(
+                    color: Color(0xFFEA4335), size: 18),
+                const SizedBox(width: 8),
+                const Expanded(
                   child: Text(
-                    'This task is blocked. Complete all prerequisite tasks before marking it as done.',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Colors.amber.shade900,
-                          fontWeight: FontWeight.w500,
-                        ),
+                    'This task is blocked. Complete all prerequisite tasks before marking it done.',
+                    style: TextStyle(
+                      color: Color(0xFFEA4335),
+                      fontWeight: FontWeight.w600,
+                      fontSize: 12,
+                    ),
                   ),
                 ),
               ],
             ),
           ),
         ],
-        const SizedBox(height: 8),
+        AppSpacing.verticalGapSm,
         if (task.blockedBy.isEmpty)
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: colorScheme.surfaceContainerHighest.withAlpha(120),
-              borderRadius: BorderRadius.circular(14),
-            ),
+          AppCard(
             child: Text(
               'No prerequisites. This task can be worked on freely.',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                  ),
+              style:
+                  TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
             ),
           )
         else
@@ -647,21 +595,20 @@ class _TaskDetailsScreenState extends ConsumerState<TaskDetailsScreen> {
               final dep = task.blockedBy[i];
               final blocker = dep['blockingTask'] ?? {};
               final isDone = blocker['isCompleted'] == true;
-              return Container(
+
+              return AppCard(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: colorScheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(12),
-                ),
                 child: Row(
                   children: [
                     Icon(
                       isDone
                           ? Icons.check_circle_rounded
                           : Icons.lock_clock_rounded,
-                      size: 20,
-                      color: isDone ? Colors.green : Colors.amber,
+                      size: 18,
+                      color: isDone
+                          ? const Color(0xFF34A853)
+                          : const Color(0xFFEA4335),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
@@ -671,12 +618,12 @@ class _TaskDetailsScreenState extends ConsumerState<TaskDetailsScreen> {
                           decoration:
                               isDone ? TextDecoration.lineThrough : null,
                           fontWeight: FontWeight.w500,
+                          fontSize: 13,
                         ),
                       ),
                     ),
                     IconButton(
-                      icon: const Icon(Icons.close_rounded, size: 18),
-                      tooltip: 'Remove blocker',
+                      icon: const Icon(Icons.close_rounded, size: 16),
                       onPressed: () async {
                         await ref
                             .read(taskRepositoryProvider)
@@ -689,58 +636,20 @@ class _TaskDetailsScreenState extends ConsumerState<TaskDetailsScreen> {
               );
             },
           ),
-        if (task.blocking.isNotEmpty) ...[
-          const SizedBox(height: 16),
-          Text(
-            'Tasks Waiting on This (${task.blocking.length})',
-            style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-          ),
-          const SizedBox(height: 6),
-          ListView.separated(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: task.blocking.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 6),
-            itemBuilder: (context, i) {
-              final dep = task.blocking[i];
-              final blocked = dep['blockedTask'] ?? {};
-              return Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: colorScheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.arrow_forward_rounded, size: 18),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        blocked['title'] ?? 'Task',
-                        style: const TextStyle(fontWeight: FontWeight.w500),
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            },
-          ),
-        ],
       ],
     );
   }
 
   Widget _buildBottomActions(BuildContext context, TaskModel task) {
     final colorScheme = Theme.of(context).colorScheme;
+    final primaryRed = colorScheme.primary;
 
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: colorScheme.surface,
-        border: Border(top: BorderSide(color: colorScheme.outlineVariant)),
+        border: Border(
+            top: BorderSide(color: colorScheme.outlineVariant.withAlpha(40))),
       ),
       child: SafeArea(
         child: Row(
@@ -752,42 +661,48 @@ class _TaskDetailsScreenState extends ConsumerState<TaskDetailsScreen> {
                   ref.read(focusProvider.notifier).setCategory('CODING');
                   context.go('/focus');
                 },
+                style: FilledButton.styleFrom(
+                  backgroundColor: primaryRed,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16)),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
                 icon: const Icon(Icons.play_arrow_rounded),
-                label: const Text('Start Focus'),
+                label: const Text('Start Focus',
+                    style: TextStyle(fontWeight: FontWeight.w700)),
+              ),
+            ),
+            const SizedBox(width: 12),
+
+            // Complete Toggle
+            OutlinedButton(
+              onPressed: () async {
+                await ref.read(tasksProvider.notifier).toggleTaskComplete(task);
+                ref.invalidate(taskDetailsProvider(widget.taskId));
+              },
+              style: OutlinedButton.styleFrom(
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16)),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                side: BorderSide(color: primaryRed),
+              ),
+              child: Text(
+                task.isCompleted ? 'Reopen' : 'Complete',
+                style:
+                    TextStyle(color: primaryRed, fontWeight: FontWeight.w700),
               ),
             ),
             const SizedBox(width: 8),
 
-            // Complete Toggle
-            IconButton.filledTonal(
-              icon: Icon(
-                task.isCompleted
-                    ? Icons.undo_rounded
-                    : Icons.check_circle_rounded,
-              ),
-              onPressed: () async {
-                final err = await ref
-                    .read(tasksProvider.notifier)
-                    .toggleTaskComplete(task);
-                if (err != null && context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(err),
-                      backgroundColor: Colors.redAccent,
-                      behavior: SnackBarBehavior.floating,
-                    ),
-                  );
-                }
-                ref.invalidate(taskDetailsProvider(widget.taskId));
-              },
-            ),
-
             // Edit
-            IconButton.outlined(
+            IconButton(
               icon: const Icon(Icons.edit_outlined),
               onPressed: () async {
-                final result = await showDialog<Map<String, dynamic>>(
+                final result = await showModalBottomSheet<Map<String, dynamic>>(
                   context: context,
+                  isScrollControlled: true,
+                  backgroundColor: Colors.transparent,
                   builder: (_) => TaskFormDialog(task: task),
                 );
                 if (result != null) {
@@ -795,37 +710,6 @@ class _TaskDetailsScreenState extends ConsumerState<TaskDetailsScreen> {
                       .read(tasksProvider.notifier)
                       .updateTask(task.id, result);
                   ref.invalidate(taskDetailsProvider(widget.taskId));
-                }
-              },
-            ),
-
-            // Delete
-            IconButton(
-              icon: const Icon(Icons.delete_outline_rounded, color: Colors.red),
-              onPressed: () async {
-                final confirm = await showDialog<bool>(
-                  context: context,
-                  builder: (ctx) => AlertDialog(
-                    title: const Text('Delete Task'),
-                    content: Text(
-                        'Are you sure you want to delete "${task.title}"?'),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(ctx, false),
-                        child: const Text('Cancel'),
-                      ),
-                      FilledButton(
-                        onPressed: () => Navigator.pop(ctx, true),
-                        style:
-                            FilledButton.styleFrom(backgroundColor: Colors.red),
-                        child: const Text('Delete'),
-                      ),
-                    ],
-                  ),
-                );
-                if (confirm == true) {
-                  await ref.read(tasksProvider.notifier).deleteTask(task.id);
-                  if (context.mounted) Navigator.pop(context);
                 }
               },
             ),

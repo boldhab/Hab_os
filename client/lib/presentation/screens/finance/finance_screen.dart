@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../data/models/finance_model.dart';
 import '../../providers/finance_provider.dart';
+import '../../../app/theme/app_theme.dart';
 import 'widgets/transaction_form_dialog.dart';
 import '../../widgets/app_error_state.dart';
 import '../../widgets/app_empty_state.dart';
+import '../../widgets/app_badge.dart';
+import '../../widgets/hero_card.dart';
 
 class FinanceScreen extends ConsumerWidget {
   const FinanceScreen({super.key});
@@ -37,43 +40,50 @@ class FinanceScreen extends ConsumerWidget {
 
             // ── Search & Filter Row ──────────────────────────────────────────
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              child: Row(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(
-                    child: TextField(
-                      onChanged: (val) => notifier.setSearchQuery(val),
-                      decoration: InputDecoration(
-                        hintText: 'Search transactions...',
-                        prefixIcon: const Icon(Icons.search_rounded, size: 20),
-                        isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(vertical: 10),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide.none,
-                        ),
-                        filled: true,
-                        fillColor: colorScheme.surfaceContainerHighest,
+                  TextField(
+                    onChanged: (val) => notifier.setSearchQuery(val),
+                    decoration: InputDecoration(
+                      hintText: 'Search transactions...',
+                      prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                      isDense: true,
+                      contentPadding:
+                          const EdgeInsets.symmetric(vertical: 10),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: BorderSide.none,
                       ),
+                      filled: true,
+                      fillColor: colorScheme.surfaceContainerLow,
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  FilterChip(
-                    label: const Text('All'),
-                    selected: state.selectedType == null,
-                    onSelected: (_) => notifier.setTypeFilter(null),
-                  ),
-                  const SizedBox(width: 4),
-                  FilterChip(
-                    label: const Text('Expense'),
-                    selected: state.selectedType == 'EXPENSE',
-                    onSelected: (_) => notifier.setTypeFilter('EXPENSE'),
-                  ),
-                  const SizedBox(width: 4),
-                  FilterChip(
-                    label: const Text('Income'),
-                    selected: state.selectedType == 'INCOME',
-                    onSelected: (_) => notifier.setTypeFilter('INCOME'),
+                  const SizedBox(height: 8),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        FilterChip(
+                          label: const Text('All'),
+                          selected: state.selectedType == null,
+                          onSelected: (_) => notifier.setTypeFilter(null),
+                        ),
+                        const SizedBox(width: 6),
+                        FilterChip(
+                          label: const Text('Expenses'),
+                          selected: state.selectedType == 'EXPENSE',
+                          onSelected: (_) => notifier.setTypeFilter('EXPENSE'),
+                        ),
+                        const SizedBox(width: 6),
+                        FilterChip(
+                          label: const Text('Income'),
+                          selected: state.selectedType == 'INCOME',
+                          onSelected: (_) => notifier.setTypeFilter('INCOME'),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -103,123 +113,163 @@ class FinanceScreen extends ConsumerWidget {
     final income = state.analytics?.totalIncome ?? state.totalIncome;
     final expense = state.analytics?.totalExpense ?? state.totalExpense;
     final net = income - expense;
+    final semantics = AppSemanticColors.of(context);
+    final isNetPositive = net >= 0;
 
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      color: colorScheme.primaryContainer,
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Net Balance',
-              style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                    color: colorScheme.onPrimaryContainer.withAlpha(180),
-                  ),
+    return HeroCard(
+      enableGlow: true,
+      glowColor: isNetPositive
+          ? semantics.success.withAlpha(25)
+          : semantics.danger.withAlpha(25),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Net Balance',
+                style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+              ),
+              if (isNetPositive)
+                AppBadge.success(
+                  label: 'POSITIVE',
+                  icon: Icons.trending_up_rounded,
+                  size: AppBadgeSize.compact,
+                  context: context,
+                )
+              else
+                AppBadge.danger(
+                  label: 'DEFICIT',
+                  icon: Icons.trending_down_rounded,
+                  size: AppBadgeSize.compact,
+                  context: context,
+                ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            '${isNetPositive ? '' : '-'}\$${net.abs().toStringAsFixed(2)}',
+            style: AppTypography.statNumeral(
+              fontSize: 34,
+              fontWeight: FontWeight.bold,
+              color: colorScheme.onSurface,
             ),
-            const SizedBox(height: 4),
-            Text(
-              '\$${net.toStringAsFixed(2)}',
-              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: colorScheme.onPrimaryContainer,
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          Row(
+            children: [
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.all(AppSpacing.sm + 2),
+                  decoration: BoxDecoration(
+                    color: semantics.successContainer.withAlpha(80),
+                    borderRadius: AppRadius.cardRadius,
+                    border: Border.all(color: semantics.success.withAlpha(40)),
                   ),
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
                   child: Row(
                     children: [
                       Container(
-                        padding: const EdgeInsets.all(8),
+                        padding: const EdgeInsets.all(AppSpacing.xs),
                         decoration: BoxDecoration(
-                          color: Colors.green.withAlpha(40),
+                          color: semantics.successContainer,
                           shape: BoxShape.circle,
                         ),
-                        child: const Icon(Icons.arrow_downward_rounded,
-                            color: Colors.green, size: 18),
+                        child: Icon(Icons.arrow_downward_rounded,
+                            color: semantics.onSuccessContainer, size: 16),
                       ),
-                      const SizedBox(width: 8),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Income',
-                            style: Theme.of(context)
-                                .textTheme
-                                .labelSmall
-                                ?.copyWith(
-                                  color: colorScheme.onPrimaryContainer,
-                                ),
-                          ),
-                          Text(
-                            '+\$${income.toStringAsFixed(2)}',
-                            style: Theme.of(context)
-                                .textTheme
-                                .titleSmall
-                                ?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.green.shade700,
-                                ),
-                          ),
-                        ],
+                      const SizedBox(width: AppSpacing.sm),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Income',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color:
+                                    semantics.onSuccessContainer.withAlpha(180),
+                              ),
+                            ),
+                            Text(
+                              '+\$${income.toStringAsFixed(2)}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                                color: semantics.onSuccessContainer,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   ),
                 ),
-                Expanded(
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.all(AppSpacing.sm + 2),
+                  decoration: BoxDecoration(
+                    color: semantics.dangerContainer.withAlpha(80),
+                    borderRadius: AppRadius.cardRadius,
+                    border: Border.all(color: semantics.danger.withAlpha(40)),
+                  ),
                   child: Row(
                     children: [
                       Container(
-                        padding: const EdgeInsets.all(8),
+                        padding: const EdgeInsets.all(AppSpacing.xs),
                         decoration: BoxDecoration(
-                          color: Colors.red.withAlpha(40),
+                          color: semantics.dangerContainer,
                           shape: BoxShape.circle,
                         ),
-                        child: const Icon(Icons.arrow_upward_rounded,
-                            color: Colors.red, size: 18),
+                        child: Icon(Icons.arrow_upward_rounded,
+                            color: semantics.onDangerContainer, size: 16),
                       ),
-                      const SizedBox(width: 8),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Expenses',
-                            style: Theme.of(context)
-                                .textTheme
-                                .labelSmall
-                                ?.copyWith(
-                                  color: colorScheme.onPrimaryContainer,
-                                ),
-                          ),
-                          Text(
-                            '-\$${expense.toStringAsFixed(2)}',
-                            style: Theme.of(context)
-                                .textTheme
-                                .titleSmall
-                                ?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.red.shade700,
-                                ),
-                          ),
-                        ],
+                      const SizedBox(width: AppSpacing.sm),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Expenses',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color:
+                                    semantics.onDangerContainer.withAlpha(180),
+                              ),
+                            ),
+                            Text(
+                              '-\$${expense.toStringAsFixed(2)}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                                color: semantics.onDangerContainer,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   ),
                 ),
-              ],
-            ),
-          ],
-        ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildBody(BuildContext context, WidgetRef ref, FinanceState state) {
     final colorScheme = Theme.of(context).colorScheme;
+    final semantics = AppSemanticColors.of(context);
 
     switch (state.status) {
       case FinanceStatus.initial:
@@ -235,16 +285,18 @@ class FinanceScreen extends ConsumerWidget {
       case FinanceStatus.loaded:
         if (state.transactions.isEmpty) {
           return AppEmptyState(
-            icon: Icons.account_balance_wallet_outlined,
+            icon: Icons.account_balance_wallet_rounded,
             title: 'No transactions found',
-            description: 'Tap "+ Add Transaction" below to record expenses or income.',
+            description:
+                'Tap "+ Add Transaction" below to record expenses or income.',
             actionLabel: 'Add Transaction',
             onAction: () => _openCreateDialog(context, ref),
           );
         }
 
         return ListView.builder(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 80),
+          padding: const EdgeInsets.fromLTRB(
+              AppSpacing.md, AppSpacing.xs, AppSpacing.md, 80),
           itemCount: state.transactions.length,
           itemBuilder: (context, index) {
             final t = state.transactions[index];
@@ -253,54 +305,68 @@ class FinanceScreen extends ConsumerWidget {
 
             return Card(
               elevation: 0,
-              margin: const EdgeInsets.only(bottom: 8),
+              margin: const EdgeInsets.only(bottom: AppSpacing.sm),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(20),
               ),
-              color: colorScheme.surfaceContainerHighest,
-              child: ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: isIncome
-                        ? Colors.green.withAlpha(30)
-                        : Colors.red.withAlpha(30),
-                    shape: BoxShape.circle,
+              color: colorScheme.surfaceContainerLow,
+              clipBehavior: Clip.antiAlias,
+              child: Material(
+                color: Colors.transparent,
+                child: ListTile(
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+                  leading: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: isIncome
+                          ? semantics.success.withAlpha(30)
+                          : semantics.danger.withAlpha(30),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      isIncome
+                          ? Icons.arrow_downward_rounded
+                          : Icons.arrow_upward_rounded,
+                      color: isIncome ? semantics.success : semantics.danger,
+                      size: 20,
+                    ),
                   ),
-                  child: Icon(
-                    isIncome
-                        ? Icons.arrow_downward_rounded
-                        : Icons.arrow_upward_rounded,
-                    color: isIncome ? Colors.green : Colors.red,
-                    size: 20,
+                  title: Text(
+                    t.description != null && t.description!.isNotEmpty
+                        ? t.description!
+                        : (isIncome ? 'Income' : 'Expense'),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
                   ),
-                ),
-                title: Text(
-                  t.description != null && t.description!.isNotEmpty
-                      ? t.description!
-                      : (isIncome ? 'Income' : 'Expense'),
-                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.bold,
+                  subtitle: Text(
+                    '$dateStr • ${t.source}${t.category?.name == null ? '' : ' • ${t.category!.name}'}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '${isIncome ? '+' : '-'}\$${t.amount.toStringAsFixed(2)}',
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w800,
+                              color: isIncome
+                                  ? semantics.success
+                                  : semantics.danger,
+                            ),
                       ),
-                ),
-                subtitle: Text('$dateStr • ${t.source}'),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      '${isIncome ? '+' : '-'}\$${t.amount.toStringAsFixed(2)}',
-                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.bold,
-                            color: isIncome
-                                ? Colors.green.shade700
-                                : Colors.red.shade700,
-                          ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.delete_outline_rounded, size: 18),
-                      onPressed: () => _confirmDelete(context, ref, t),
-                    ),
-                  ],
+                      IconButton(
+                        tooltip: 'Delete transaction',
+                        icon: Icon(Icons.delete_outline_rounded,
+                            size: 18, color: semantics.danger),
+                        onPressed: () => _confirmDelete(context, ref, t),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             );
@@ -321,11 +387,13 @@ class FinanceScreen extends ConsumerWidget {
 
   Future<void> _confirmDelete(
       BuildContext context, WidgetRef ref, TransactionModel transaction) async {
+    final semantics = AppSemanticColors.of(context);
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Delete Transaction'),
-        content: const Text('Are you sure you want to delete this transaction?'),
+        content:
+            const Text('Are you sure you want to delete this transaction?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -334,7 +402,8 @@ class FinanceScreen extends ConsumerWidget {
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.error,
+              backgroundColor: semantics.danger,
+              foregroundColor: semantics.onDanger,
             ),
             child: const Text('Delete'),
           ),
@@ -342,7 +411,9 @@ class FinanceScreen extends ConsumerWidget {
       ),
     );
     if (confirm == true) {
-      await ref.read(financeProvider.notifier).deleteTransaction(transaction.id);
+      await ref
+          .read(financeProvider.notifier)
+          .deleteTransaction(transaction.id);
     }
   }
 }
