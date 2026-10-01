@@ -30,7 +30,8 @@ class AuthRepository {
 
       final data = response.data['data'] ?? response.data;
       final user = UserModel.fromJson(Map<String, dynamic>.from(data['user']));
-      final tokens = AuthTokensModel.fromJson(Map<String, dynamic>.from(data['tokens']));
+      final tokens =
+          AuthTokensModel.fromJson(Map<String, dynamic>.from(data['tokens']));
 
       await storage.saveAccessToken(tokens.accessToken);
       await storage.saveRefreshToken(tokens.refreshToken);
@@ -38,7 +39,8 @@ class AuthRepository {
 
       return user;
     } on DioException catch (e) {
-      final message = e.response?.data?['message'] ?? 'Login failed. Please check your credentials.';
+      final message = e.response?.data?['message'] ??
+          'Login failed. Please check your credentials.';
       throw Exception(message);
     }
   }
@@ -60,7 +62,8 @@ class AuthRepository {
 
       final data = response.data['data'] ?? response.data;
       final user = UserModel.fromJson(Map<String, dynamic>.from(data['user']));
-      final tokens = AuthTokensModel.fromJson(Map<String, dynamic>.from(data['tokens']));
+      final tokens =
+          AuthTokensModel.fromJson(Map<String, dynamic>.from(data['tokens']));
 
       await storage.saveAccessToken(tokens.accessToken);
       await storage.saveRefreshToken(tokens.refreshToken);
@@ -68,7 +71,8 @@ class AuthRepository {
 
       return user;
     } on DioException catch (e) {
-      final message = e.response?.data?['message'] ?? 'Registration failed. Please try again.';
+      final message = e.response?.data?['message'] ??
+          'Registration failed. Please try again.';
       throw Exception(message);
     }
   }
