@@ -77,8 +77,10 @@ class FocusNotifier extends StateNotifier<FocusState> {
     state = state.copyWith(isLoading: true);
     try {
       final now = DateTime.now();
-      final startOfToday = DateTime(now.year, now.month, now.day).toIso8601String();
-      final sessions = await _repository.getFocusSessions(startDate: startOfToday);
+      final startOfToday =
+          DateTime(now.year, now.month, now.day).toIso8601String();
+      final sessions =
+          await _repository.getFocusSessions(startDate: startOfToday);
       final stats = await _repository.getFocusStats();
       state = state.copyWith(
         isLoading: false,
