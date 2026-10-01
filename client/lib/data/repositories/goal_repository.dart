@@ -22,7 +22,9 @@ class GoalRepository {
     } else if (data is List) {
       items = data;
     }
-    return items.map((i) => GoalModel.fromJson(Map<String, dynamic>.from(i))).toList();
+    return items
+        .map((i) => GoalModel.fromJson(Map<String, dynamic>.from(i)))
+        .toList();
   }
 
   Future<GoalModel> getGoalById(String id) async {
@@ -59,8 +61,10 @@ class GoalRepository {
     await _dio.delete(ApiEndpoints.goalById(id));
   }
 
-  Future<MilestoneModel> createMilestone(String goalId, Map<String, dynamic> payload) async {
-    final response = await _dio.post(ApiEndpoints.goalMilestones(goalId), data: payload);
+  Future<MilestoneModel> createMilestone(
+      String goalId, Map<String, dynamic> payload) async {
+    final response =
+        await _dio.post(ApiEndpoints.goalMilestones(goalId), data: payload);
     final data = response.data['data'] ?? response.data;
     return MilestoneModel.fromJson(Map<String, dynamic>.from(data));
   }

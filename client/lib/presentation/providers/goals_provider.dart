@@ -5,13 +5,15 @@ import 'dashboard_provider.dart';
 
 final selectedGoalCategoryProvider = StateProvider<String>((ref) => 'ALL');
 
-final goalsListProvider = FutureProvider.autoDispose<List<GoalModel>>((ref) async {
+final goalsListProvider =
+    FutureProvider.autoDispose<List<GoalModel>>((ref) async {
   final repo = ref.watch(goalRepositoryProvider);
   final category = ref.watch(selectedGoalCategoryProvider);
   return repo.getGoals(category: category == 'ALL' ? null : category);
 });
 
-final goalsHealthProvider = FutureProvider.autoDispose<GoalsHealthSummary>((ref) async {
+final goalsHealthProvider =
+    FutureProvider.autoDispose<GoalsHealthSummary>((ref) async {
   final repo = ref.watch(goalRepositoryProvider);
   return repo.getGoalsHealth();
 });
@@ -22,8 +24,8 @@ final goalDetailsProvider =
   return repo.getGoalById(goalId);
 });
 
-final goalTreeProvider =
-    FutureProvider.autoDispose.family<GoalTreeModel, String>((ref, goalId) async {
+final goalTreeProvider = FutureProvider.autoDispose
+    .family<GoalTreeModel, String>((ref, goalId) async {
   final repo = ref.watch(goalRepositoryProvider);
   return repo.getGoalTree(goalId);
 });
@@ -81,7 +83,8 @@ class GoalsNotifier extends StateNotifier<AsyncValue<void>> {
     }
   }
 
-  Future<bool> createMilestone(String goalId, Map<String, dynamic> payload) async {
+  Future<bool> createMilestone(
+      String goalId, Map<String, dynamic> payload) async {
     try {
       await _repo.createMilestone(goalId, payload);
       _ref.invalidate(goalDetailsProvider(goalId));
@@ -127,7 +130,8 @@ class GoalsNotifier extends StateNotifier<AsyncValue<void>> {
     }
   }
 
-  Future<bool> recordCheckIn(String goalId, String confidence, String? note) async {
+  Future<bool> recordCheckIn(
+      String goalId, String confidence, String? note) async {
     try {
       await _repo.recordCheckIn(goalId, confidence, note);
       _ref.invalidate(goalDetailsProvider(goalId));
@@ -152,7 +156,8 @@ class GoalsNotifier extends StateNotifier<AsyncValue<void>> {
   }
 }
 
-final goalsActionsProvider = StateNotifierProvider<GoalsNotifier, AsyncValue<void>>((ref) {
+final goalsActionsProvider =
+    StateNotifierProvider<GoalsNotifier, AsyncValue<void>>((ref) {
   final repo = ref.watch(goalRepositoryProvider);
   return GoalsNotifier(repo, ref);
 });

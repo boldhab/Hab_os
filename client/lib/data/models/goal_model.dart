@@ -32,7 +32,8 @@ class MilestoneTaskSummary extends Equatable {
   }
 
   @override
-  List<Object?> get props => [id, title, priority, status, isCompleted, dueDate];
+  List<Object?> get props =>
+      [id, title, priority, status, isCompleted, dueDate];
 }
 
 class MilestoneModel extends Equatable {
@@ -60,8 +61,9 @@ class MilestoneModel extends Equatable {
 
   int get completedTasksCount => tasks.where((t) => t.isCompleted).length;
   int get totalTasksCount => tasks.length;
-  double get taskProgressRatio =>
-      totalTasksCount == 0 ? (isCompleted ? 1.0 : 0.0) : (completedTasksCount / totalTasksCount);
+  double get taskProgressRatio => totalTasksCount == 0
+      ? (isCompleted ? 1.0 : 0.0)
+      : (completedTasksCount / totalTasksCount);
   int get progressPercent => (taskProgressRatio * 100).round();
 
   factory MilestoneModel.fromJson(Map<String, dynamic> json) {
@@ -76,13 +78,24 @@ class MilestoneModel extends Equatable {
       order: (json['order'] as num?)?.toDouble() ?? 0.0,
       weight: (json['weight'] as num?)?.toDouble() ?? 1.0,
       tasks: rawTasks
-          .map((t) => MilestoneTaskSummary.fromJson(Map<String, dynamic>.from(t)))
+          .map((t) =>
+              MilestoneTaskSummary.fromJson(Map<String, dynamic>.from(t)))
           .toList(),
     );
   }
 
   @override
-  List<Object?> get props => [id, title, description, targetDate, status, isCompleted, order, weight, tasks];
+  List<Object?> get props => [
+        id,
+        title,
+        description,
+        targetDate,
+        status,
+        isCompleted,
+        order,
+        weight,
+        tasks
+      ];
 }
 
 class GoalCheckInModel extends Equatable {
@@ -174,7 +187,8 @@ class GoalModel extends Equatable {
           .map((m) => MilestoneModel.fromJson(Map<String, dynamic>.from(m)))
           .toList(),
       tasks: rawTasks
-          .map((t) => MilestoneTaskSummary.fromJson(Map<String, dynamic>.from(t)))
+          .map((t) =>
+              MilestoneTaskSummary.fromJson(Map<String, dynamic>.from(t)))
           .toList(),
       checkIns: rawCheckIns
           .map((c) => GoalCheckInModel.fromJson(Map<String, dynamic>.from(c)))
@@ -246,7 +260,8 @@ class GoalTreeBranchModel extends Equatable {
       totalTasks: (json['totalTasks'] as num?)?.toInt() ?? 0,
       completedTasks: (json['completedTasks'] as num?)?.toInt() ?? 0,
       tasks: rawTasks
-          .map((t) => MilestoneTaskSummary.fromJson(Map<String, dynamic>.from(t)))
+          .map((t) =>
+              MilestoneTaskSummary.fromJson(Map<String, dynamic>.from(t)))
           .toList(),
     );
   }
@@ -315,10 +330,12 @@ class GoalTreeModel extends Equatable {
       milestoneCount: (json['milestoneCount'] as num?)?.toInt() ?? 0,
       directTasksCount: (json['directTasksCount'] as num?)?.toInt() ?? 0,
       branches: rawBranches
-          .map((b) => GoalTreeBranchModel.fromJson(Map<String, dynamic>.from(b)))
+          .map(
+              (b) => GoalTreeBranchModel.fromJson(Map<String, dynamic>.from(b)))
           .toList(),
       unassignedTasks: rawDirect
-          .map((t) => MilestoneTaskSummary.fromJson(Map<String, dynamic>.from(t)))
+          .map((t) =>
+              MilestoneTaskSummary.fromJson(Map<String, dynamic>.from(t)))
           .toList(),
     );
   }
@@ -437,5 +454,13 @@ class GoalsHealthSummary extends Equatable {
   }
 
   @override
-  List<Object?> get props => [totalActive, atRiskCount, behindCount, onTrackCount, atRisk, behind, onTrack];
+  List<Object?> get props => [
+        totalActive,
+        atRiskCount,
+        behindCount,
+        onTrackCount,
+        atRisk,
+        behind,
+        onTrack
+      ];
 }
