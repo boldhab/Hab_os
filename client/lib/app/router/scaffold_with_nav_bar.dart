@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../theme/app_theme.dart';
 
 /// Persistent bottom NavigationBar shell wrapping all authenticated tabs.
 class ScaffoldWithNavBar extends StatelessWidget {
@@ -11,39 +12,84 @@ class ScaffoldWithNavBar extends StatelessWidget {
   });
 
   static const _tabs = [
-    _NavTab(icon: Icons.home_outlined, activeIcon: Icons.home_rounded, label: 'Home'),
-    _NavTab(icon: Icons.loop_outlined, activeIcon: Icons.loop_rounded, label: 'Habits'),
-    _NavTab(icon: Icons.task_alt_outlined, activeIcon: Icons.task_alt_rounded, label: 'Tasks'),
-    _NavTab(icon: Icons.timer_outlined, activeIcon: Icons.timer_rounded, label: 'Focus'),
-    _NavTab(icon: Icons.grid_view_outlined, activeIcon: Icons.grid_view_rounded, label: 'More'),
+    _NavTab(
+        icon: Icons.home_outlined,
+        activeIcon: Icons.home_rounded,
+        label: 'Home'),
+    _NavTab(
+        icon: Icons.loop_outlined,
+        activeIcon: Icons.loop_rounded,
+        label: 'Habits'),
+    _NavTab(
+        icon: Icons.task_alt_outlined,
+        activeIcon: Icons.task_alt_rounded,
+        label: 'Tasks'),
+    _NavTab(
+        icon: Icons.timer_outlined,
+        activeIcon: Icons.timer_rounded,
+        label: 'Focus'),
+    _NavTab(
+        icon: Icons.grid_view_outlined,
+        activeIcon: Icons.grid_view_rounded,
+        label: 'More'),
   ];
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
       body: navigationShell,
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: navigationShell.currentIndex,
-        onDestinationSelected: _onTabTap,
-        backgroundColor: colorScheme.surface,
-        indicatorColor: colorScheme.primaryContainer,
-        elevation: 0,
-        destinations: _tabs
-            .map(
-              (t) => NavigationDestination(
-                icon: Icon(t.icon),
-                selectedIcon: Icon(t.activeIcon),
-                label: t.label,
+      bottomNavigationBar: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        child: Container(
+          decoration: BoxDecoration(
+            color: colorScheme.surfaceContainerLow,
+            borderRadius: BorderRadius.circular(28),
+            border: Border.all(
+              color: colorScheme.outlineVariant.withAlpha(70),
+              width: 1,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withAlpha(isDark ? 38 : 10),
+                blurRadius: 18,
+                offset: const Offset(0, 8),
               ),
-            )
-            .toList(),
+            ],
+          ),
+          child: NavigationBar(
+            selectedIndex: navigationShell.currentIndex,
+            onDestinationSelected: _onTabTap,
+            height: 74,
+            backgroundColor: Colors.transparent,
+            surfaceTintColor: Colors.transparent,
+            elevation: 0,
+            indicatorColor: colorScheme.primaryContainer,
+            indicatorShape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            overlayColor: WidgetStatePropertyAll(
+              colorScheme.primary.withAlpha(18),
+            ),
+            destinations: _tabs
+                .map(
+                  (t) => NavigationDestination(
+                    icon: Icon(t.icon),
+                    selectedIcon: Icon(t.activeIcon),
+                    label: t.label,
+                  ),
+                )
+                .toList(),
+          ),
+        ),
       ),
     );
   }
 
   void _onTabTap(int index) {
+    AppHaptics.selection();
     navigationShell.goBranch(
       index,
       // Re-tap active tab → pop to root of that branch
