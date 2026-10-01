@@ -45,7 +45,9 @@ class ProjectOverviewModel {
 
   factory ProjectOverviewModel.fromJson(Map<String, dynamic> json) {
     final counts = json['counts'] as Map<String, dynamic>? ?? {};
-    final techs = (json['technologies'] as List?)?.map((e) => e.toString()).toList() ?? [];
+    final techs =
+        (json['technologies'] as List?)?.map((e) => e.toString()).toList() ??
+            [];
 
     return ProjectOverviewModel(
       id: json['id'] ?? '',
@@ -151,7 +153,9 @@ class BugItemModel {
       order: (json['order'] as num?)?.toDouble() ?? 0.0,
       githubIssueNumber: json['githubIssueNumber'] as int?,
       githubUrl: json['githubUrl'],
-      resolvedAt: json['resolvedAt'] != null ? DateTime.tryParse(json['resolvedAt']) : null,
+      resolvedAt: json['resolvedAt'] != null
+          ? DateTime.tryParse(json['resolvedAt'])
+          : null,
       resolutionNotes: json['resolutionNotes'],
     );
   }
@@ -215,14 +219,35 @@ class KanbanBoardModel {
     required this.totalItems,
   });
 
+  Map<String, List<KanbanCardModel>> get columns => {
+        'TODO': todo,
+        'IN_PROGRESS': inProgress,
+        'BLOCKED': blocked,
+        'CODE_REVIEW': blocked,
+        'DONE': completed,
+        'COMPLETED': completed,
+      };
+
   factory KanbanBoardModel.fromJson(Map<String, dynamic> json) {
     final cols = json['columns'] as Map<String, dynamic>? ?? {};
     return KanbanBoardModel(
       projectId: json['projectId'] ?? '',
-      todo: (cols['TODO'] as List?)?.map((i) => KanbanCardModel.fromJson(i)).toList() ?? [],
-      inProgress: (cols['IN_PROGRESS'] as List?)?.map((i) => KanbanCardModel.fromJson(i)).toList() ?? [],
-      blocked: (cols['BLOCKED'] as List?)?.map((i) => KanbanCardModel.fromJson(i)).toList() ?? [],
-      completed: (cols['COMPLETED'] as List?)?.map((i) => KanbanCardModel.fromJson(i)).toList() ?? [],
+      todo: (cols['TODO'] as List?)
+              ?.map((i) => KanbanCardModel.fromJson(i))
+              .toList() ??
+          [],
+      inProgress: (cols['IN_PROGRESS'] as List?)
+              ?.map((i) => KanbanCardModel.fromJson(i))
+              .toList() ??
+          [],
+      blocked: (cols['BLOCKED'] as List?)
+              ?.map((i) => KanbanCardModel.fromJson(i))
+              .toList() ??
+          [],
+      completed: (cols['COMPLETED'] as List?)
+              ?.map((i) => KanbanCardModel.fromJson(i))
+              .toList() ??
+          [],
       totalItems: json['totalItems'] ?? 0,
     );
   }
@@ -281,6 +306,9 @@ class ProjectAnalyticsModel {
     required this.technologies,
   });
 
+  int get totalCommits =>
+      weeklyVelocity.fold<int>(0, (sum, w) => sum + w.tasksCompleted);
+
   factory ProjectAnalyticsModel.fromJson(Map<String, dynamic> json) {
     final health = json['health'] as Map<String, dynamic>? ?? {};
     final progressDetails = json['progress'] as Map<String, dynamic>? ?? {};
@@ -288,7 +316,9 @@ class ProjectAnalyticsModel {
             ?.map((e) => VelocityWeekModel.fromJson(e as Map<String, dynamic>))
             .toList() ??
         [];
-    final techs = (json['technologies'] as List?)?.map((e) => e.toString()).toList() ?? [];
+    final techs =
+        (json['technologies'] as List?)?.map((e) => e.toString()).toList() ??
+            [];
 
     return ProjectAnalyticsModel(
       projectId: json['projectId'] ?? '',
@@ -346,6 +376,9 @@ class CommitItemModel {
     this.date,
     this.url,
   });
+
+  String get authorName => author;
+  String get timestamp => date ?? '';
 
   factory CommitItemModel.fromJson(Map<String, dynamic> json) {
     return CommitItemModel(
