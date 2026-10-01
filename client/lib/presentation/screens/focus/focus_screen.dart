@@ -1,472 +1,314 @@
-import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../app/theme/app_theme.dart';
 import '../../providers/focus_provider.dart';
+import 'widgets/focus_timer_gauge.dart';
+import 'widgets/focus_controls.dart';
+import 'widgets/focus_category_duration_picker.dart';
+import 'widgets/focus_stats_row.dart';
+import 'widgets/focus_session_history.dart';
 
-class FocusScreen extends ConsumerWidget {
+class FocusScreen extends ConsumerStatefulWidget {
   const FocusScreen({super.key});
 
-  static const _categories = [
-    {'id': 'CODING', 'label': 'Coding', 'icon': Icons.code_rounded},
-    {'id': 'STUDY', 'label': 'Study', 'icon': Icons.menu_book_rounded},
-    {'id': 'PROJECT', 'label': 'Project', 'icon': Icons.work_outline_rounded},
-    {'id': 'READING', 'label': 'Reading', 'icon': Icons.book_outlined},
-    {'id': 'OTHER', 'label': 'Other', 'icon': Icons.more_horiz_rounded},
-  ];
+  @override
+  ConsumerState<FocusScreen> createState() => _FocusScreenState();
+}
 
-  static const _durations = [15, 25, 45, 60];
+class _FocusScreenState extends ConsumerState<FocusScreen>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _pulseController;
+  late Animation<double> _pulseAnimation;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  void initState() {
+    super.initState();
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 4),
+    )..repeat(reverse: true);
+
+    _pulseAnimation = Tween<double>(begin: 0.98, end: 1.02).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _pulseController.dispose();
+    super.dispose();
+  }
+
+  String _getFormattedDate() {
+    final now = DateTime.now();
+    final weekdays = [
+      'Monday',
+      'Tuesday',
+      'Wednesday',
+      'Thursday',
+      'Friday',
+      'Saturday',
+      'Sunday'
+    ];
+    final months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec'
+    ];
+    return '${weekdays[now.weekday - 1]}, ${now.day} ${months[now.month - 1]}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final state = ref.watch(focusProvider);
     final notifier = ref.read(focusProvider.notifier);
     final colorScheme = Theme.of(context).colorScheme;
+    final primaryRed = colorScheme.primary;
+
+    final isIdle = state.status == PomodoroStatus.idle;
+
+    // Listen for session completion transition for celebration haptics
+    ref.listen<FocusState>(focusProvider, (prev, next) {
+      if (prev?.status == PomodoroStatus.running &&
+          next.status == PomodoroStatus.idle) {
+        AppHaptics.celebration();
+      }
+    });
 
     return Scaffold(
+      backgroundColor: colorScheme.surface,
       appBar: AppBar(
-        title: const Text('Focus Timer'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh_rounded),
-            onPressed: () => notifier.loadTodayData(),
-          ),
-        ],
-      ),
-      body: RefreshIndicator(
-        onRefresh: () => notifier.loadTodayData(),
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Column(
-            children: [
-              // ── Category Selector Pills ────────────────────────────────────
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: _categories.map((c) {
-                    final selected = state.category == c['id'];
-                    return Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: ChoiceChip(
-                        avatar: Icon(c['icon'] as IconData, size: 16),
-                        label: Text(c['label'] as String),
-                        selected: selected,
-                        onSelected: (_) => notifier.setCategory(c['id'] as String),
-                      ),
-                    );
-                  }).toList(),
-                ),
-              ),
-              const SizedBox(height: 24),
-
-              // ── Circular Pomodoro Timer ─────────────────────────────────────
-              _TimerGauge(state: state, colorScheme: colorScheme),
-              const SizedBox(height: 20),
-
-              // ── Duration Presets (Only visible when idle) ───────────────────
-              if (state.status == PomodoroStatus.idle) ...[
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: _durations.map((d) {
-                    final selected = state.targetMinutes == d;
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 6),
-                      child: ActionChip(
-                        label: Text('$d min'),
-                        backgroundColor: selected
-                            ? colorScheme.primaryContainer
-                            : colorScheme.surfaceContainerHighest,
-                        side: BorderSide.none,
-                        onPressed: () => notifier.setDuration(d),
-                      ),
-                    );
-                  }).toList(),
-                ),
-                const SizedBox(height: 20),
-              ],
-
-              // ── Control Buttons ────────────────────────────────────────────
-              _buildControlButtons(context, state, notifier, colorScheme),
-              const SizedBox(height: 28),
-
-              // ── Today's Stats Card ──────────────────────────────────────────
-              _buildStatsSummaryCard(context, state, colorScheme),
-              const SizedBox(height: 20),
-
-              // ── Today's Completed Sessions List ────────────────────────────
-              _buildSessionsList(context, state, notifier, colorScheme),
-              const SizedBox(height: 40),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildControlButtons(
-    BuildContext context,
-    FocusState state,
-    FocusNotifier notifier,
-    ColorScheme colorScheme,
-  ) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        if (state.status == PomodoroStatus.running) ...[
-          FloatingActionButton.large(
-            heroTag: 'pauseBtn',
-            onPressed: () => notifier.pauseTimer(),
-            backgroundColor: colorScheme.tertiaryContainer,
-            child: Icon(Icons.pause_rounded,
-                size: 36, color: colorScheme.onTertiaryContainer),
-          ),
-          const SizedBox(width: 16),
-          FilledButton.icon(
-            onPressed: () => notifier.finishAndSaveSession(),
-            icon: const Icon(Icons.check_circle_rounded),
-            label: const Text('Finish Session'),
-            style: FilledButton.styleFrom(
-              backgroundColor: colorScheme.primary,
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-            ),
-          ),
-        ] else if (state.status == PomodoroStatus.paused) ...[
-          FloatingActionButton.large(
-            heroTag: 'resumeBtn',
-            onPressed: () => notifier.startTimer(),
-            child: const Icon(Icons.play_arrow_rounded, size: 36),
-          ),
-          const SizedBox(width: 16),
-          OutlinedButton.icon(
-            onPressed: () => notifier.resetTimer(),
-            icon: const Icon(Icons.refresh_rounded),
-            label: const Text('Reset'),
-          ),
-          const SizedBox(width: 12),
-          FilledButton.icon(
-            onPressed: () => notifier.finishAndSaveSession(),
-            icon: const Icon(Icons.check_rounded),
-            label: const Text('Save'),
-          ),
-        ] else ...[
-          FloatingActionButton.large(
-            heroTag: 'startBtn',
-            onPressed: () => notifier.startTimer(),
-            child: const Icon(Icons.play_arrow_rounded, size: 40),
-          ),
-        ],
-      ],
-    );
-  }
-
-  Widget _buildStatsSummaryCard(
-    BuildContext context,
-    FocusState state,
-    ColorScheme colorScheme,
-  ) {
-    final stats = state.todayStats;
-    final totalMins = stats?.totalMinutesToday ?? 0;
-    final hours = totalMins ~/ 60;
-    final mins = totalMins % 60;
-    final timeStr = hours > 0 ? '${hours}h ${mins}m' : '${mins}m';
-    final count = stats?.totalSessionsToday ?? state.todaySessions.length;
-
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      color: colorScheme.surfaceContainerHighest,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: colorScheme.primary.withAlpha(30),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(Icons.timer_rounded,
-                        color: colorScheme.primary, size: 24),
-                  ),
-                  const SizedBox(width: 12),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Total Focus Today',
-                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                              color: colorScheme.onSurfaceVariant,
-                            ),
-                      ),
-                      Text(
-                        timeStr,
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
-                      ),
-                    ],
-                  ),
-                ],
+            Text(
+              'Focus',
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+                fontSize: 22,
+                letterSpacing: -0.5,
+                color: colorScheme.onSurface,
               ),
             ),
-            Container(height: 36, width: 1, color: colorScheme.outlineVariant),
-            Expanded(
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: colorScheme.tertiary.withAlpha(30),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(Icons.local_fire_department_rounded,
-                        color: colorScheme.tertiary, size: 24),
-                  ),
-                  const SizedBox(width: 12),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Sessions',
-                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                              color: colorScheme.onSurfaceVariant,
-                            ),
-                      ),
-                      Text(
-                        '$count',
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
-                      ),
-                    ],
-                  ),
-                ],
+            Text(
+              _getFormattedDate(),
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: colorScheme.onSurfaceVariant.withAlpha(180),
               ),
             ),
           ],
         ),
+        actions: [
+          IconButton(
+            icon: Icon(Icons.refresh_rounded,
+                color: colorScheme.onSurfaceVariant),
+            tooltip: 'Refresh stats',
+            onPressed: () {
+              AppHaptics.light();
+              notifier.loadTodayData();
+            },
+          ),
+          const SizedBox(width: 8),
+        ],
       ),
-    );
-  }
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final isWide = constraints.maxWidth > 700;
 
-  Widget _buildSessionsList(
-    BuildContext context,
-    FocusState state,
-    FocusNotifier notifier,
-    ColorScheme colorScheme,
-  ) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Today\'s Focus Sessions',
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
-        ),
-        const SizedBox(height: 12),
-        if (state.todaySessions.isEmpty)
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: colorScheme.surfaceContainerHighest.withAlpha(120),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Column(
+          if (isWide) {
+            // Wide Screen / Tablet / Landscape 2-Pane View
+            return Row(
               children: [
-                Icon(Icons.hourglass_empty_rounded,
-                    size: 36, color: colorScheme.onSurfaceVariant),
-                const SizedBox(height: 8),
-                Text(
-                  'No focus sessions completed today yet.',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
-                      ),
-                ),
-              ],
-            ),
-          )
-        else
-          ListView.separated(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: state.todaySessions.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 8),
-            itemBuilder: (context, index) {
-              final s = state.todaySessions[index];
-              final mins = s.durationMinutes ?? 0;
-              return Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                decoration: BoxDecoration(
-                  color: colorScheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.check_circle_rounded,
-                        color: colorScheme.tertiary, size: 20),
-                    const SizedBox(width: 12),
-                    Expanded(
+                Expanded(
+                  flex: 5,
+                  child: Center(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.all(AppSpacing.lg),
                       child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Text(
-                            s.category,
-                            style: Theme.of(context)
-                                .textTheme
-                                .titleSmall
-                                ?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                ),
+                          _buildSessionCockpit(
+                            context,
+                            state: state,
+                            notifier: notifier,
+                            isIdle: isIdle,
                           ),
-                          if (s.notes != null && s.notes!.isNotEmpty)
-                            Text(
-                              s.notes!,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodySmall
-                                  ?.copyWith(
-                                    color: colorScheme.onSurfaceVariant,
-                                  ),
-                            ),
                         ],
                       ),
                     ),
-                    Text(
-                      '$mins min',
-                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                            fontWeight: FontWeight.bold,
-                            color: colorScheme.primary,
-                          ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.delete_outline_rounded, size: 18),
-                      onPressed: () => notifier.deleteSession(s.id),
-                    ),
-                  ],
+                  ),
                 ),
-              );
-            },
-          ),
-      ],
-    );
-  }
-}
-
-class _TimerGauge extends StatelessWidget {
-  final FocusState state;
-  final ColorScheme colorScheme;
-
-  const _TimerGauge({required this.state, required this.colorScheme});
-
-  @override
-  Widget build(BuildContext context) {
-    final totalSecs = state.targetMinutes * 60;
-    final progress = totalSecs > 0 ? state.remainingSeconds / totalSecs : 0.0;
-    final mins = state.remainingSeconds ~/ 60;
-    final secs = state.remainingSeconds % 60;
-    final formattedTime =
-        '${mins.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}';
-
-    return SizedBox(
-      width: 240,
-      height: 240,
-      child: CustomPaint(
-        painter: _CircularTimerPainter(
-          progress: progress,
-          trackColor: colorScheme.primary.withAlpha(30),
-          fillColor: state.status == PomodoroStatus.paused
-              ? colorScheme.tertiary
-              : colorScheme.primary,
-        ),
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                formattedTime,
-                style: Theme.of(context).textTheme.displayMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 2,
+                VerticalDivider(
+                  width: 1,
+                  color: colorScheme.outlineVariant.withAlpha(40),
+                ),
+                Expanded(
+                  flex: 4,
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(AppSpacing.lg),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildStatsSurface(context, state),
+                        AppSpacing.verticalGapXl,
+                        FocusSessionHistory(
+                          state: state,
+                          notifier: notifier,
+                        ),
+                      ],
                     ),
+                  ),
+                ),
+              ],
+            );
+          }
+
+          // Mobile Standard View
+          return RefreshIndicator(
+            onRefresh: () => notifier.loadTodayData(),
+            color: primaryRed,
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              child: Column(
+                children: [
+                  _buildSessionCockpit(
+                    context,
+                    state: state,
+                    notifier: notifier,
+                    isIdle: isIdle,
+                  ),
+                  AnimatedSize(
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeInOut,
+                    child: isIdle
+                        ? Column(
+                            children: [
+                              const SizedBox(height: 32),
+                              _buildStatsSurface(context, state),
+                              const SizedBox(height: 32),
+                              FocusSessionHistory(
+                                state: state,
+                                notifier: notifier,
+                              ),
+                              const SizedBox(height: 24),
+                            ],
+                          )
+                        : const SizedBox.shrink(),
+                  ),
+                ],
               ),
-              const SizedBox(height: 4),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: colorScheme.primaryContainer,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  state.status == PomodoroStatus.running
-                      ? 'FOCUSING'
-                      : state.status == PomodoroStatus.paused
-                          ? 'PAUSED'
-                          : 'READY',
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: colorScheme.onPrimaryContainer,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1,
-                      ),
-                ),
-              ),
-            ],
-          ),
-        ),
+            ),
+          );
+        },
       ),
     );
   }
-}
 
-class _CircularTimerPainter extends CustomPainter {
-  final double progress;
-  final Color trackColor;
-  final Color fillColor;
+  Widget _buildSessionCockpit(
+    BuildContext context, {
+    required FocusState state,
+    required FocusNotifier notifier,
+    required bool isIdle,
+  }) {
+    final colorScheme = Theme.of(context).colorScheme;
 
-  const _CircularTimerPainter({
-    required this.progress,
-    required this.trackColor,
-    required this.fillColor,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final cx = size.width / 2;
-    final cy = size.height / 2;
-    final radius = math.min(cx, cy) - 12;
-    const startAngle = -math.pi / 2;
-    final sweepAngle = 2 * math.pi * progress;
-
-    final trackPaint = Paint()
-      ..color = trackColor
-      ..strokeWidth = 12
-      ..style = PaintingStyle.stroke;
-
-    final fillPaint = Paint()
-      ..color = fillColor
-      ..strokeWidth = 12
-      ..strokeCap = StrokeCap.round
-      ..style = PaintingStyle.stroke;
-
-    canvas.drawCircle(Offset(cx, cy), radius, trackPaint);
-    canvas.drawArc(
-      Rect.fromCircle(center: Offset(cx, cy), radius: radius),
-      startAngle,
-      sweepAngle,
-      false,
-      fillPaint,
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(18, 22, 18, 20),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            colorScheme.primary.withAlpha(18),
+            colorScheme.surfaceContainerLow,
+          ],
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+        ),
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(color: colorScheme.primary.withAlpha(38)),
+        boxShadow: [
+          BoxShadow(
+            color: colorScheme.primary.withAlpha(12),
+            blurRadius: 24,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  isIdle ? 'Make space to think' : 'Stay with the moment',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.2,
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+              Icon(
+                isIdle ? Icons.self_improvement_rounded : Icons.bolt_rounded,
+                size: 18,
+                color: colorScheme.primary,
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          FocusTimerGauge(
+            state: state,
+            pulseAnimation: _pulseAnimation,
+          ),
+          const SizedBox(height: 14),
+          AnimatedSize(
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+            child: isIdle
+                ? Padding(
+                    padding: const EdgeInsets.only(bottom: 20),
+                    child: FocusCategoryDurationPicker(
+                      key: const ValueKey('picker'),
+                      state: state,
+                      notifier: notifier,
+                    ),
+                  )
+                : const SizedBox.shrink(key: ValueKey('empty')),
+          ),
+          FocusControls(state: state, notifier: notifier),
+        ],
+      ),
     );
   }
 
-  @override
-  bool shouldRepaint(_CircularTimerPainter old) =>
-      old.progress != progress || old.fillColor != fillColor;
+  Widget _buildStatsSurface(BuildContext context, FocusState state) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 18),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: colorScheme.outlineVariant.withAlpha(55)),
+      ),
+      child: FocusStatsRow(state: state),
+    );
+  }
 }
