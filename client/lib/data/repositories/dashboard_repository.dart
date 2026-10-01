@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:dio/dio.dart';
 import '../models/dashboard_feed_model.dart';
 import '../../core/constants/api_endpoints.dart';
@@ -11,7 +12,14 @@ class DashboardRepository {
 
   Future<DashboardFeedModel> getFeed() async {
     final response = await _dio.get(ApiEndpoints.dashboardFeed);
-    final data = response.data['data'] ?? response.data;
+    dynamic raw = response.data;
+    if (raw is String) {
+      raw = jsonDecode(raw);
+    }
+    final data = (raw is Map && raw['data'] != null) ? raw['data'] : raw;
+    if (data is! Map) {
+      throw Exception('Invalid response format received from dashboard API');
+    }
     return DashboardFeedModel.fromJson(Map<String, dynamic>.from(data));
   }
 
