@@ -1,8 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../../core/constants/api_endpoints.dart';
 import '../../../core/network/api_client.dart';
+import '../../../app/theme/app_theme.dart';
 import '../../widgets/app_error_state.dart';
+import '../../widgets/app_empty_state.dart';
+import 'widgets/analytics_hero_card.dart';
+import 'widgets/analytics_stat_tiles.dart';
+import 'widgets/analytics_focus_chart.dart';
+import 'widgets/analytics_at_a_glance_card.dart';
 
 class RetrospectiveModel {
   final double totalFocusHours;
@@ -31,10 +38,13 @@ class RetrospectiveModel {
     }
     return RetrospectiveModel(
       totalFocusHours: (summary['totalFocusHours'] as num?)?.toDouble() ?? 0.0,
-      totalTrackedHours: (summary['totalTrackedHours'] as num?)?.toDouble() ?? 0.0,
-      completedTasksCount: (summary['completedTasksCount'] as num?)?.toInt() ?? 0,
+      totalTrackedHours:
+          (summary['totalTrackedHours'] as num?)?.toDouble() ?? 0.0,
+      completedTasksCount:
+          (summary['completedTasksCount'] as num?)?.toInt() ?? 0,
       workoutsCount: (summary['workoutsCount'] as num?)?.toInt() ?? 0,
-      habitsCompletedCount: (summary['habitsCompletedCount'] as num?)?.toInt() ?? 0,
+      habitsCompletedCount:
+          (summary['habitsCompletedCount'] as num?)?.toInt() ?? 0,
       dailyFocusHours: daily,
     );
   }
@@ -51,19 +61,110 @@ final retrospectiveProvider =
 class AnalyticsScreen extends ConsumerWidget {
   const AnalyticsScreen({super.key});
 
+  String _getDateRangeString(Map<String, double> dailyFocusHours) {
+    if (dailyFocusHours.isEmpty) {
+      final now = DateTime.now();
+      final ago = now.subtract(const Duration(days: 6));
+      final months = [
+        'Jan',
+        'Feb',
+        'Mar',
+        'Apr',
+        'May',
+        'Jun',
+        'Jul',
+        'Aug',
+        'Sep',
+        'Oct',
+        'Nov',
+        'Dec'
+      ];
+      return '${months[ago.month - 1]} ${ago.day} - ${months[now.month - 1]} ${now.day}';
+    }
+
+    final keys = dailyFocusHours.keys.toList();
+    final first = keys.first;
+    final last = keys.last;
+    return '$first to $last';
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final retroAsync = ref.watch(retrospectiveProvider);
     final colorScheme = Theme.of(context).colorScheme;
+    final primaryRed = colorScheme.primary;
 
     return Scaffold(
+      backgroundColor: colorScheme.surface,
       appBar: AppBar(
-        title: const Text('7-Day Retrospective'),
+        backgroundColor: colorScheme.surface,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text(
+                  'Insights',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 24,
+                    letterSpacing: -0.5,
+                    color: colorScheme.onSurface,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: primaryRed.withAlpha(20),
+                    borderRadius: BorderRadius.circular(AppRadius.pill),
+                    border: Border.all(color: primaryRed.withAlpha(40)),
+                  ),
+                  child: Text(
+                    'Past 7 days',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: primaryRed,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            retroAsync.when(
+              data: (retro) => Text(
+                _getDateRangeString(retro.dailyFocusHours),
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: colorScheme.onSurfaceVariant.withAlpha(180),
+                ),
+              ),
+              loading: () => Text(
+                'Calculating retrospective...',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: colorScheme.onSurfaceVariant.withAlpha(160),
+                ),
+              ),
+              error: (_, __) => const SizedBox.shrink(),
+            ),
+          ],
+        ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh_rounded),
-            onPressed: () => ref.invalidate(retrospectiveProvider),
+            icon: Icon(Icons.refresh_rounded,
+                color: colorScheme.onSurfaceVariant),
+            tooltip: 'Refresh',
+            onPressed: () {
+              AppHaptics.light();
+              ref.invalidate(retrospectiveProvider);
+            },
           ),
+          const SizedBox(width: 8),
         ],
       ),
       body: retroAsync.when(
@@ -73,177 +174,97 @@ class AnalyticsScreen extends ConsumerWidget {
           onRetry: () => ref.invalidate(retrospectiveProvider),
         ),
         data: (retro) {
+          final isZeroActivity = retro.totalFocusHours == 0 &&
+              retro.completedTasksCount == 0 &&
+              retro.workoutsCount == 0 &&
+              retro.habitsCompletedCount == 0;
+
+          if (isZeroActivity) {
+            return AppEmptyState(
+              icon: Icons.analytics_outlined,
+              title: 'No activity recorded this week',
+              description:
+                  'Start a focus session, complete a task, or log a habit to generate personal insights.',
+              actionLabel: 'Start Focus Session',
+              onAction: () => context.go('/focus'),
+            );
+          }
+
           return RefreshIndicator(
             onRefresh: () async => ref.invalidate(retrospectiveProvider),
-            child: ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                // Summary cards grid
-                GridView.count(
-                  crossAxisCount: 2,
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  crossAxisSpacing: 12,
-                  mainAxisSpacing: 12,
-                  childAspectRatio: 1.4,
-                  children: [
-                    _StatTile(
-                      label: 'Focus Hours',
-                      value: '${retro.totalFocusHours}h',
-                      icon: Icons.timer_rounded,
-                      color: colorScheme.primary,
-                    ),
-                    _StatTile(
-                      label: 'Tasks Completed',
-                      value: '${retro.completedTasksCount}',
-                      icon: Icons.task_alt_rounded,
-                      color: colorScheme.tertiary,
-                    ),
-                    _StatTile(
-                      label: 'Workouts Completed',
-                      value: '${retro.workoutsCount}',
-                      icon: Icons.fitness_center_rounded,
-                      color: Colors.orange,
-                    ),
-                    _StatTile(
-                      label: 'Habits Completed',
-                      value: '${retro.habitsCompletedCount}',
-                      icon: Icons.loop_rounded,
-                      color: Colors.purple,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 24),
+            color: primaryRed,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final isWide = constraints.maxWidth > 850;
 
-                // Daily Focus Breakdown Card
-                Text(
-                  'Daily Focus Hours (Past 7 Days)',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                ),
-                const SizedBox(height: 12),
-
-                Card(
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20)),
-                  color: colorScheme.surfaceContainerHighest,
-                  child: Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                      children: retro.dailyFocusHours.entries.map((e) {
-                        final maxVal = 8.0;
-                        final pct = (e.value / maxVal).clamp(0.0, 1.0);
-                        final dayLabel = e.key.substring(5); // MM-DD
-
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 10),
-                          child: Row(
+                if (isWide) {
+                  // Tablet & Wide Desktop 2-Column Layout
+                  return SingleChildScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.all(AppSpacing.lg),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          flex: 5,
+                          child: Column(
                             children: [
-                              SizedBox(
-                                width: 50,
-                                child: Text(
-                                  dayLabel,
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .labelMedium
-                                      ?.copyWith(
-                                        color: colorScheme.onSurfaceVariant,
-                                      ),
-                                ),
-                              ),
-                              Expanded(
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(4),
-                                  child: LinearProgressIndicator(
-                                    value: pct,
-                                    minHeight: 8,
-                                    backgroundColor:
-                                        colorScheme.primary.withAlpha(30),
-                                    valueColor: AlwaysStoppedAnimation<Color>(
-                                        colorScheme.primary),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              SizedBox(
-                                width: 40,
-                                child: Text(
-                                  '${e.value}h',
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .labelMedium
-                                      ?.copyWith(
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                  textAlign: TextAlign.end,
-                                ),
-                              ),
+                              AnalyticsHeroCard(retro: retro),
+                              AppSpacing.verticalGapLg,
+                              AnalyticsFocusChart(retro: retro),
                             ],
                           ),
-                        );
-                      }).toList(),
+                        ),
+                        const SizedBox(width: AppSpacing.lg),
+                        Expanded(
+                          flex: 4,
+                          child: Column(
+                            children: [
+                              AnalyticsStatTiles(retro: retro),
+                              AppSpacing.verticalGapLg,
+                              AnalyticsAtAGlanceCard(retro: retro),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                ),
-              ],
+                  );
+                }
+
+                // Phone Standard Single-Column Layout
+                return ListView(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
+                  children: [
+                    // 1. Hero Summary Card (GPA / Total Focus + Sparkline)
+                    AnalyticsHeroCard(retro: retro),
+                    AppSpacing.verticalGapLg,
+
+                    // 2. Daily Focus Vertical Bar Chart
+                    AnalyticsFocusChart(retro: retro),
+                    AppSpacing.verticalGapLg,
+
+                    // 3. Calm Stat Tiles (2x2 Grid)
+                    Text(
+                      'PERFORMANCE METRICS',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.8,
+                        color: colorScheme.onSurfaceVariant.withAlpha(160),
+                      ),
+                    ),
+                    AppSpacing.verticalGapSm,
+                    AnalyticsStatTiles(retro: retro),
+                    AppSpacing.verticalGapLg,
+
+                    // 4. This Week At A Glance Stacked Share Card
+                    AnalyticsAtAGlanceCard(retro: retro),
+                  ],
+                );
+              },
             ),
           );
         },
-      ),
-    );
-  }
-}
-
-class _StatTile extends StatelessWidget {
-  final String label;
-  final String value;
-  final IconData icon;
-  final Color color;
-
-  const _StatTile({
-    required this.label,
-    required this.value,
-    required this.icon,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      color: colorScheme.surfaceContainerHighest,
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Row(
-              children: [
-                Icon(icon, color: color, size: 20),
-                const Spacer(),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              value,
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-            ),
-            Text(
-              label,
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                  ),
-            ),
-          ],
-        ),
       ),
     );
   }
