@@ -22,10 +22,13 @@ class CourseGradeDetailsModel {
       runningPercentage: (json['runningPercentage'] as num?)?.toDouble() ?? 0.0,
       letter: json['letter'] ?? 'N/A',
       gradePoints: (json['gradePoints'] as num?)?.toDouble() ?? 0.0,
-      totalEvaluatedWeight: (json['totalEvaluatedWeight'] as num?)?.toDouble() ?? 0.0,
-      totalPossibleWeight: (json['totalPossibleWeight'] as num?)?.toDouble() ?? 0.0,
+      totalEvaluatedWeight:
+          (json['totalEvaluatedWeight'] as num?)?.toDouble() ?? 0.0,
+      totalPossibleWeight:
+          (json['totalPossibleWeight'] as num?)?.toDouble() ?? 0.0,
       gradedItemsCount: json['gradedItemsCount'] as int? ?? 0,
-      earnedWeightPoints: (json['earnedWeightPoints'] as num?)?.toDouble() ?? 0.0,
+      earnedWeightPoints:
+          (json['earnedWeightPoints'] as num?)?.toDouble() ?? 0.0,
     );
   }
 }
@@ -105,7 +108,8 @@ class AssignmentItemModel {
 
   bool get isCompleted => status == 'SUBMITTED' || status == 'GRADED';
 
-  double? get percentage => grade != null && maxGrade > 0 ? (grade! / maxGrade) * 100.0 : null;
+  double? get percentage =>
+      grade != null && maxGrade > 0 ? (grade! / maxGrade) * 100.0 : null;
 
   factory AssignmentItemModel.fromJson(Map<String, dynamic> json) {
     return AssignmentItemModel(
@@ -145,7 +149,8 @@ class ExamItemModel {
 
   bool get isGraded => grade != null;
 
-  double? get percentage => grade != null && maxGrade > 0 ? (grade! / maxGrade) * 100.0 : null;
+  double? get percentage =>
+      grade != null && maxGrade > 0 ? (grade! / maxGrade) * 100.0 : null;
 
   factory ExamItemModel.fromJson(Map<String, dynamic> json) {
     return ExamItemModel(
@@ -219,7 +224,8 @@ class CourseOverviewModel {
     final counts = json['counts'] as Map<String, dynamic>? ?? {};
     final gradeMap = json['gradeDetails'] as Map<String, dynamic>? ?? {};
     final schedList = (json['classSchedules'] as List?)
-            ?.map((e) => ClassScheduleItemModel.fromJson(Map<String, dynamic>.from(e)))
+            ?.map((e) =>
+                ClassScheduleItemModel.fromJson(Map<String, dynamic>.from(e)))
             .toList() ??
         [];
 
@@ -281,7 +287,8 @@ class GpaOverviewModel {
 
   factory GpaOverviewModel.fromJson(Map<String, dynamic> json) {
     final sems = (json['semesters'] as List?)
-            ?.map((s) => SemesterGpaModel.fromJson(Map<String, dynamic>.from(s)))
+            ?.map(
+                (s) => SemesterGpaModel.fromJson(Map<String, dynamic>.from(s)))
             .toList() ??
         [];
 
@@ -323,9 +330,12 @@ class WhatIfResultModel {
       targetPercentage: (json['targetPercentage'] as num?)?.toDouble() ?? 0.0,
       targetLetter: json['targetLetter'] ?? 'A',
       finalExamWeight: (json['finalExamWeight'] as num?)?.toDouble() ?? 30.0,
-      currentRunningPercentage: (json['currentRunningPercentage'] as num?)?.toDouble() ?? 0.0,
-      currentEarnedTowardsFinal: (json['currentEarnedTowardsFinal'] as num?)?.toDouble() ?? 0.0,
-      requiredScorePercentage: (json['requiredScorePercentage'] as num?)?.toDouble() ?? 0.0,
+      currentRunningPercentage:
+          (json['currentRunningPercentage'] as num?)?.toDouble() ?? 0.0,
+      currentEarnedTowardsFinal:
+          (json['currentEarnedTowardsFinal'] as num?)?.toDouble() ?? 0.0,
+      requiredScorePercentage:
+          (json['requiredScorePercentage'] as num?)?.toDouble() ?? 0.0,
       maxPossibleGrade: (json['maxPossibleGrade'] as num?)?.toDouble() ?? 100.0,
       status: json['status'] ?? 'ACHIEVABLE',
       message: json['message'] ?? '',
