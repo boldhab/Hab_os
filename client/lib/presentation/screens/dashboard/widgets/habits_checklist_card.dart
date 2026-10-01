@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
+import '../../../../app/theme/app_spacing.dart';
 import '../../../../data/models/dashboard_feed_model.dart';
+import '../../../widgets/app_animated_check.dart';
+import '../../../widgets/common/app_card.dart';
+import '../../../widgets/common/section_header.dart';
 
 /// Interactive habit checklist with streak badges and completion checkmarks.
 class HabitsChecklistCard extends StatelessWidget {
@@ -15,86 +19,73 @@ class HabitsChecklistCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final completedPct =
-        habits.total > 0 ? habits.completedToday / habits.total : 0.0;
+    final textTheme = Theme.of(context).textTheme;
+    final primaryRed = colorScheme.primary;
+
+    final completedPct = habits.total > 0
+        ? (habits.completedToday / habits.total).clamp(0.0, 1.0)
+        : 0.0;
     final allDone = habits.completedToday == habits.total && habits.total > 0;
+    final accentColor = allDone ? const Color(0xFF34A853) : primaryRed;
 
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      color: colorScheme.surfaceContainerHighest,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header
-            Row(
-              children: [
-                Icon(
-                  allDone
-                      ? Icons.check_circle_rounded
-                      : Icons.repeat_rounded,
-                  color: allDone
-                      ? colorScheme.tertiary
-                      : colorScheme.primary,
-                  size: 20,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  'Today\'s Habits',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                ),
-                const Spacer(),
-                Text(
-                  '${habits.completedToday}/${habits.total}',
-                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                        color: allDone
-                            ? colorScheme.tertiary
-                            : colorScheme.primary,
-                        fontWeight: FontWeight.bold,
-                      ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-
-            // Progress bar
-            ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: LinearProgressIndicator(
-                value: completedPct,
-                minHeight: 5,
-                backgroundColor:
-                    colorScheme.primary.withAlpha(30),
-                valueColor: AlwaysStoppedAnimation<Color>(
-                  allDone ? colorScheme.tertiary : colorScheme.primary,
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          SectionHeader(
+            icon: allDone ? Icons.check_circle_rounded : Icons.repeat_rounded,
+            title: 'Today\'s Habits',
+            iconColor: accentColor,
+            action: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: accentColor.withAlpha(25),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                '${habits.completedToday}/${habits.total}',
+                style: textTheme.labelSmall?.copyWith(
+                  color: accentColor,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 12,
                 ),
               ),
             ),
-            const SizedBox(height: 12),
+          ),
+          AppSpacing.verticalGapSm,
 
-            // Habit list
-            if (habits.items.isEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Text(
-                  'No active habits yet.',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
-                      ),
+          // Progress bar
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: completedPct,
+              minHeight: 4.5,
+              backgroundColor: accentColor.withAlpha(25),
+              valueColor: AlwaysStoppedAnimation<Color>(accentColor),
+            ),
+          ),
+          AppSpacing.verticalGapSm,
+
+          // Habit list
+          if (habits.items.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+              child: Text(
+                'No active habits yet.',
+                style: textTheme.bodySmall?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
                 ),
-              )
-            else
-              ...habits.items.map((h) => _HabitRow(
-                    habit: h,
-                    onTap: onHabitTap,
-                    colorScheme: colorScheme,
-                  )),
-          ],
-        ),
+              ),
+            )
+          else
+            ...habits.items.map((h) => _HabitRow(
+                  habit: h,
+                  onTap: onHabitTap,
+                  colorScheme: colorScheme,
+                  activeColor: const Color(0xFF34A853),
+                )),
+        ],
       ),
     );
   }
@@ -104,89 +95,91 @@ class _HabitRow extends StatelessWidget {
   final DashboardHabitItem habit;
   final void Function(String) onTap;
   final ColorScheme colorScheme;
+  final Color activeColor;
 
   const _HabitRow({
     required this.habit,
     required this.onTap,
     required this.colorScheme,
+    required this.activeColor,
   });
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: habit.isCompletedToday ? null : () => onTap(habit.id),
-      borderRadius: BorderRadius.circular(12),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 6),
-        child: Row(
-          children: [
-            // Checkbox visual
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              width: 24,
-              height: 24,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: habit.isCompletedToday
-                    ? colorScheme.tertiary
-                    : Colors.transparent,
-                border: Border.all(
-                  color: habit.isCompletedToday
-                      ? colorScheme.tertiary
-                      : colorScheme.outline,
-                  width: 2,
-                ),
-              ),
-              child: habit.isCompletedToday
-                  ? Icon(Icons.check_rounded,
-                      size: 14, color: colorScheme.onTertiary)
-                  : null,
-            ),
-            const SizedBox(width: 12),
+    final textTheme = Theme.of(context).textTheme;
 
-            // Name + streak
-            Expanded(
-              child: Text(
-                habit.name,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      decoration: habit.isCompletedToday
-                          ? TextDecoration.lineThrough
-                          : null,
-                      color: habit.isCompletedToday
-                          ? colorScheme.onSurfaceVariant
-                          : colorScheme.onSurface,
-                    ),
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 48),
+      child: InkWell(
+        onTap: habit.isCompletedToday ? null : () => onTap(habit.id),
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+          child: Row(
+            children: [
+              // Checkbox visual
+              AppAnimatedCheck(
+                value: habit.isCompletedToday,
+                isCircle: true,
+                size: 22,
+                activeColor: activeColor,
+                onChanged:
+                    habit.isCompletedToday ? null : (_) => onTap(habit.id),
               ),
-            ),
+              AppSpacing.horizontalGapMd,
 
-            // Streak badge
-            if (habit.currentStreak > 0) ...[
-              const SizedBox(width: 8),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: colorScheme.secondaryContainer,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text('🔥', style: const TextStyle(fontSize: 11)),
-                    const SizedBox(width: 2),
-                    Text(
-                      '${habit.currentStreak}d',
-                      style:
-                          Theme.of(context).textTheme.labelSmall?.copyWith(
-                                color: colorScheme.onSecondaryContainer,
-                                fontWeight: FontWeight.bold,
-                              ),
-                    ),
-                  ],
+              // Name
+              Expanded(
+                child: Text(
+                  habit.name,
+                  style: textTheme.bodyMedium?.copyWith(
+                    fontWeight: habit.isCompletedToday
+                        ? FontWeight.w400
+                        : FontWeight.w600,
+                    fontSize: 14,
+                    decoration: habit.isCompletedToday
+                        ? TextDecoration.lineThrough
+                        : null,
+                    color: habit.isCompletedToday
+                        ? colorScheme.onSurfaceVariant.withAlpha(150)
+                        : colorScheme.onSurface,
+                  ),
                 ),
               ),
+
+              // Streak badge (Icon instead of emoji)
+              if (habit.currentStreak > 0) ...[
+                AppSpacing.horizontalGapSm,
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: colorScheme.primary.withAlpha(20),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.local_fire_department_rounded,
+                        size: 13,
+                        color: colorScheme.primary,
+                      ),
+                      const SizedBox(width: 3),
+                      Text(
+                        '${habit.currentStreak}d',
+                        style: textTheme.labelSmall?.copyWith(
+                          color: colorScheme.primary,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );
