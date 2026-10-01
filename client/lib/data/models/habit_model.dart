@@ -67,7 +67,8 @@ class HabitLogModel extends Equatable {
   }
 
   @override
-  List<Object?> get props => [id, habitId, date, isCompleted, wasFrozen, value, notes];
+  List<Object?> get props =>
+      [id, habitId, date, isCompleted, wasFrozen, value, notes];
 }
 
 class HabitModel extends Equatable {
@@ -138,7 +139,8 @@ class HabitModel extends Equatable {
       isCompletedToday: json['isCompletedToday'] ?? false,
       weeklyCompletionsCount: json['weeklyCompletionsCount'] ?? 0,
       category: json['category'] != null
-          ? HabitCategoryModel.fromJson(Map<String, dynamic>.from(json['category']))
+          ? HabitCategoryModel.fromJson(
+              Map<String, dynamic>.from(json['category']))
           : null,
       todayLog: json['todayLog'] != null
           ? HabitLogModel.fromJson(Map<String, dynamic>.from(json['todayLog']))
@@ -173,7 +175,8 @@ class HabitModel extends Equatable {
       description: description ?? this.description,
       frequency: frequency ?? this.frequency,
       targetFrequencyCount: targetFrequencyCount ?? this.targetFrequencyCount,
-      targetFrequencyPeriod: targetFrequencyPeriod ?? this.targetFrequencyPeriod,
+      targetFrequencyPeriod:
+          targetFrequencyPeriod ?? this.targetFrequencyPeriod,
       targetType: targetType ?? this.targetType,
       targetValue: targetValue ?? this.targetValue,
       reminderTime: reminderTime ?? this.reminderTime,
@@ -184,7 +187,8 @@ class HabitModel extends Equatable {
       weight: weight ?? this.weight,
       isActive: isActive ?? this.isActive,
       isCompletedToday: isCompletedToday ?? this.isCompletedToday,
-      weeklyCompletionsCount: weeklyCompletionsCount ?? this.weeklyCompletionsCount,
+      weeklyCompletionsCount:
+          weeklyCompletionsCount ?? this.weeklyCompletionsCount,
       category: category ?? this.category,
       todayLog: todayLog ?? this.todayLog,
     );
@@ -299,7 +303,8 @@ class RoutineModel extends Equatable {
       isCompletedToday: json['isCompletedToday'] ?? false,
       items: json['items'] != null
           ? (json['items'] as List)
-              .map((i) => RoutineItemModel.fromJson(Map<String, dynamic>.from(i)))
+              .map((i) =>
+                  RoutineItemModel.fromJson(Map<String, dynamic>.from(i)))
               .toList()
           : const [],
     );
