@@ -99,7 +99,8 @@ class WorkoutDetailModel {
 
   factory WorkoutDetailModel.fromJson(Map<String, dynamic> json) {
     final exList = (json['exercises'] as List?)
-            ?.map((e) => WorkoutExerciseModel.fromJson(Map<String, dynamic>.from(e)))
+            ?.map((e) =>
+                WorkoutExerciseModel.fromJson(Map<String, dynamic>.from(e)))
             .toList() ??
         [];
 
@@ -202,15 +203,19 @@ class ExerciseHistoryModel {
   });
 
   factory ExerciseHistoryModel.fromJson(Map<String, dynamic> json) {
-    final ex = ExerciseCatalogModel.fromJson(Map<String, dynamic>.from(json['exercise']));
+    final ex = ExerciseCatalogModel.fromJson(
+        Map<String, dynamic>.from(json['exercise']));
     final pr = json['currentPR'] != null
-        ? PersonalRecordModel.fromJson(Map<String, dynamic>.from(json['currentPR']))
+        ? PersonalRecordModel.fromJson(
+            Map<String, dynamic>.from(json['currentPR']))
         : null;
     final lastPerf = json['lastPerformance'] != null
-        ? ExerciseSessionHistoryModel.fromJson(Map<String, dynamic>.from(json['lastPerformance']))
+        ? ExerciseSessionHistoryModel.fromJson(
+            Map<String, dynamic>.from(json['lastPerformance']))
         : null;
     final hist = (json['history'] as List?)
-            ?.map((h) => ExerciseSessionHistoryModel.fromJson(Map<String, dynamic>.from(h)))
+            ?.map((h) => ExerciseSessionHistoryModel.fromJson(
+                Map<String, dynamic>.from(h)))
             .toList() ??
         [];
 
@@ -254,7 +259,8 @@ class PersonalRecordModel {
       muscleGroup: ex['muscleGroup'] ?? ex['category'] ?? 'CHEST',
       weightKg: (json['weightKg'] as num?)?.toDouble() ?? 0.0,
       repetitions: json['repetitions'] ?? 1,
-      calculatedOneRepMax: (json['calculatedOneRepMax'] as num?)?.toDouble() ?? 0.0,
+      calculatedOneRepMax:
+          (json['calculatedOneRepMax'] as num?)?.toDouble() ?? 0.0,
       achievedDate: json['achievedDate'] ?? '',
     );
   }
@@ -297,7 +303,8 @@ class GymStatsModel {
 
   factory GymStatsModel.fromJson(Map<String, dynamic> json) {
     final dist = (json['muscleDistribution'] as List?)
-            ?.map((m) => MuscleVolumeModel.fromJson(Map<String, dynamic>.from(m)))
+            ?.map(
+                (m) => MuscleVolumeModel.fromJson(Map<String, dynamic>.from(m)))
             .toList() ??
         [];
 
@@ -305,7 +312,8 @@ class GymStatsModel {
       workoutsThisWeek: json['workoutsThisWeek'] ?? 0,
       weeklyTarget: json['weeklyTarget'] ?? 4,
       workedOutToday: json['workedOutToday'] == true,
-      totalLifetimeTonnage: (json['totalLifetimeTonnage'] as num?)?.toDouble() ?? 0.0,
+      totalLifetimeTonnage:
+          (json['totalLifetimeTonnage'] as num?)?.toDouble() ?? 0.0,
       muscleDistribution: dist,
     );
   }
@@ -372,7 +380,8 @@ class WorkoutTemplateModel {
 
   factory WorkoutTemplateModel.fromJson(Map<String, dynamic> json) {
     final exList = (json['exercises'] as List?)
-            ?.map((e) => WorkoutTemplateExerciseModel.fromJson(Map<String, dynamic>.from(e)))
+            ?.map((e) => WorkoutTemplateExerciseModel.fromJson(
+                Map<String, dynamic>.from(e)))
             .toList() ??
         [];
 
@@ -425,7 +434,9 @@ class BodyMetricModel {
       legsCm: (json['legsCm'] as num?)?.toDouble(),
       photoUrl: json['photoUrl'],
       notes: json['notes'],
-      sevenDayAverageKg: (json['sevenDayAverageKg'] as num?)?.toDouble() ?? (json['weightKg'] as num?)?.toDouble() ?? 0.0,
+      sevenDayAverageKg: (json['sevenDayAverageKg'] as num?)?.toDouble() ??
+          (json['weightKg'] as num?)?.toDouble() ??
+          0.0,
     );
   }
 }

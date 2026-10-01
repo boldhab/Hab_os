@@ -7,7 +7,8 @@ import '../models/gym_models.dart';
 // DATA PROVIDERS
 // ==========================================
 
-final gymWorkoutsProvider = FutureProvider.autoDispose<List<WorkoutDetailModel>>((ref) async {
+final gymWorkoutsProvider =
+    FutureProvider.autoDispose<List<WorkoutDetailModel>>((ref) async {
   final dio = ref.watch(dioProvider);
   final response = await dio.get(ApiEndpoints.gymWorkouts);
   final data = response.data['data'];
@@ -17,30 +18,39 @@ final gymWorkoutsProvider = FutureProvider.autoDispose<List<WorkoutDetailModel>>
   } else if (data is Map && data.containsKey('data')) {
     items = data['data'] as List;
   }
-  return items.map((i) => WorkoutDetailModel.fromJson(Map<String, dynamic>.from(i))).toList();
+  return items
+      .map((i) => WorkoutDetailModel.fromJson(Map<String, dynamic>.from(i)))
+      .toList();
 });
 
-final gymExercisesProvider = FutureProvider.autoDispose<List<ExerciseCatalogModel>>((ref) async {
+final gymExercisesProvider =
+    FutureProvider.autoDispose<List<ExerciseCatalogModel>>((ref) async {
   final dio = ref.watch(dioProvider);
   final response = await dio.get(ApiEndpoints.gymExercises);
   final list = response.data['data'] as List? ?? [];
-  return list.map((i) => ExerciseCatalogModel.fromJson(Map<String, dynamic>.from(i))).toList();
+  return list
+      .map((i) => ExerciseCatalogModel.fromJson(Map<String, dynamic>.from(i)))
+      .toList();
 });
 
-final gymExerciseHistoryProvider =
-    FutureProvider.autoDispose.family<ExerciseHistoryModel, String>((ref, id) async {
+final gymExerciseHistoryProvider = FutureProvider.autoDispose
+    .family<ExerciseHistoryModel, String>((ref, id) async {
   final dio = ref.watch(dioProvider);
   final response = await dio.get(ApiEndpoints.gymExerciseHistory(id));
-  return ExerciseHistoryModel.fromJson(Map<String, dynamic>.from(response.data['data']));
+  return ExerciseHistoryModel.fromJson(
+      Map<String, dynamic>.from(response.data['data']));
 });
 
-final gymPRsProvider = FutureProvider.autoDispose<List<PersonalRecordModel>>((ref) async {
+final gymPRsProvider =
+    FutureProvider.autoDispose<List<PersonalRecordModel>>((ref) async {
   final dio = ref.watch(dioProvider);
   final response = await dio.get(ApiEndpoints.gymPRs);
   final data = response.data['data'];
   if (data is Map && data.containsKey('personalRecords')) {
     final list = data['personalRecords'] as List;
-    return list.map((i) => PersonalRecordModel.fromJson(Map<String, dynamic>.from(i))).toList();
+    return list
+        .map((i) => PersonalRecordModel.fromJson(Map<String, dynamic>.from(i)))
+        .toList();
   }
   return [];
 });
@@ -48,30 +58,40 @@ final gymPRsProvider = FutureProvider.autoDispose<List<PersonalRecordModel>>((re
 final gymStatsProvider = FutureProvider.autoDispose<GymStatsModel>((ref) async {
   final dio = ref.watch(dioProvider);
   final response = await dio.get(ApiEndpoints.gymStats);
-  return GymStatsModel.fromJson(Map<String, dynamic>.from(response.data['data']));
+  return GymStatsModel.fromJson(
+      Map<String, dynamic>.from(response.data['data']));
 });
 
-final gymTemplatesProvider = FutureProvider.autoDispose<List<WorkoutTemplateModel>>((ref) async {
+final gymTemplatesProvider =
+    FutureProvider.autoDispose<List<WorkoutTemplateModel>>((ref) async {
   final dio = ref.watch(dioProvider);
   final response = await dio.get(ApiEndpoints.gymTemplates);
   final list = response.data['data'] as List? ?? [];
-  return list.map((i) => WorkoutTemplateModel.fromJson(Map<String, dynamic>.from(i))).toList();
+  return list
+      .map((i) => WorkoutTemplateModel.fromJson(Map<String, dynamic>.from(i)))
+      .toList();
 });
 
-final gymBodyMetricsProvider = FutureProvider.autoDispose<List<BodyMetricModel>>((ref) async {
+final gymBodyMetricsProvider =
+    FutureProvider.autoDispose<List<BodyMetricModel>>((ref) async {
   final dio = ref.watch(dioProvider);
   final response = await dio.get(ApiEndpoints.gymBodyMetrics);
   final list = response.data['data'] as List? ?? [];
-  return list.map((i) => BodyMetricModel.fromJson(Map<String, dynamic>.from(i))).toList();
+  return list
+      .map((i) => BodyMetricModel.fromJson(Map<String, dynamic>.from(i)))
+      .toList();
 });
 
-final gymInsightsProvider = FutureProvider.autoDispose<List<GymInsightModel>>((ref) async {
+final gymInsightsProvider =
+    FutureProvider.autoDispose<List<GymInsightModel>>((ref) async {
   final dio = ref.watch(dioProvider);
   final response = await dio.get(ApiEndpoints.gymInsights);
   final data = response.data['data'];
   if (data is Map && data.containsKey('insights')) {
     final list = data['insights'] as List;
-    return list.map((i) => GymInsightModel.fromJson(Map<String, dynamic>.from(i))).toList();
+    return list
+        .map((i) => GymInsightModel.fromJson(Map<String, dynamic>.from(i)))
+        .toList();
   }
   return [];
 });
@@ -135,7 +155,8 @@ class GymController {
     final dio = ref.read(dioProvider);
     await dio.post(ApiEndpoints.gymTemplates, data: {
       'name': name,
-      if (description != null && description.isNotEmpty) 'description': description,
+      if (description != null && description.isNotEmpty)
+        'description': description,
       'category': category,
       'exercises': exercises,
     });
