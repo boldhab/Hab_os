@@ -57,7 +57,8 @@ class TransactionModel extends Equatable {
       description: json['description'],
       source: json['source'] ?? 'CASH',
       category: json['category'] != null
-          ? TransactionCategorySummary.fromJson(Map<String, dynamic>.from(json['category']))
+          ? TransactionCategorySummary.fromJson(
+              Map<String, dynamic>.from(json['category']))
           : null,
     );
   }
@@ -103,13 +104,15 @@ class BudgetModel extends Equatable {
       month: json['month'] ?? 1,
       year: json['year'] ?? 2026,
       category: json['category'] != null
-          ? TransactionCategorySummary.fromJson(Map<String, dynamic>.from(json['category']))
+          ? TransactionCategorySummary.fromJson(
+              Map<String, dynamic>.from(json['category']))
           : null,
     );
   }
 
   @override
-  List<Object?> get props => [id, categoryId, monthlyLimit, month, year, category];
+  List<Object?> get props =>
+      [id, categoryId, monthlyLimit, month, year, category];
 }
 
 class FinanceAnalyticsModel extends Equatable {
