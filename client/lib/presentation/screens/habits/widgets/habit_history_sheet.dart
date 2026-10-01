@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../data/models/habit_model.dart';
 import '../../../providers/habits_provider.dart';
+import '../../../../app/theme/app_theme.dart';
 import 'habit_contribution_heatmap.dart';
 
 class HabitHistorySheet extends ConsumerStatefulWidget {
@@ -24,7 +25,8 @@ class _HabitHistorySheetState extends ConsumerState<HabitHistorySheet> {
   }
 
   Future<void> _loadHistory() async {
-    final logs = await ref.read(habitsProvider.notifier).fetchHistory(widget.habit.id);
+    final logs =
+        await ref.read(habitsProvider.notifier).fetchHistory(widget.habit.id);
     if (mounted) {
       setState(() {
         _logs = logs;
@@ -34,11 +36,15 @@ class _HabitHistorySheetState extends ConsumerState<HabitHistorySheet> {
   }
 
   Future<void> _refillFreeze() async {
-    await ref.read(habitsProvider.notifier).refillStreakFreeze(widget.habit.id, count: 1);
+    await ref
+        .read(habitsProvider.notifier)
+        .refillStreakFreeze(widget.habit.id, count: 1);
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Streak Freeze added! ❄️ Your streak is protected.')),
+      const SnackBar(
+          content: Text('Streak Freeze added! ❄️ Your streak is protected.')),
     );
-    if (mounted) Navigator.pop(context);
+    Navigator.pop(context);
   }
 
   @override
@@ -63,21 +69,26 @@ class _HabitHistorySheetState extends ConsumerState<HabitHistorySheet> {
                         Flexible(
                           child: Text(
                             widget.habit.name,
-                            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleLarge
+                                ?.copyWith(
                                   fontWeight: FontWeight.bold,
                                 ),
                           ),
                         ),
                         const SizedBox(width: 8),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
                             color: colorScheme.surfaceContainerHighest,
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Text(
                             widget.habit.difficulty,
-                            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
+                            style: const TextStyle(
+                                fontSize: 10, fontWeight: FontWeight.bold),
                           ),
                         ),
                       ],
@@ -106,7 +117,9 @@ class _HabitHistorySheetState extends ConsumerState<HabitHistorySheet> {
             children: [
               Expanded(
                 child: _StatCard(
-                  label: widget.habit.isWeeklyCount ? 'Weekly Streak' : 'Current Streak',
+                  label: widget.habit.isWeeklyCount
+                      ? 'Weekly Streak'
+                      : 'Current Streak',
                   value: widget.habit.isWeeklyCount
                       ? '${widget.habit.currentStreak} wks'
                       : '${widget.habit.currentStreak} days',
@@ -136,35 +149,44 @@ class _HabitHistorySheetState extends ConsumerState<HabitHistorySheet> {
           const SizedBox(height: 8),
 
           // Freeze Refill Banner
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: Colors.blue.withAlpha(20),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.blue.withAlpha(50)),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.shield_outlined, size: 18, color: Colors.blueAccent),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Streak Freezes protect against 1 missed day without breaking your streak.',
-                    style: TextStyle(fontSize: 11, color: Colors.blue.shade900),
-                  ),
+          Builder(
+            builder: (context) {
+              final semantics = AppSemanticColors.of(context);
+              return Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.sm + 4, vertical: AppSpacing.sm),
+                decoration: BoxDecoration(
+                  color: semantics.info.withAlpha(20),
+                  borderRadius: BorderRadius.circular(AppRadius.sm + 4),
+                  border: Border.all(color: semantics.info.withAlpha(50)),
                 ),
-                TextButton(
-                  onPressed: _refillFreeze,
-                  child: const Text('+ Add Freeze', style: TextStyle(fontSize: 11)),
+                child: Row(
+                  children: [
+                    Icon(Icons.shield_outlined,
+                        size: 18, color: semantics.info),
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      child: Text(
+                        'Streak Freezes protect against 1 missed day without breaking your streak.',
+                        style: TextStyle(fontSize: 11, color: semantics.info),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: _refillFreeze,
+                      child: const Text('+ Add Freeze',
+                          style: TextStyle(fontSize: 11)),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              );
+            },
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: AppSpacing.md),
 
           // Heatmap Widget
           if (_loading)
-            const Center(child: Padding(
+            const Center(
+                child: Padding(
               padding: EdgeInsets.all(24),
               child: CircularProgressIndicator(),
             ))
@@ -174,9 +196,9 @@ class _HabitHistorySheetState extends ConsumerState<HabitHistorySheet> {
               primaryColor: colorScheme.primary,
               weeksToShow: 18,
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: AppSpacing.md),
             const Divider(height: 1),
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpacing.sm + 4),
             Text(
               'Recent Logs',
               style: Theme.of(context).textTheme.titleSmall?.copyWith(
@@ -198,30 +220,42 @@ class _HabitHistorySheetState extends ConsumerState<HabitHistorySheet> {
                       itemBuilder: (context, index) {
                         final log = _logs[index];
                         final dateStr = log.date.split('T')[0];
+                        final semantics = AppSemanticColors.of(context);
 
-                        return ListTile(
+                        return Material(
+                          color: Colors.transparent,
+                          child: ListTile(
                           dense: true,
                           contentPadding: EdgeInsets.zero,
                           leading: Icon(
                             log.wasFrozen
-                                ? Icons.ac_unit_rounded
-                                : (log.isCompleted
-                                    ? Icons.check_circle_rounded
-                                    : Icons.cancel_outlined),
+                              ? Icons.ac_unit_rounded
+                              : (log.isCompleted
+                                ? Icons.check_circle_rounded
+                                : Icons.cancel_outlined),
                             color: log.wasFrozen
-                                ? Colors.blueAccent
-                                : (log.isCompleted ? Colors.green : colorScheme.error),
+                              ? semantics.info
+                              : (log.isCompleted
+                                ? semantics.success
+                                : semantics.danger),
                             size: 18,
                           ),
-                          title: Text(dateStr, style: const TextStyle(fontSize: 13)),
+                          title: Text(dateStr,
+                            style: const TextStyle(fontSize: 13)),
                           subtitle: log.wasFrozen
-                              ? const Text('Streak Shield Applied ❄️',
-                                  style: TextStyle(fontSize: 11, color: Colors.blueAccent))
-                              : (log.notes != null ? Text(log.notes!, style: const TextStyle(fontSize: 11)) : null),
+                            ? Text('Streak Shield Applied ❄️',
+                              style: TextStyle(
+                                fontSize: 11, color: semantics.info))
+                            : (log.notes != null
+                              ? Text(log.notes!,
+                                style: const TextStyle(fontSize: 11))
+                              : null),
                           trailing: widget.habit.targetType != 'CHECKBOX'
-                              ? Text('${log.value} ${widget.habit.targetType.toLowerCase()}',
-                                  style: const TextStyle(fontSize: 11))
-                              : null,
+                            ? Text(
+                              '${log.value} ${widget.habit.targetType.toLowerCase()}',
+                              style: const TextStyle(fontSize: 11))
+                            : null,
+                          ),
                         );
                       },
                     ),
@@ -252,7 +286,7 @@ class _StatCard extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
       decoration: BoxDecoration(
         color: colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(AppRadius.sm + 4),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -266,7 +300,8 @@ class _StatCard extends StatelessWidget {
                   label,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 11, color: colorScheme.onSurfaceVariant),
+                  style: TextStyle(
+                      fontSize: 11, color: colorScheme.onSurfaceVariant),
                 ),
               ),
             ],
