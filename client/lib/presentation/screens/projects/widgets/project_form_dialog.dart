@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../app/theme/app_theme.dart';
+import '../dialogs/edit_project_dialog.dart';
 
 class ProjectFormDialog extends StatefulWidget {
   final Future<void> Function({
@@ -8,6 +9,7 @@ class ProjectFormDialog extends StatefulWidget {
     required String status,
     String? repoUrl,
     required List<String> technologies,
+    String color,
   }) onSubmit;
 
   const ProjectFormDialog(
@@ -21,6 +23,7 @@ class ProjectFormDialog extends StatefulWidget {
       required String status,
       String? repoUrl,
       required List<String> technologies,
+      String color,
     }) onSubmit,
   }) async {
     final isWide = MediaQuery.of(context).size.width > 600;
@@ -69,6 +72,7 @@ class _ProjectFormDialogState extends State<ProjectFormDialog> {
   final _techController = TextEditingController(text: 'TypeScript, Flutter');
 
   String _status = 'IN_PROGRESS';
+  Color _selectedColor = kProjectColorPresets[0];
   bool _showMoreOptions = false;
   bool _isSaving = false;
 
@@ -78,6 +82,9 @@ class _ProjectFormDialogState extends State<ProjectFormDialog> {
     {'id': 'ON_HOLD', 'label': 'On Hold'},
     {'id': 'COMPLETED', 'label': 'Completed'},
   ];
+
+  String _toHex(Color c) =>
+      '#${c.r.round().toRadixString(16).padLeft(2, '0')}${c.g.round().toRadixString(16).padLeft(2, '0')}${c.b.round().toRadixString(16).padLeft(2, '0')}';
 
   @override
   void dispose() {
@@ -109,11 +116,19 @@ class _ProjectFormDialogState extends State<ProjectFormDialog> {
             ? _repoUrlController.text.trim()
             : null,
         technologies: techs,
+        color: _toHex(_selectedColor),
       );
 
       if (mounted) Navigator.pop(context);
-    } catch (_) {
-      setState(() => _isSaving = false);
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isSaving = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(e.toString()),
+          backgroundColor: AppSemanticColors.of(context).danger,
+          behavior: SnackBarBehavior.floating,
+        ));
+      }
     }
   }
 
@@ -237,6 +252,22 @@ class _ProjectFormDialogState extends State<ProjectFormDialog> {
                         borderSide: BorderSide.none,
                       ),
                     ),
+                  ),
+                  AppSpacing.verticalGapLg,
+
+                  // Color Swatches Picker (Item 10)
+                  const Text(
+                    'Project Color',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.4,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  ProjectColorSwatchRow(
+                    selected: _selectedColor,
+                    onChanged: (c) => setState(() => _selectedColor = c),
                   ),
                   AppSpacing.verticalGapLg,
 
