@@ -87,6 +87,15 @@ class ApiEndpoints {
   static String projectAnalytics(String id) => '/projects/$id/analytics';
   static String projectCommits(String id) => '/projects/$id/commits';
   static const String projectTechInsights = '/projects/insights/tech-stack';
+  static String projectWebhookConfig(String id) =>
+      '/projects/$id/webhooks/config';
+  static String projectWebhookSecret(String id) =>
+      '/projects/$id/webhooks/secret';
+  static String projectGithubLinks(String id) =>
+      '/projects/$id/github-links';
+  static String projectGithubLinkById(String id, String linkId) =>
+      '/projects/$id/github-links/$linkId';
+  static String projectEvents(String id) => '/projects/$id/events';
   static String registerGithubWebhook(String owner, String repo) =>
       '/integrations/github/repos/$owner/$repo/webhook';
 
