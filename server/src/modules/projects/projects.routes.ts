@@ -4,6 +4,7 @@ import asyncHandler from '../../common/asyncHandler';
 import authenticate, { AuthRequest } from '../../middleware/auth';
 import { validate } from '../../middleware/validate';
 import projectsService from './projects.service';
+import { projectEventBus } from './projects.events';
 import {
   createProjectSchema,
   updateProjectSchema,
@@ -16,7 +17,60 @@ import {
 
 const router = Router();
 
+// ==========================================
+// 0. PUBLIC GITHUB WEBHOOK RECEIVER
+// ==========================================
+
+router.post(
+  '/:id/webhooks/github',
+  asyncHandler(async (req: Request, res: Response) => {
+    const event = (req.headers['x-github-event'] as string) || 'push';
+    const signature = req.headers['x-hub-signature-256'] as string | undefined;
+    const rawBody = (req as any).rawBody as Buffer | undefined;
+
+    const result = await projectsService.handleProjectGithubWebhook(
+      req.params.id,
+      event,
+      req.body,
+      rawBody,
+      signature
+    );
+    return ApiResponse.success(res, result, 'GitHub webhook processed');
+  })
+);
+
 router.use(authenticate);
+
+// ==========================================
+// 0.1 SSE REAL-TIME EVENT STREAM
+// ==========================================
+
+router.get(
+  '/:id/events',
+  (req: Request, res: Response) => {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    });
+
+    res.write(`event: connected\ndata: {"status":"connected","projectId":"${req.params.id}"}\n\n`);
+
+    projectEventBus.addClient(req.params.id, res);
+
+    const pingInterval = setInterval(() => {
+      try {
+        res.write(`: ping\n\n`);
+      } catch (_) {}
+    }, 25000);
+
+    req.on('close', () => {
+      clearInterval(pingInterval);
+      projectEventBus.removeClient(req.params.id, res);
+    });
+  }
+);
 
 // ==========================================
 // 1. TECH STACK INSIGHTS (Cross-Project)
@@ -227,6 +281,55 @@ router.get(
     const authReq = req as AuthRequest;
     const commits = await projectsService.getProjectCommits(authReq.user!.id, req.params.id);
     return ApiResponse.success(res, commits, 'Project commits retrieved');
+  })
+);
+
+// ==========================================
+// 7. GITHUB WEBHOOK CONFIG & ENTITY LINKS
+// ==========================================
+
+router.get(
+  '/:id/webhooks/config',
+  asyncHandler(async (req: Request, res: Response) => {
+    const authReq = req as AuthRequest;
+    const config = await projectsService.getProjectWebhookConfig(authReq.user!.id, req.params.id);
+    return ApiResponse.success(res, config, 'Project webhook config retrieved');
+  })
+);
+
+router.post(
+  '/:id/webhooks/secret',
+  asyncHandler(async (req: Request, res: Response) => {
+    const authReq = req as AuthRequest;
+    const result = await projectsService.generateProjectWebhookSecret(authReq.user!.id, req.params.id);
+    return ApiResponse.success(res, result, 'Project webhook secret generated');
+  })
+);
+
+router.get(
+  '/:id/github-links',
+  asyncHandler(async (req: Request, res: Response) => {
+    const authReq = req as AuthRequest;
+    const links = await projectsService.getProjectGithubLinks(authReq.user!.id, req.params.id);
+    return ApiResponse.success(res, links, 'Project GitHub links retrieved');
+  })
+);
+
+router.post(
+  '/:id/github-links',
+  asyncHandler(async (req: Request, res: Response) => {
+    const authReq = req as AuthRequest;
+    const link = await projectsService.linkGithubEntity(authReq.user!.id, req.params.id, req.body);
+    return ApiResponse.success(res, link, 'GitHub link created', 201);
+  })
+);
+
+router.delete(
+  '/:id/github-links/:linkId',
+  asyncHandler(async (req: Request, res: Response) => {
+    const authReq = req as AuthRequest;
+    await projectsService.unlinkGithubEntity(authReq.user!.id, req.params.id, req.params.linkId);
+    return ApiResponse.success(res, null, 'GitHub link deleted');
   })
 );
 

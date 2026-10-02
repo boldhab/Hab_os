@@ -43,15 +43,17 @@ export const deleteProject = asyncHandler(async (req: Request, res: Response) =>
 
 export const createFeature = asyncHandler(async (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
-  const feature = await projectsService.createFeature(authReq.user!.id, req.params.projectId, req.body);
+  const projectId = req.params.projectId || req.params.id;
+  const feature = await projectsService.createFeature(authReq.user!.id, projectId, req.body);
   return ApiResponse.success(res, feature, 'Feature created successfully', 201);
 });
 
 export const updateFeature = asyncHandler(async (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
+  const projectId = req.params.projectId || req.params.id;
   const feature = await projectsService.updateFeature(
     authReq.user!.id,
-    req.params.projectId,
+    projectId,
     req.params.featureId,
     req.body
   );
@@ -60,9 +62,10 @@ export const updateFeature = asyncHandler(async (req: Request, res: Response) =>
 
 export const deleteFeature = asyncHandler(async (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
+  const projectId = req.params.projectId || req.params.id;
   const result = await projectsService.deleteFeature(
     authReq.user!.id,
-    req.params.projectId,
+    projectId,
     req.params.featureId
   );
   return ApiResponse.success(res, result, 'Feature deleted successfully');
@@ -72,15 +75,17 @@ export const deleteFeature = asyncHandler(async (req: Request, res: Response) =>
 
 export const createBug = asyncHandler(async (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
-  const bug = await projectsService.createBug(authReq.user!.id, req.params.projectId, req.body);
+  const projectId = req.params.projectId || req.params.id;
+  const bug = await projectsService.createBug(authReq.user!.id, projectId, req.body);
   return ApiResponse.success(res, bug, 'Bug reported successfully', 201);
 });
 
 export const updateBug = asyncHandler(async (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
+  const projectId = req.params.projectId || req.params.id;
   const bug = await projectsService.updateBug(
     authReq.user!.id,
-    req.params.projectId,
+    projectId,
     req.params.bugId,
     req.body
   );
@@ -89,9 +94,10 @@ export const updateBug = asyncHandler(async (req: Request, res: Response) => {
 
 export const deleteBug = asyncHandler(async (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
+  const projectId = req.params.projectId || req.params.id;
   const result = await projectsService.deleteBug(
     authReq.user!.id,
-    req.params.projectId,
+    projectId,
     req.params.bugId
   );
   return ApiResponse.success(res, result, 'Bug removed successfully');
