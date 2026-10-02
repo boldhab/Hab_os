@@ -1,5 +1,7 @@
+import crypto from 'crypto';
 import prisma from '../../config/db';
 import ApiError from '../../common/apiError';
+import { projectEventBus } from './projects.events';
 
 export interface ProgressCalculationResult {
   progress: number;
@@ -29,12 +31,98 @@ export interface HealthSignalResult {
   completedPrior7Days: number;
 }
 
+/**
+ * The normalised in-memory projection that computeHealthFromData operates on.
+ * Both computeProjectHealth (DB-sourced) and getProjects (already-fetched data)
+ * map their respective Prisma shapes to this before calling the helper.
+ */
+export interface ProjectHealthInput {
+  updatedAt: Date;
+  tasks: Array<{
+    updatedAt: Date;
+    completedAt?: Date | null;
+    focusSessions: Array<{ startTime: Date; updatedAt: Date }>;
+  }>;
+  features: Array<{ status: string; updatedAt: Date }>;
+  bugs: Array<{ status: string; severity: string; updatedAt: Date }>;
+}
+
 export class ProjectsService {
   /**
-   * Recalculates and persists auto progress for a project
+   * Pure in-memory health computation. Accepts already-fetched data so
+   * neither getProjects nor computeProjectHealth need an extra DB call.
    */
-  async computeAndSyncProjectProgress(projectId: string): Promise<ProgressCalculationResult> {
-    const project = await prisma.project.findUnique({
+  private computeHealthFromData(input: ProjectHealthInput): HealthSignalResult {
+    const now = new Date();
+    const msPerDay = 1000 * 60 * 60 * 24;
+
+    // Collect all activity timestamps
+    const activityDates: Date[] = [input.updatedAt];
+    input.tasks.forEach((t) => {
+      activityDates.push(t.updatedAt);
+      if (t.completedAt) activityDates.push(t.completedAt);
+      t.focusSessions.forEach((fs) => {
+        activityDates.push(fs.startTime);
+        activityDates.push(fs.updatedAt);
+      });
+    });
+    input.features.forEach((f) => activityDates.push(f.updatedAt));
+    input.bugs.forEach((b) => activityDates.push(b.updatedAt));
+
+    const latestActivity = new Date(Math.max(...activityDates.map((d) => d.getTime())));
+    const daysInactive = Math.floor((now.getTime() - latestActivity.getTime()) / msPerDay);
+    const isStale = daysInactive > 14;
+
+    const openBugs = input.bugs.filter((b) => b.status === 'OPEN' || b.status === 'IN_PROGRESS');
+    const openFeatures = input.features.filter((f) => f.status === 'TODO' || f.status === 'IN_PROGRESS');
+    const openCriticalBugs = openBugs.filter((b) => b.severity === 'CRITICAL').length;
+    const isFirefighting = openBugs.length > openFeatures.length || openCriticalBugs > 0;
+
+    const sevenDaysAgo = new Date(now.getTime() - 7 * msPerDay);
+    const fourteenDaysAgo = new Date(now.getTime() - 14 * msPerDay);
+
+    const completedLast7Days =
+      input.tasks.filter((t) => t.completedAt && t.completedAt >= sevenDaysAgo).length +
+      input.features.filter((f) => f.status === 'COMPLETED' && f.updatedAt >= sevenDaysAgo).length;
+
+    const completedPrior7Days =
+      input.tasks.filter((t) => t.completedAt && t.completedAt >= fourteenDaysAgo && t.completedAt < sevenDaysAgo).length +
+      input.features.filter((f) => f.status === 'COMPLETED' && f.updatedAt >= fourteenDaysAgo && f.updatedAt < sevenDaysAgo).length;
+
+    let velocityTrend: 'UP' | 'DOWN' | 'STABLE' = 'STABLE';
+    if (completedLast7Days > completedPrior7Days) velocityTrend = 'UP';
+    else if (completedLast7Days < completedPrior7Days) velocityTrend = 'DOWN';
+
+    let healthStatus: 'HEALTHY' | 'NEEDS_ATTENTION' | 'AT_RISK' = 'HEALTHY';
+    if (openCriticalBugs > 0 || isStale || (isFirefighting && openBugs.length >= 3)) {
+      healthStatus = 'AT_RISK';
+    } else if (isFirefighting || velocityTrend === 'DOWN') {
+      healthStatus = 'NEEDS_ATTENTION';
+    }
+
+    return {
+      healthStatus,
+      isStale,
+      daysInactive,
+      isFirefighting,
+      openBugs: openBugs.length,
+      openFeatures: openFeatures.length,
+      openCriticalBugs,
+      velocityTrend,
+      completedLast7Days,
+      completedPrior7Days,
+    };
+  }
+
+  /**
+   * Recalculates and persists auto progress for a project.
+   * Accepts an optional Prisma transaction client to support atomic multi-table operations.
+   */
+  async computeAndSyncProjectProgress(
+    projectId: string,
+    dbClient: any = prisma
+  ): Promise<ProgressCalculationResult> {
+    const project = await dbClient.project.findUnique({
       where: { id: projectId },
       include: {
         tasks: { select: { id: true, status: true, isCompleted: true } },
@@ -48,18 +136,18 @@ export class ProjectsService {
     }
 
     const completedTasks = project.tasks.filter(
-      (t) => t.isCompleted || t.status === 'COMPLETED' || t.status === 'DONE'
+      (t: any) => t.isCompleted || t.status === 'COMPLETED' || t.status === 'DONE'
     ).length;
     const totalTasks = project.tasks.length;
 
     const completedFeatures = project.features.filter(
-      (f) => f.status === 'COMPLETED' || f.status === 'DONE'
+      (f: any) => f.status === 'COMPLETED' || f.status === 'DONE'
     ).length;
     const totalFeatures = project.features.length;
 
-    const openBugs = project.bugs.filter((b) => b.status === 'OPEN' || b.status === 'IN_PROGRESS');
-    const openCriticalBugs = openBugs.filter((b) => b.severity === 'CRITICAL').length;
-    const openMajorBugs = openBugs.filter((b) => b.severity === 'MAJOR').length;
+    const openBugs = project.bugs.filter((b: any) => b.status === 'OPEN' || b.status === 'IN_PROGRESS');
+    const openCriticalBugs = openBugs.filter((b: any) => b.severity === 'CRITICAL').length;
+    const openMajorBugs = openBugs.filter((b: any) => b.severity === 'MAJOR').length;
 
     const deliverablesTotal = totalTasks + totalFeatures;
     const deliverablesCompleted = completedTasks + completedFeatures;
@@ -77,7 +165,7 @@ export class ProjectsService {
 
     // If manual override is not enabled, update project.progress
     if (!project.manualProgress) {
-      await prisma.project.update({
+      await dbClient.project.update({
         where: { id: projectId },
         data: { progress: calculatedProgress },
       });
@@ -102,7 +190,8 @@ export class ProjectsService {
   }
 
   /**
-   * Computes health metrics, risk signals, and velocity trend for a project
+   * Computes health metrics, risk signals, and velocity trend for a project.
+   * Delegates all computation to the shared computeHealthFromData helper.
    */
   async computeProjectHealth(projectId: string): Promise<HealthSignalResult> {
     const project = await prisma.project.findUnique({
@@ -123,79 +212,24 @@ export class ProjectsService {
       },
     });
 
-    if (!project) {
-      throw ApiError.notFound('Project not found');
-    }
+    if (!project) throw ApiError.notFound('Project not found');
 
-    const now = new Date();
-    const msPerDay = 1000 * 60 * 60 * 24;
-
-    // Collect all activity timestamps
-    const activityDates: Date[] = [project.updatedAt];
-    project.tasks.forEach((t) => {
-      activityDates.push(t.updatedAt);
-      if (t.completedAt) activityDates.push(t.completedAt);
-      t.focusSessions.forEach((fs) => {
-        activityDates.push(fs.startTime);
-        activityDates.push(fs.updatedAt);
-      });
+    return this.computeHealthFromData({
+      updatedAt: project.updatedAt,
+      tasks: project.tasks.map((t) => ({
+        updatedAt: t.updatedAt,
+        completedAt: t.completedAt,
+        focusSessions: t.focusSessions,
+      })),
+      features: project.features.map((f) => ({ status: f.status, updatedAt: f.updatedAt })),
+      bugs: project.bugs.map((b) => ({ status: b.status, severity: b.severity, updatedAt: b.updatedAt })),
     });
-    project.features.forEach((f) => activityDates.push(f.updatedAt));
-    project.bugs.forEach((b) => activityDates.push(b.updatedAt));
-
-    const latestActivity = new Date(Math.max(...activityDates.map((d) => d.getTime())));
-    const daysInactive = Math.floor((now.getTime() - latestActivity.getTime()) / msPerDay);
-    const isStale = daysInactive > 14;
-
-    // Bug ratio and firefighting signals
-    const openBugs = project.bugs.filter((b) => b.status === 'OPEN' || b.status === 'IN_PROGRESS');
-    const openFeatures = project.features.filter((f) => f.status === 'TODO' || f.status === 'IN_PROGRESS');
-    const openCriticalBugs = openBugs.filter((b) => b.severity === 'CRITICAL').length;
-    const isFirefighting = openBugs.length > openFeatures.length || openCriticalBugs > 0;
-
-    // Velocity trend (completed items in last 7 days vs prior 7 days)
-    const sevenDaysAgo = new Date(now.getTime() - 7 * msPerDay);
-    const fourteenDaysAgo = new Date(now.getTime() - 14 * msPerDay);
-
-    const completedLast7Days =
-      project.tasks.filter((t) => t.completedAt && t.completedAt >= sevenDaysAgo).length +
-      project.features.filter((f) => f.status === 'COMPLETED' && f.updatedAt >= sevenDaysAgo).length;
-
-    const completedPrior7Days =
-      project.tasks.filter((t) => t.completedAt && t.completedAt >= fourteenDaysAgo && t.completedAt < sevenDaysAgo).length +
-      project.features.filter((f) => f.status === 'COMPLETED' && f.updatedAt >= fourteenDaysAgo && f.updatedAt < sevenDaysAgo).length;
-
-    let velocityTrend: 'UP' | 'DOWN' | 'STABLE' = 'STABLE';
-    if (completedLast7Days > completedPrior7Days) {
-      velocityTrend = 'UP';
-    } else if (completedLast7Days < completedPrior7Days) {
-      velocityTrend = 'DOWN';
-    }
-
-    // Health categorization
-    let healthStatus: 'HEALTHY' | 'NEEDS_ATTENTION' | 'AT_RISK' = 'HEALTHY';
-    if (openCriticalBugs > 0 || isStale || (isFirefighting && openBugs.length >= 3)) {
-      healthStatus = 'AT_RISK';
-    } else if (isFirefighting || velocityTrend === 'DOWN') {
-      healthStatus = 'NEEDS_ATTENTION';
-    }
-
-    return {
-      healthStatus,
-      isStale,
-      daysInactive,
-      isFirefighting,
-      openBugs: openBugs.length,
-      openFeatures: openFeatures.length,
-      openCriticalBugs,
-      velocityTrend,
-      completedLast7Days,
-      completedPrior7Days,
-    };
   }
 
   /**
-   * List all projects for a user with computed stats, health badges, and focus hours
+   * List all projects for a user with computed stats, health badges, and focus hours.
+   * Health is computed in-memory via the shared computeHealthFromData helper —
+   * no extra DB calls per project.
    */
   async getProjects(userId: string, status?: string, page?: number, limit?: number) {
     const where: any = { userId };
@@ -212,12 +246,13 @@ export class ProjectsService {
             id: true,
             status: true,
             isCompleted: true,
+            updatedAt: true,
             completedAt: true,
-            focusSessions: { select: { durationMinutes: true } },
+            focusSessions: { select: { durationMinutes: true, startTime: true, updatedAt: true } },
           },
         },
-        features: { select: { id: true, status: true } },
-        bugs: { select: { id: true, status: true, severity: true } },
+        features: { select: { id: true, status: true, updatedAt: true } },
+        bugs: { select: { id: true, status: true, severity: true, updatedAt: true } },
       },
       orderBy: { updatedAt: 'desc' },
     });
@@ -251,17 +286,20 @@ export class ProjectsService {
 
       const finalProgress = project.manualProgress ? project.progress : computedProgress;
 
-      // Health status check
-      const daysInactive = Math.floor((Date.now() - project.updatedAt.getTime()) / (1000 * 60 * 60 * 24));
-      const isStale = daysInactive > 14;
-      const isFirefighting = openBugs.length > (project.features.length - completedFeatures) || openCriticalBugs > 0;
-
-      let healthStatus: 'HEALTHY' | 'NEEDS_ATTENTION' | 'AT_RISK' = 'HEALTHY';
-      if (openCriticalBugs > 0 || isStale) {
-        healthStatus = 'AT_RISK';
-      } else if (isFirefighting) {
-        healthStatus = 'NEEDS_ATTENTION';
-      }
+      // Delegate health to the shared helper — same thresholds as computeProjectHealth
+      const health = this.computeHealthFromData({
+        updatedAt: project.updatedAt,
+        tasks: project.tasks.map((t) => ({
+          updatedAt: t.updatedAt,
+          completedAt: t.completedAt,
+          focusSessions: t.focusSessions.map((fs) => ({
+            startTime: fs.startTime,
+            updatedAt: fs.updatedAt,
+          })),
+        })),
+        features: project.features.map((f) => ({ status: f.status, updatedAt: f.updatedAt })),
+        bugs: project.bugs.map((b) => ({ status: b.status, severity: b.severity, updatedAt: b.updatedAt })),
+      });
 
       results.push({
         id: project.id,
@@ -277,9 +315,9 @@ export class ProjectsService {
         updatedAt: project.updatedAt,
         totalFocusMinutes,
         totalFocusHours: Number((totalFocusMinutes / 60).toFixed(1)),
-        healthStatus,
-        isStale,
-        isFirefighting,
+        healthStatus: health.healthStatus,
+        isStale: health.isStale,
+        isFirefighting: health.isFirefighting,
         counts: {
           tasks: project.tasks.length,
           completedTasks,
@@ -310,7 +348,8 @@ export class ProjectsService {
   }
 
   /**
-   * Get single project details including features, bugs, tasks, health, and focus rollups
+   * Get single project details including features, bugs, tasks, health, and focus rollups.
+   * NOTE: webhookSecret is intentionally excluded from the response — it is write-only.
    */
   async getProjectById(userId: string, projectId: string) {
     const project = await prisma.project.findFirst({
@@ -344,13 +383,28 @@ export class ProjectsService {
       });
     });
 
+    // Explicit allowlist — never spread the raw Prisma row to avoid leaking webhookSecret
     return {
-      ...project,
+      id: project.id,
+      userId: project.userId,
+      title: project.title,
+      description: project.description,
+      status: project.status,
+      repoUrl: project.repoUrl,
+      technologies: project.technologies,
+      color: project.color,
+      manualProgress: project.manualProgress,
       progress: progressStats.progress,
       progressDetails: progressStats,
       health: healthStats,
+      features: project.features,
+      bugs: project.bugs,
+      tasks: project.tasks,
+      githubLinks: project.githubLinks,
       totalFocusMinutes,
       totalFocusHours: Number((totalFocusMinutes / 60).toFixed(1)),
+      createdAt: project.createdAt,
+      updatedAt: project.updatedAt,
     };
   }
 
@@ -391,21 +445,68 @@ export class ProjectsService {
     const updated = await prisma.project.update({
       where: { id: projectId },
       data: updateData,
+      include: {
+        features: { orderBy: { order: 'asc' } },
+        bugs: { orderBy: { order: 'asc' } },
+        tasks: {
+          orderBy: { order: 'asc' },
+          include: {
+            focusSessions: {
+              select: { id: true, durationMinutes: true, startTime: true, endTime: true, category: true },
+            },
+          },
+        },
+        githubLinks: true,
+      },
     });
 
-    if (!updated.manualProgress) {
-      await this.computeAndSyncProjectProgress(projectId);
-    }
+    // Single progress computation — not re-triggered by getProjectById
+    const progressStats = updated.manualProgress
+      ? { progress: updated.progress, formula: 'Manual override', deliverablesCompleted: 0, deliverablesTotal: 0, completedTasks: 0, totalTasks: 0, completedFeatures: 0, totalFeatures: 0, openBugsCount: 0, criticalBugsCount: 0, majorBugsCount: 0, bugPenalty: 0 }
+      : await this.computeAndSyncProjectProgress(projectId);
 
-    return this.getProjectById(userId, projectId);
+    const healthStats = await this.computeProjectHealth(projectId);
+
+    let totalFocusMinutes = 0;
+    updated.tasks.forEach((t) => {
+      t.focusSessions.forEach((fs) => {
+        totalFocusMinutes += fs.durationMinutes || 0;
+      });
+    });
+
+    // Safe serialization — webhookSecret excluded (same allowlist as getProjectById)
+    return {
+      id: updated.id,
+      userId: updated.userId,
+      title: updated.title,
+      description: updated.description,
+      status: updated.status,
+      repoUrl: updated.repoUrl,
+      technologies: updated.technologies,
+      color: updated.color,
+      manualProgress: updated.manualProgress,
+      progress: progressStats.progress,
+      progressDetails: progressStats,
+      health: healthStats,
+      features: updated.features,
+      bugs: updated.bugs,
+      tasks: updated.tasks,
+      githubLinks: updated.githubLinks,
+      totalFocusMinutes,
+      totalFocusHours: Number((totalFocusMinutes / 60).toFixed(1)),
+      createdAt: updated.createdAt,
+      updatedAt: updated.updatedAt,
+    };
   }
 
   async deleteProject(userId: string, projectId: string) {
     const existing = await prisma.project.findFirst({ where: { id: projectId, userId } });
     if (!existing) throw ApiError.notFound('Project not found');
 
-    await prisma.project.delete({ where: { id: projectId } });
-    return true;
+    return prisma.$transaction(async (tx) => {
+      await tx.project.delete({ where: { id: projectId } });
+      return true;
+    });
   }
 
   // ==========================================
@@ -420,40 +521,62 @@ export class ProjectsService {
     if (query.status) where.status = query.status;
     if (query.priority) where.priority = query.priority;
 
-    return prisma.feature.findMany({
-      where,
-      orderBy: { order: 'asc' },
-      include: { assignedTask: { select: { id: true, title: true, status: true } } },
-    });
+    const { page = 1, limit = 50 } = query;
+    const parsedPage = Math.max(1, parseInt(page, 10) || 1);
+    const parsedLimit = Math.min(200, Math.max(1, parseInt(limit, 10) || 50));
+    const skip = (parsedPage - 1) * parsedLimit;
+
+    const [items, total] = await Promise.all([
+      prisma.feature.findMany({
+        where,
+        orderBy: { order: 'asc' },
+        skip,
+        take: parsedLimit,
+        include: { assignedTask: { select: { id: true, title: true, status: true } } },
+      }),
+      prisma.feature.count({ where }),
+    ]);
+
+    return {
+      data: items,
+      meta: {
+        total,
+        page: parsedPage,
+        limit: parsedLimit,
+        totalPages: Math.ceil(total / parsedLimit),
+      },
+    };
   }
 
   async createFeature(userId: string, projectId: string, data: any) {
     const project = await prisma.project.findFirst({ where: { id: projectId, userId } });
     if (!project) throw ApiError.notFound('Project not found');
 
-    const lastFeature = await prisma.feature.findFirst({
-      where: { projectId },
-      orderBy: { order: 'desc' },
-      select: { order: true },
-    });
-    const order = data.order !== undefined ? Number(data.order) : (lastFeature?.order ?? 0) + 1000;
+    return prisma.$transaction(async (tx) => {
+      const lastFeature = await tx.feature.findFirst({
+        where: { projectId },
+        orderBy: { order: 'desc' },
+        select: { order: true },
+      });
+      const order = data.order !== undefined ? Number(data.order) : (lastFeature?.order ?? 0) + 1000;
 
-    const feature = await prisma.feature.create({
-      data: {
-        projectId,
-        name: data.name || data.title,
-        description: data.description || null,
-        status: data.status || 'TODO',
-        priority: data.priority || 'MEDIUM',
-        order,
-        githubIssueNumber: data.githubIssueNumber ? Number(data.githubIssueNumber) : null,
-        githubUrl: data.githubUrl || null,
-        assignedTaskId: data.assignedTaskId || null,
-      },
-    });
+      const feature = await tx.feature.create({
+        data: {
+          projectId,
+          name: data.name || data.title,
+          description: data.description || null,
+          status: data.status || 'TODO',
+          priority: data.priority || 'MEDIUM',
+          order,
+          githubIssueNumber: data.githubIssueNumber ? Number(data.githubIssueNumber) : null,
+          githubUrl: data.githubUrl || null,
+          assignedTaskId: data.assignedTaskId || null,
+        },
+      });
 
-    await this.computeAndSyncProjectProgress(projectId);
-    return feature;
+      await this.computeAndSyncProjectProgress(projectId, tx);
+      return feature;
+    });
   }
 
   async updateFeature(userId: string, projectId: string, featureId: string, data: any) {
@@ -474,13 +597,15 @@ export class ProjectsService {
     if (data.githubUrl !== undefined) updateData.githubUrl = data.githubUrl;
     if (data.assignedTaskId !== undefined) updateData.assignedTaskId = data.assignedTaskId;
 
-    const updated = await prisma.feature.update({
-      where: { id: featureId },
-      data: updateData,
-    });
+    return prisma.$transaction(async (tx) => {
+      const updated = await tx.feature.update({
+        where: { id: featureId },
+        data: updateData,
+      });
 
-    await this.computeAndSyncProjectProgress(projectId);
-    return updated;
+      await this.computeAndSyncProjectProgress(projectId, tx);
+      return updated;
+    });
   }
 
   async deleteFeature(userId: string, projectId: string, featureId: string) {
@@ -490,9 +615,11 @@ export class ProjectsService {
     const existing = await prisma.feature.findFirst({ where: { id: featureId, projectId } });
     if (!existing) throw ApiError.notFound('Feature not found');
 
-    await prisma.feature.delete({ where: { id: featureId } });
-    await this.computeAndSyncProjectProgress(projectId);
-    return true;
+    return prisma.$transaction(async (tx) => {
+      await tx.feature.delete({ where: { id: featureId } });
+      await this.computeAndSyncProjectProgress(projectId, tx);
+      return true;
+    });
   }
 
   // ==========================================
@@ -508,41 +635,63 @@ export class ProjectsService {
     if (query.priority) where.priority = query.priority;
     if (query.severity) where.severity = query.severity;
 
-    return prisma.bug.findMany({
-      where,
-      orderBy: { order: 'asc' },
-    });
+    const { page = 1, limit = 50 } = query;
+    const parsedPage = Math.max(1, parseInt(page, 10) || 1);
+    const parsedLimit = Math.min(200, Math.max(1, parseInt(limit, 10) || 50));
+    const skip = (parsedPage - 1) * parsedLimit;
+
+    const [items, total] = await Promise.all([
+      prisma.bug.findMany({
+        where,
+        orderBy: { order: 'asc' },
+        skip,
+        take: parsedLimit,
+      }),
+      prisma.bug.count({ where }),
+    ]);
+
+    return {
+      data: items,
+      meta: {
+        total,
+        page: parsedPage,
+        limit: parsedLimit,
+        totalPages: Math.ceil(total / parsedLimit),
+      },
+    };
   }
 
   async createBug(userId: string, projectId: string, data: any) {
     const project = await prisma.project.findFirst({ where: { id: projectId, userId } });
     if (!project) throw ApiError.notFound('Project not found');
 
-    const lastBug = await prisma.bug.findFirst({
-      where: { projectId },
-      orderBy: { order: 'desc' },
-      select: { order: true },
-    });
-    const order = data.order !== undefined ? Number(data.order) : (lastBug?.order ?? 0) + 1000;
+    return prisma.$transaction(async (tx) => {
+      const lastBug = await tx.bug.findFirst({
+        where: { projectId },
+        orderBy: { order: 'desc' },
+        select: { order: true },
+      });
+      const order = data.order !== undefined ? Number(data.order) : (lastBug?.order ?? 0) + 1000;
 
-    const bug = await prisma.bug.create({
-      data: {
-        projectId,
-        title: data.title,
-        description: data.description || '',
-        stepsToReproduce: data.stepsToReproduce || null,
-        severity: data.severity || 'MAJOR',
-        priority: data.priority || 'MEDIUM',
-        status: data.status || 'OPEN',
-        order,
-        githubIssueNumber: data.githubIssueNumber ? Number(data.githubIssueNumber) : null,
-        githubUrl: data.githubUrl || null,
-        resolutionNotes: data.resolutionNotes || null,
-      },
-    });
+      const bug = await tx.bug.create({
+        data: {
+          projectId,
+          title: data.title,
+          description: data.description || '',
+          stepsToReproduce: data.stepsToReproduce || null,
+          severity: data.severity || 'MAJOR',
+          priority: data.priority || 'MEDIUM',
+          status: data.status || 'OPEN',
+          order,
+          githubIssueNumber: data.githubIssueNumber ? Number(data.githubIssueNumber) : null,
+          githubUrl: data.githubUrl || null,
+          resolutionNotes: data.resolutionNotes || null,
+        },
+      });
 
-    await this.computeAndSyncProjectProgress(projectId);
-    return bug;
+      await this.computeAndSyncProjectProgress(projectId, tx);
+      return bug;
+    });
   }
 
   async updateBug(userId: string, projectId: string, bugId: string, data: any) {
@@ -571,13 +720,15 @@ export class ProjectsService {
     if (data.githubUrl !== undefined) updateData.githubUrl = data.githubUrl;
     if (data.resolutionNotes !== undefined) updateData.resolutionNotes = data.resolutionNotes;
 
-    const updated = await prisma.bug.update({
-      where: { id: bugId },
-      data: updateData,
-    });
+    return prisma.$transaction(async (tx) => {
+      const updated = await tx.bug.update({
+        where: { id: bugId },
+        data: updateData,
+      });
 
-    await this.computeAndSyncProjectProgress(projectId);
-    return updated;
+      await this.computeAndSyncProjectProgress(projectId, tx);
+      return updated;
+    });
   }
 
   async deleteBug(userId: string, projectId: string, bugId: string) {
@@ -587,9 +738,11 @@ export class ProjectsService {
     const existing = await prisma.bug.findFirst({ where: { id: bugId, projectId } });
     if (!existing) throw ApiError.notFound('Bug not found');
 
-    await prisma.bug.delete({ where: { id: bugId } });
-    await this.computeAndSyncProjectProgress(projectId);
-    return true;
+    return prisma.$transaction(async (tx) => {
+      await tx.bug.delete({ where: { id: bugId } });
+      await this.computeAndSyncProjectProgress(projectId, tx);
+      return true;
+    });
   }
 
   // ==========================================
@@ -707,85 +860,87 @@ export class ProjectsService {
 
     const { entityType, entityId, targetStatus, prevOrder, nextOrder } = payload;
 
-    let calculatedOrder: number;
-    if (prevOrder !== undefined && nextOrder !== undefined) {
-      calculatedOrder = (prevOrder + nextOrder) / 2;
-    } else if (nextOrder !== undefined) {
-      calculatedOrder = nextOrder > 1000 ? nextOrder - 1000 : nextOrder / 2;
-    } else if (prevOrder !== undefined) {
-      calculatedOrder = prevOrder + 1000;
-    } else {
-      calculatedOrder = 1000;
-    }
-
-    // Safety: if the precision gap is too small, renormalize the source column
-    const MIN_ORDER_GAP = 0.001;
-    if (
-      prevOrder !== undefined &&
-      nextOrder !== undefined &&
-      Math.abs(nextOrder - prevOrder) < MIN_ORDER_GAP
-    ) {
-      // Renormalize the target column after this update
-      await this.normalizeColumnOrder(projectId, entityType, targetStatus);
-      // After renormalization use a simple append order; the column is clean now
-      const last = await this.getLastOrderInColumn(projectId, entityType, targetStatus);
-      calculatedOrder = (last ?? 0) + 1000;
-    }
-
-    let entityStatus = targetStatus;
-    let isCompleted = false;
-
-    if (entityType === 'TASK') {
-      if (targetStatus === 'COMPLETED') {
-        entityStatus = 'COMPLETED';
-        isCompleted = true;
+    return prisma.$transaction(async (tx) => {
+      let calculatedOrder: number;
+      if (prevOrder !== undefined && nextOrder !== undefined) {
+        calculatedOrder = (prevOrder + nextOrder) / 2;
+      } else if (nextOrder !== undefined) {
+        calculatedOrder = nextOrder > 1000 ? nextOrder - 1000 : nextOrder / 2;
+      } else if (prevOrder !== undefined) {
+        calculatedOrder = prevOrder + 1000;
+      } else {
+        calculatedOrder = 1000;
       }
-      await prisma.task.update({
-        where: { id: entityId },
-        data: {
-          status: entityStatus,
-          isCompleted,
-          completedAt: isCompleted ? new Date() : null,
-          order: calculatedOrder,
-        },
-      });
-    } else if (entityType === 'FEATURE') {
-      await prisma.feature.update({
-        where: { id: entityId },
-        data: {
-          status: targetStatus,
-          order: calculatedOrder,
-        },
-      });
-    } else if (entityType === 'BUG') {
-      let bugStatus = 'OPEN';
-      let resolvedAt: Date | null = null;
-      if (targetStatus === 'COMPLETED') {
-        bugStatus = 'RESOLVED';
-        resolvedAt = new Date();
-      } else if (targetStatus === 'IN_PROGRESS') {
-        bugStatus = 'IN_PROGRESS';
+
+      // Safety: if the precision gap is too small, renormalize the source column
+      const MIN_ORDER_GAP = 0.001;
+      if (
+        prevOrder !== undefined &&
+        nextOrder !== undefined &&
+        Math.abs(nextOrder - prevOrder) < MIN_ORDER_GAP
+      ) {
+        // Renormalize the target column after this update
+        await this.normalizeColumnOrder(projectId, entityType, targetStatus, tx);
+        // After renormalization use a simple append order; the column is clean now
+        const last = await this.getLastOrderInColumn(projectId, entityType, targetStatus, tx);
+        calculatedOrder = (last ?? 0) + 1000;
       }
-      await prisma.bug.update({
-        where: { id: entityId },
-        data: {
-          status: bugStatus,
-          resolvedAt,
-          order: calculatedOrder,
-        },
-      });
-    }
 
-    const progress = await this.computeAndSyncProjectProgress(projectId);
+      let entityStatus = targetStatus;
+      let isCompleted = false;
 
-    return {
-      success: true,
-      entityType,
-      entityId,
-      newStatus: targetStatus,
-      newOrder: calculatedOrder,
-      projectProgress: progress.progress,
-    };
+      if (entityType === 'TASK') {
+        if (targetStatus === 'COMPLETED') {
+          entityStatus = 'COMPLETED';
+          isCompleted = true;
+        }
+        await tx.task.update({
+          where: { id: entityId },
+          data: {
+            status: entityStatus,
+            isCompleted,
+            completedAt: isCompleted ? new Date() : null,
+            order: calculatedOrder,
+          },
+        });
+      } else if (entityType === 'FEATURE') {
+        await tx.feature.update({
+          where: { id: entityId },
+          data: {
+            status: targetStatus,
+            order: calculatedOrder,
+          },
+        });
+      } else if (entityType === 'BUG') {
+        let bugStatus = 'OPEN';
+        let resolvedAt: Date | null = null;
+        if (targetStatus === 'COMPLETED') {
+          bugStatus = 'RESOLVED';
+          resolvedAt = new Date();
+        } else if (targetStatus === 'IN_PROGRESS') {
+          bugStatus = 'IN_PROGRESS';
+        }
+        await tx.bug.update({
+          where: { id: entityId },
+          data: {
+            status: bugStatus,
+            resolvedAt,
+            order: calculatedOrder,
+          },
+        });
+      }
+
+      const progress = await this.computeAndSyncProjectProgress(projectId, tx);
+
+      return {
+        success: true,
+        entityType,
+        entityId,
+        newStatus: targetStatus,
+        newOrder: calculatedOrder,
+        projectProgress: progress.progress,
+      };
+    });
   }
 
   /**
@@ -795,28 +950,29 @@ export class ProjectsService {
   private async normalizeColumnOrder(
     projectId: string,
     entityType: 'TASK' | 'FEATURE' | 'BUG',
-    columnStatus: string
+    columnStatus: string,
+    dbClient: any = prisma
   ): Promise<void> {
     if (entityType === 'TASK') {
-      const items = await prisma.task.findMany({
+      const items = await dbClient.task.findMany({
         where: { projectId, status: columnStatus },
         orderBy: { order: 'asc' },
         select: { id: true },
       });
       for (let i = 0; i < items.length; i++) {
-        await prisma.task.update({
+        await dbClient.task.update({
           where: { id: items[i].id },
           data: { order: (i + 1) * 1000 },
         });
       }
     } else if (entityType === 'FEATURE') {
-      const items = await prisma.feature.findMany({
+      const items = await dbClient.feature.findMany({
         where: { projectId, status: columnStatus },
         orderBy: { order: 'asc' },
         select: { id: true },
       });
       for (let i = 0; i < items.length; i++) {
-        await prisma.feature.update({
+        await dbClient.feature.update({
           where: { id: items[i].id },
           data: { order: (i + 1) * 1000 },
         });
@@ -830,13 +986,13 @@ export class ProjectsService {
         BLOCKED: [],
       };
       const statusFilter = bugStatusMap[columnStatus] ?? [];
-      const items = await prisma.bug.findMany({
+      const items = await dbClient.bug.findMany({
         where: { projectId, status: { in: statusFilter } },
         orderBy: { order: 'asc' },
         select: { id: true },
       });
       for (let i = 0; i < items.length; i++) {
-        await prisma.bug.update({
+        await dbClient.bug.update({
           where: { id: items[i].id },
           data: { order: (i + 1) * 1000 },
         });
@@ -850,24 +1006,25 @@ export class ProjectsService {
   private async getLastOrderInColumn(
     projectId: string,
     entityType: 'TASK' | 'FEATURE' | 'BUG',
-    columnStatus: string
+    columnStatus: string,
+    dbClient: any = prisma
   ): Promise<number | null> {
     if (entityType === 'TASK') {
-      const item = await prisma.task.findFirst({
+      const item = await dbClient.task.findFirst({
         where: { projectId, status: columnStatus },
         orderBy: { order: 'desc' },
         select: { order: true },
       });
       return item?.order ?? null;
     } else if (entityType === 'FEATURE') {
-      const item = await prisma.feature.findFirst({
+      const item = await dbClient.feature.findFirst({
         where: { projectId, status: columnStatus },
         orderBy: { order: 'desc' },
         select: { order: true },
       });
       return item?.order ?? null;
     } else {
-      const item = await prisma.bug.findFirst({
+      const item = await dbClient.bug.findFirst({
         where: { projectId },
         orderBy: { order: 'desc' },
         select: { order: true },
@@ -1058,6 +1215,7 @@ export class ProjectsService {
       return {
         repoUrl: null,
         commits: [],
+        errorCode: 'NO_REPO_URL' as const,
         message: 'No GitHub repository URL configured for this project',
       };
     }
@@ -1067,7 +1225,8 @@ export class ProjectsService {
       return {
         repoUrl: project.repoUrl,
         commits: [],
-        message: 'Invalid GitHub repository URL format',
+        errorCode: 'INVALID_REPO_URL' as const,
+        message: 'Repository URL does not match expected GitHub format (https://github.com/owner/repo)',
       };
     }
 
@@ -1089,12 +1248,30 @@ export class ProjectsService {
       });
 
       if (!res.ok) {
-        throw new Error(`GitHub API returned status ${res.status}`);
+        // Surface rate-limit specifics to the client without fake data
+        const errorCode = res.status === 403 || res.status === 429
+          ? 'GITHUB_RATE_LIMITED'
+          : 'GITHUB_API_ERROR';
+        return {
+          owner,
+          repo,
+          repoUrl: project.repoUrl,
+          commits: [],
+          errorCode: errorCode as 'GITHUB_RATE_LIMITED' | 'GITHUB_API_ERROR',
+          message: `Unable to sync remote commits (GitHub API ${res.status})`,
+        };
       }
 
       const data: any = await res.json();
       if (!Array.isArray(data)) {
-        throw new Error('Unexpected GitHub API response');
+        return {
+          owner,
+          repo,
+          repoUrl: project.repoUrl,
+          commits: [],
+          errorCode: 'GITHUB_UNEXPECTED_RESPONSE' as const,
+          message: 'Unable to sync remote commits (unexpected response format)',
+        };
       }
 
       const commits = data.map((c: any) => ({
@@ -1117,28 +1294,423 @@ export class ProjectsService {
         owner,
         repo,
         repoUrl: project.repoUrl,
-        isOfflineFallback: true,
-        message: 'Using local activity stream (GitHub API offline/rate-limited)',
-        commits: [
-          {
-            sha: 'a1b2c3d',
-            fullSha: 'a1b2c3d4e5f6g7h8i9j0',
-            message: `feat(${project.title.toLowerCase().replace(/\s+/g, '-')}): initial architecture setup`,
-            author: 'Developer',
-            date: project.createdAt.toISOString(),
-            url: `${project.repoUrl}/commits`,
-          },
-          {
-            sha: 'f8e7d6c',
-            fullSha: 'f8e7d6c5b4a3928170aa',
-            message: 'fix(core): resolve dependency lifecycle & state management',
-            author: 'Developer',
-            date: project.updatedAt.toISOString(),
-            url: `${project.repoUrl}/commits`,
-          },
-        ],
+        commits: [],
+        errorCode: 'GITHUB_NETWORK_ERROR' as const,
+        message: 'Unable to sync remote commits (network unreachable)',
       };
     }
+  }
+
+  // ==========================================
+  // GITHUB WEBHOOKS & ISSUE AUTOMATION
+  // ==========================================
+
+  verifyWebhookSignature(
+    payloadBuffer: Buffer | string,
+    signatureHeader?: string,
+    secret?: string
+  ): boolean {
+    if (!signatureHeader || !secret) {
+      return false;
+    }
+    try {
+      const hmac = crypto.createHmac('sha256', secret);
+      const computed = 'sha256=' + hmac.update(payloadBuffer).digest('hex');
+      const sigBuf = Buffer.from(signatureHeader);
+      const compBuf = Buffer.from(computed);
+      if (sigBuf.length !== compBuf.length) {
+        return false;
+      }
+      return crypto.timingSafeEqual(sigBuf, compBuf);
+    } catch {
+      return false;
+    }
+  }
+
+  async getProjectWebhookConfig(userId: string, projectId: string) {
+    const project = await prisma.project.findFirst({
+      where: { id: projectId, userId },
+      select: { id: true, webhookSecret: true, repoUrl: true },
+    });
+    if (!project) throw ApiError.notFound('Project not found');
+
+    const baseUrl = process.env.WEBHOOK_BASE_URL || process.env.BASE_URL || 'http://localhost:5000';
+    const webhookUrl = `${baseUrl}/api/v1/projects/${projectId}/webhooks/github`;
+
+    return {
+      projectId,
+      webhookUrl,
+      hasSecret: !!project.webhookSecret,
+      repoUrl: project.repoUrl,
+    };
+  }
+
+  async generateProjectWebhookSecret(userId: string, projectId: string) {
+    const project = await prisma.project.findFirst({
+      where: { id: projectId, userId },
+    });
+    if (!project) throw ApiError.notFound('Project not found');
+
+    const secret = crypto.randomBytes(24).toString('hex');
+    await prisma.project.update({
+      where: { id: projectId },
+      data: { webhookSecret: secret },
+    });
+
+    const baseUrl = process.env.WEBHOOK_BASE_URL || process.env.BASE_URL || 'http://localhost:5000';
+    const webhookUrl = `${baseUrl}/api/v1/projects/${projectId}/webhooks/github`;
+
+    return {
+      projectId,
+      webhookSecret: secret,
+      webhookUrl,
+      message: 'Webhook secret generated. Configure this secret in your GitHub repository webhook settings.',
+    };
+  }
+
+  async handleProjectGithubWebhook(
+    projectId: string,
+    event: string,
+    payload: any,
+    rawBody?: Buffer,
+    signatureHeader?: string
+  ) {
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+    });
+    if (!project) throw ApiError.notFound('Project not found');
+
+    const effectiveSecret = project.webhookSecret || process.env.GITHUB_WEBHOOK_SECRET;
+    if (effectiveSecret) {
+      const bodyToVerify = rawBody || Buffer.from(JSON.stringify(payload));
+      const isValid = this.verifyWebhookSignature(bodyToVerify, signatureHeader, effectiveSecret);
+      if (!isValid) {
+        throw ApiError.unauthorized('Invalid GitHub webhook HMAC signature');
+      }
+    }
+
+    const processedEvents: string[] = [];
+    const repoFullName = payload.repository?.full_name || 'unknown';
+
+    const result = await prisma.$transaction(async (tx) => {
+      // 1. Push Event (scan commit messages for fixes/closes/resolves #num)
+      if (event === 'push' && Array.isArray(payload.commits)) {
+        for (const commit of payload.commits) {
+          const message = commit.message || '';
+          const issueMatches = [...message.matchAll(/(?:fixes|closes|resolves)\s+#(\d+)/gi)];
+          for (const match of issueMatches) {
+            const issueNum = parseInt(match[1], 10);
+
+            // Complete task
+            const tasks = await tx.task.findMany({
+              where: { projectId: project.id, githubIssueNumber: issueNum, isCompleted: false },
+            });
+            for (const t of tasks) {
+              await tx.task.update({
+                where: { id: t.id },
+                data: { status: 'COMPLETED', isCompleted: true, completedAt: new Date() },
+              });
+              processedEvents.push(`Task ${t.title} completed via commit ${commit.id.substring(0, 7)}`);
+            }
+
+            // Complete feature
+            const features = await tx.feature.findMany({
+              where: { projectId: project.id, githubIssueNumber: issueNum, status: { not: 'COMPLETED' } },
+            });
+            for (const f of features) {
+              await tx.feature.update({
+                where: { id: f.id },
+                data: { status: 'COMPLETED' },
+              });
+              processedEvents.push(`Feature ${f.name} completed via commit ${commit.id.substring(0, 7)}`);
+            }
+
+            // Resolve bug
+            const bugs = await tx.bug.findMany({
+              where: {
+                projectId: project.id,
+                githubIssueNumber: issueNum,
+                status: { notIn: ['RESOLVED', 'CLOSED'] },
+              },
+            });
+            for (const b of bugs) {
+              await tx.bug.update({
+                where: { id: b.id },
+                data: { status: 'RESOLVED', resolvedAt: new Date() },
+              });
+              processedEvents.push(`Bug ${b.title} resolved via commit ${commit.id.substring(0, 7)}`);
+            }
+          }
+        }
+      }
+
+      // 2. Pull Request Event (merged PR closes linked items)
+      if (event === 'pull_request') {
+        const pr = payload.pull_request;
+        const action = payload.action;
+
+        if (action === 'closed' && pr?.merged) {
+          const prNumber = pr.number;
+          const links = await tx.githubLink.findMany({
+            where: { projectId: project.id, issueOrPrNumber: prNumber },
+          });
+
+          for (const link of links) {
+            if (link.entityType === 'TASK') {
+              await tx.task.update({
+                where: { id: link.entityId },
+                data: { status: 'COMPLETED', isCompleted: true, completedAt: new Date() },
+              });
+            } else if (link.entityType === 'FEATURE') {
+              await tx.feature.update({
+                where: { id: link.entityId },
+                data: { status: 'COMPLETED' },
+              });
+            } else if (link.entityType === 'BUG') {
+              await tx.bug.update({
+                where: { id: link.entityId },
+                data: { status: 'RESOLVED', resolvedAt: new Date() },
+              });
+            }
+            processedEvents.push(`PR #${prNumber} merged: closed ${link.entityType} ${link.entityId}`);
+          }
+
+          // Also check for issue closing references in PR body/title
+          const prText = `${pr.title || ''} ${pr.body || ''}`;
+          const matches = [...prText.matchAll(/(?:fixes|closes|resolves)\s+#(\d+)/gi)];
+          for (const match of matches) {
+            const issueNum = parseInt(match[1], 10);
+            await tx.task.updateMany({
+              where: { projectId: project.id, githubIssueNumber: issueNum },
+              data: { status: 'COMPLETED', isCompleted: true, completedAt: new Date() },
+            });
+            await tx.feature.updateMany({
+              where: { projectId: project.id, githubIssueNumber: issueNum },
+              data: { status: 'COMPLETED' },
+            });
+            await tx.bug.updateMany({
+              where: { projectId: project.id, githubIssueNumber: issueNum },
+              data: { status: 'RESOLVED', resolvedAt: new Date() },
+            });
+            processedEvents.push(`PR #${prNumber} resolved linked issue #${issueNum}`);
+          }
+        }
+      }
+
+      // 3. Issues Event (auto-import and auto-status)
+      if (event === 'issues') {
+        const issue = payload.issue;
+        const action = payload.action;
+
+        if (action === 'opened' && issue) {
+          const isBug = issue.labels?.some((l: any) =>
+            l.name?.toLowerCase().includes('bug')
+          );
+          if (isBug) {
+            const lastBug = await tx.bug.findFirst({
+              where: { projectId: project.id },
+              orderBy: { order: 'desc' },
+              select: { order: true },
+            });
+            const bug = await tx.bug.create({
+              data: {
+                projectId: project.id,
+                title: issue.title,
+                description: issue.body || 'Issue imported via GitHub webhook',
+                severity: 'MAJOR',
+                priority: 'MEDIUM',
+                status: 'OPEN',
+                order: (lastBug?.order ?? 0) + 1000,
+                githubIssueNumber: issue.number,
+                githubUrl: issue.html_url,
+              },
+            });
+            await tx.githubLink.upsert({
+              where: {
+                repoFullName_issueOrPrNumber_entityType_entityId: {
+                  repoFullName,
+                  issueOrPrNumber: issue.number,
+                  entityType: 'BUG',
+                  entityId: bug.id,
+                },
+              },
+              update: {},
+              create: {
+                projectId: project.id,
+                repoFullName,
+                issueOrPrNumber: issue.number,
+                entityType: 'BUG',
+                entityId: bug.id,
+              },
+            });
+            processedEvents.push(`Created bug for GitHub issue #${issue.number}`);
+          } else {
+            const lastFeature = await tx.feature.findFirst({
+              where: { projectId: project.id },
+              orderBy: { order: 'desc' },
+              select: { order: true },
+            });
+            const feature = await tx.feature.create({
+              data: {
+                projectId: project.id,
+                name: issue.title,
+                description: issue.body || 'Feature imported via GitHub webhook',
+                status: 'TODO',
+                priority: 'MEDIUM',
+                order: (lastFeature?.order ?? 0) + 1000,
+                githubIssueNumber: issue.number,
+                githubUrl: issue.html_url,
+              },
+            });
+            await tx.githubLink.upsert({
+              where: {
+                repoFullName_issueOrPrNumber_entityType_entityId: {
+                  repoFullName,
+                  issueOrPrNumber: issue.number,
+                  entityType: 'FEATURE',
+                  entityId: feature.id,
+                },
+              },
+              update: {},
+              create: {
+                projectId: project.id,
+                repoFullName,
+                issueOrPrNumber: issue.number,
+                entityType: 'FEATURE',
+                entityId: feature.id,
+              },
+            });
+            processedEvents.push(`Created feature for GitHub issue #${issue.number}`);
+          }
+        } else if (action === 'closed' && issue) {
+          await tx.bug.updateMany({
+            where: { projectId: project.id, githubIssueNumber: issue.number },
+            data: { status: 'RESOLVED', resolvedAt: new Date() },
+          });
+          await tx.feature.updateMany({
+            where: { projectId: project.id, githubIssueNumber: issue.number },
+            data: { status: 'COMPLETED' },
+          });
+          processedEvents.push(`Closed issue #${issue.number}`);
+        } else if (action === 'reopened' && issue) {
+          await tx.bug.updateMany({
+            where: { projectId: project.id, githubIssueNumber: issue.number },
+            data: { status: 'OPEN', resolvedAt: null },
+          });
+          await tx.feature.updateMany({
+            where: { projectId: project.id, githubIssueNumber: issue.number },
+            data: { status: 'TODO' },
+          });
+          processedEvents.push(`Reopened issue #${issue.number}`);
+        }
+      }
+
+      // Recalculate auto progress within the same transaction
+      const progress = await this.computeAndSyncProjectProgress(project.id, tx);
+
+      return {
+        handled: true,
+        event,
+        projectId: project.id,
+        processedEvents,
+        updatedProgress: progress.progress,
+      };
+    });
+
+    // Broadcast real-time project:updated event to connected clients
+    projectEventBus.emitProjectUpdate(projectId, {
+      type: 'GITHUB_WEBHOOK',
+      event,
+      details: result,
+    });
+
+    return result;
+  }
+
+  // ==========================================
+  // GITHUB ENTITY LINKS CRUD
+  // ==========================================
+
+  async getProjectGithubLinks(userId: string, projectId: string) {
+    const project = await prisma.project.findFirst({
+      where: { id: projectId, userId },
+    });
+    if (!project) throw ApiError.notFound('Project not found');
+
+    return prisma.githubLink.findMany({
+      where: { projectId },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async linkGithubEntity(
+    userId: string,
+    projectId: string,
+    data: {
+      entityType: 'TASK' | 'FEATURE' | 'BUG';
+      entityId: string;
+      issueOrPrNumber: number;
+      repoFullName: string;
+    }
+  ) {
+    const project = await prisma.project.findFirst({
+      where: { id: projectId, userId },
+    });
+    if (!project) throw ApiError.notFound('Project not found');
+
+    const link = await prisma.githubLink.upsert({
+      where: {
+        repoFullName_issueOrPrNumber_entityType_entityId: {
+          repoFullName: data.repoFullName,
+          issueOrPrNumber: Number(data.issueOrPrNumber),
+          entityType: data.entityType,
+          entityId: data.entityId,
+        },
+      },
+      update: {},
+      create: {
+        projectId,
+        repoFullName: data.repoFullName,
+        issueOrPrNumber: Number(data.issueOrPrNumber),
+        entityType: data.entityType,
+        entityId: data.entityId,
+      },
+    });
+
+    // Also update githubIssueNumber on the entity itself
+    if (data.entityType === 'TASK') {
+      await prisma.task.update({
+        where: { id: data.entityId },
+        data: { githubIssueNumber: Number(data.issueOrPrNumber) },
+      });
+    } else if (data.entityType === 'FEATURE') {
+      await prisma.feature.update({
+        where: { id: data.entityId },
+        data: { githubIssueNumber: Number(data.issueOrPrNumber) },
+      });
+    } else if (data.entityType === 'BUG') {
+      await prisma.bug.update({
+        where: { id: data.entityId },
+        data: { githubIssueNumber: Number(data.issueOrPrNumber) },
+      });
+    }
+
+    return link;
+  }
+
+  async unlinkGithubEntity(userId: string, projectId: string, linkId: string) {
+    const project = await prisma.project.findFirst({
+      where: { id: projectId, userId },
+    });
+    if (!project) throw ApiError.notFound('Project not found');
+
+    const link = await prisma.githubLink.findFirst({
+      where: { id: linkId, projectId },
+    });
+    if (!link) throw ApiError.notFound('GitHub link not found');
+
+    await prisma.githubLink.delete({ where: { id: linkId } });
+    return true;
   }
 }
 
