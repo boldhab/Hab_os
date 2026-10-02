@@ -74,6 +74,17 @@ class ProjectOverviewModel {
   }
 }
 
+String? _extractMilestone(String? desc) {
+  if (desc == null || desc.isEmpty) return null;
+  final match = RegExp(r'\[(?:Milestone|Sprint):\s*([^\]]+)\]', caseSensitive: false).firstMatch(desc);
+  return match?.group(1)?.trim();
+}
+
+String _cleanDescription(String? desc) {
+  if (desc == null) return '';
+  return desc.replaceAll(RegExp(r'\s*\[(?:Milestone|Sprint):\s*[^\]]+\]\s*', caseSensitive: false), '').trim();
+}
+
 class FeatureItemModel {
   final String id;
   final String name;
@@ -84,6 +95,7 @@ class FeatureItemModel {
   final int? githubIssueNumber;
   final String? githubUrl;
   final String? assignedTaskId;
+  final String? milestone;
 
   FeatureItemModel({
     required this.id,
@@ -95,19 +107,25 @@ class FeatureItemModel {
     this.githubIssueNumber,
     this.githubUrl,
     this.assignedTaskId,
+    this.milestone,
   });
 
   factory FeatureItemModel.fromJson(Map<String, dynamic> json) {
+    final rawDesc = json['description'] as String?;
+    final milestone = json['milestone'] as String? ?? _extractMilestone(rawDesc);
+    final cleanDesc = rawDesc != null ? _cleanDescription(rawDesc) : null;
+
     return FeatureItemModel(
       id: json['id'] ?? '',
       name: json['name'] ?? json['title'] ?? '',
-      description: json['description'],
+      description: cleanDesc?.isNotEmpty == true ? cleanDesc : (rawDesc?.isNotEmpty == true ? rawDesc : null),
       status: json['status'] ?? 'TODO',
       priority: json['priority'] ?? 'MEDIUM',
       order: (json['order'] as num?)?.toDouble() ?? 0.0,
       githubIssueNumber: json['githubIssueNumber'] as int?,
       githubUrl: json['githubUrl'],
       assignedTaskId: json['assignedTaskId'],
+      milestone: milestone,
     );
   }
 }
@@ -125,6 +143,7 @@ class BugItemModel {
   final String? githubUrl;
   final DateTime? resolvedAt;
   final String? resolutionNotes;
+  final String? milestone;
 
   BugItemModel({
     required this.id,
@@ -139,13 +158,18 @@ class BugItemModel {
     this.githubUrl,
     this.resolvedAt,
     this.resolutionNotes,
+    this.milestone,
   });
 
   factory BugItemModel.fromJson(Map<String, dynamic> json) {
+    final rawDesc = json['description'] as String? ?? '';
+    final milestone = json['milestone'] as String? ?? _extractMilestone(rawDesc);
+    final cleanDesc = _cleanDescription(rawDesc);
+
     return BugItemModel(
       id: json['id'] ?? '',
       title: json['title'] ?? '',
-      description: json['description'] ?? '',
+      description: cleanDesc.isNotEmpty ? cleanDesc : rawDesc,
       stepsToReproduce: json['stepsToReproduce'],
       severity: json['severity'] ?? 'MAJOR',
       priority: json['priority'] ?? 'MEDIUM',
@@ -157,6 +181,7 @@ class BugItemModel {
           ? DateTime.tryParse(json['resolvedAt'])
           : null,
       resolutionNotes: json['resolutionNotes'],
+      milestone: milestone,
     );
   }
 }
@@ -172,6 +197,7 @@ class KanbanCardModel {
   final double order;
   final int? githubIssueNumber;
   final bool isCompleted;
+  final String? milestone;
 
   KanbanCardModel({
     required this.id,
@@ -184,20 +210,26 @@ class KanbanCardModel {
     required this.order,
     this.githubIssueNumber,
     this.isCompleted = false,
+    this.milestone,
   });
 
   factory KanbanCardModel.fromJson(Map<String, dynamic> json) {
+    final rawDesc = json['description'] as String?;
+    final milestone = json['milestone'] as String? ?? _extractMilestone(rawDesc);
+    final cleanDesc = rawDesc != null ? _cleanDescription(rawDesc) : null;
+
     return KanbanCardModel(
       id: json['id'] ?? '',
       type: json['type'] ?? 'TASK',
       title: json['title'] ?? '',
-      description: json['description'],
+      description: cleanDesc?.isNotEmpty == true ? cleanDesc : rawDesc,
       status: json['status'] ?? 'TODO',
       priority: json['priority'] ?? 'MEDIUM',
       severity: json['severity'],
       order: (json['order'] as num?)?.toDouble() ?? 0.0,
       githubIssueNumber: json['githubIssueNumber'] as int?,
       isCompleted: json['isCompleted'] == true,
+      milestone: milestone,
     );
   }
 }
@@ -390,3 +422,48 @@ class CommitItemModel {
     );
   }
 }
+
+/// Typed result returned when fetching remote Git commits.
+class CommitsResult {
+  final List<CommitItemModel> commits;
+  final String? errorCode;
+  final String? message;
+
+  const CommitsResult({
+    required this.commits,
+    this.errorCode,
+    this.message,
+  });
+
+  bool get hasError => errorCode != null;
+}
+
+/// Generic container for paginated API collections.
+class PaginatedList<T> {
+  final List<T> items;
+  final int total;
+  final int page;
+  final int limit;
+  final int totalPages;
+
+  const PaginatedList({
+    required this.items,
+    required this.total,
+    required this.page,
+    required this.limit,
+    required this.totalPages,
+  });
+
+  bool get hasMore => page < totalPages;
+
+  PaginatedList<T> copyWithAppended(List<T> newItems, int newPage) {
+    return PaginatedList<T>(
+      items: [...items, ...newItems],
+      total: total,
+      page: newPage,
+      limit: limit,
+      totalPages: totalPages,
+    );
+  }
+}
+
