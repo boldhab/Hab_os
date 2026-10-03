@@ -9,12 +9,16 @@ class TaskFormDialog extends ConsumerStatefulWidget {
   final TaskModel? task;
   final String? initialGoalId;
   final String? initialMilestoneId;
+  /// Pre-selects the linked project dropdown. Pass the current project's id
+  /// when opening this dialog from within a [ProjectDetailScreen] context.
+  final String? initialProjectId;
 
   const TaskFormDialog({
     super.key,
     this.task,
     this.initialGoalId,
     this.initialMilestoneId,
+    this.initialProjectId,
   });
 
   @override
@@ -50,7 +54,8 @@ class _TaskFormDialogState extends ConsumerState<TaskFormDialog> {
         TextEditingController(text: t?.estimatedMinutes?.toString() ?? '');
     _priority = t?.priority ?? 'MEDIUM';
     _status = t?.status ?? 'TODO';
-    _selectedProjectId = t?.projectId ?? t?.project?.id;
+    // initialProjectId takes precedence — allows pre-selection from ProjectDetailScreen
+    _selectedProjectId = widget.initialProjectId ?? t?.projectId ?? t?.project?.id;
     _selectedGoalId = widget.initialGoalId ?? t?.goalId ?? t?.goal?.id;
     _selectedMilestoneId = widget.initialMilestoneId ?? t?.milestoneId;
     _isRecurring = t?.isRecurring ?? false;

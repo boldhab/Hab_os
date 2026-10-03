@@ -479,6 +479,7 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
         required status,
         repoUrl,
         required technologies,
+        color = '#10B981',
       }) async {
         await ref.read(projectsControllerProvider).createProject(
               title: title,
@@ -486,6 +487,7 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
               status: status,
               repoUrl: repoUrl,
               technologies: technologies,
+              color: color,
             );
       },
     );

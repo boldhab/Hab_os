@@ -12,6 +12,7 @@ class FocusState {
   final int remainingSeconds;
   final String category;
   final String? activeSessionId;
+  final String? activeTaskId;
   final DateTime? sessionStartTime;
   final List<FocusSessionModel> todaySessions;
   final FocusStatsModel? todayStats;
@@ -24,6 +25,7 @@ class FocusState {
     this.remainingSeconds = 25 * 60,
     this.category = 'CODING',
     this.activeSessionId,
+    this.activeTaskId,
     this.sessionStartTime,
     this.todaySessions = const [],
     this.todayStats,
@@ -37,6 +39,7 @@ class FocusState {
     int? remainingSeconds,
     String? category,
     String? activeSessionId,
+    String? activeTaskId,
     DateTime? sessionStartTime,
     List<FocusSessionModel>? todaySessions,
     FocusStatsModel? todayStats,
@@ -49,6 +52,7 @@ class FocusState {
       remainingSeconds: remainingSeconds ?? this.remainingSeconds,
       category: category ?? this.category,
       activeSessionId: activeSessionId ?? this.activeSessionId,
+      activeTaskId: activeTaskId ?? this.activeTaskId,
       sessionStartTime: sessionStartTime ?? this.sessionStartTime,
       todaySessions: todaySessions ?? this.todaySessions,
       todayStats: todayStats ?? this.todayStats,
@@ -107,16 +111,27 @@ class FocusNotifier extends StateNotifier<FocusState> {
     state = state.copyWith(category: category);
   }
 
-  Future<void> startTimer() async {
+  Future<void> startTimer({
+    String? taskId,
+    String? notes,
+    String? category,
+  }) async {
     if (state.status == PomodoroStatus.running) return;
+
+    final targetCategory = category ?? state.category;
+    final targetTaskId = taskId ?? state.activeTaskId;
 
     if (state.status == PomodoroStatus.idle) {
       try {
         final session = await _repository.startSession(
-          category: state.category,
+          category: targetCategory,
+          taskId: targetTaskId,
+          notes: notes,
         );
         state = state.copyWith(
           status: PomodoroStatus.running,
+          category: targetCategory,
+          activeTaskId: targetTaskId,
           activeSessionId: session.id,
           sessionStartTime: DateTime.now(),
         );
@@ -124,6 +139,8 @@ class FocusNotifier extends StateNotifier<FocusState> {
         // Fallback local start if network fails
         state = state.copyWith(
           status: PomodoroStatus.running,
+          category: targetCategory,
+          activeTaskId: targetTaskId,
           sessionStartTime: DateTime.now(),
         );
       }
@@ -158,6 +175,7 @@ class FocusNotifier extends StateNotifier<FocusState> {
       status: PomodoroStatus.idle,
       remainingSeconds: state.targetMinutes * 60,
       activeSessionId: null,
+      activeTaskId: null,
       sessionStartTime: null,
     );
   }
@@ -172,6 +190,7 @@ class FocusNotifier extends StateNotifier<FocusState> {
         await _repository.endSession(
           state.activeSessionId!,
           durationMinutes: elapsedMinutes,
+          taskId: state.activeTaskId,
         );
       } catch (_) {}
     } else if (state.sessionStartTime != null) {
@@ -182,6 +201,7 @@ class FocusNotifier extends StateNotifier<FocusState> {
           endTime: endTime.toIso8601String(),
           durationMinutes: elapsedMinutes,
           category: state.category,
+          taskId: state.activeTaskId,
         );
       } catch (_) {}
     }
