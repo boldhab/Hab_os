@@ -18,10 +18,7 @@ const envSchema = Joi.object({
     .valid('development', 'production', 'test')
     .default('development'),
   PORT: Joi.number().port().default(5000),
-  DATABASE_URL: Joi.string().required().messages({
-    'any.required': 'DATABASE_URL is required for database connections',
-    'string.empty': 'DATABASE_URL cannot be empty',
-  }),
+  DATABASE_URL: Joi.string().allow('').optional().default(''),
   JWT_SECRET: Joi.string().required().min(16).messages({
     'any.required': 'JWT_SECRET is required to sign access tokens',
     'string.min': 'JWT_SECRET must be at least 16 characters long',
@@ -33,6 +30,13 @@ const envSchema = Joi.object({
   JWT_EXPIRES_IN: Joi.string().default('15m'),
   JWT_REFRESH_EXPIRES_IN: Joi.string().default('30d'),
   ALLOWED_ORIGINS: Joi.string().allow('').optional(),
+  GOOGLE_CLIENT_ID: Joi.string().allow('').optional().default(''),
+  GOOGLE_CLIENT_SECRET: Joi.string().allow('').optional().default(''),
+  GOOGLE_CALLBACK_URL: Joi.string()
+    .allow('')
+    .optional()
+    .default('http://localhost:5000/api/v1/auth/google/callback'),
+  FRONTEND_URL: Joi.string().allow('').optional().default('http://localhost:5000'),
 }).unknown(true);
 
 const { error, value: envVars } = envSchema.validate(process.env, {
@@ -72,6 +76,10 @@ export interface EnvironmentConfig {
   JWT_EXPIRES_IN: string;
   JWT_REFRESH_EXPIRES_IN: string;
   ALLOWED_ORIGINS?: string;
+  GOOGLE_CLIENT_ID: string;
+  GOOGLE_CLIENT_SECRET: string;
+  GOOGLE_CALLBACK_URL: string;
+  FRONTEND_URL: string;
 }
 
 export const env: EnvironmentConfig = {
@@ -83,6 +91,11 @@ export const env: EnvironmentConfig = {
   JWT_EXPIRES_IN: envVars.JWT_EXPIRES_IN,
   JWT_REFRESH_EXPIRES_IN: envVars.JWT_REFRESH_EXPIRES_IN,
   ALLOWED_ORIGINS: envVars.ALLOWED_ORIGINS,
+  GOOGLE_CLIENT_ID: envVars.GOOGLE_CLIENT_ID || '',
+  GOOGLE_CLIENT_SECRET: envVars.GOOGLE_CLIENT_SECRET || '',
+  GOOGLE_CALLBACK_URL:
+    envVars.GOOGLE_CALLBACK_URL || 'http://localhost:5000/api/v1/auth/google/callback',
+  FRONTEND_URL: envVars.FRONTEND_URL || 'http://localhost:5000',
 };
 
 export default env;
