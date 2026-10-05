@@ -1,3 +1,5 @@
+import path from 'path';
+import fs from 'fs';
 import express, { Request, Response } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -56,7 +58,12 @@ const corsOptions: cors.CorsOptions = {
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
 };
 
-app.use(helmet());
+app.use(
+  helmet({
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false,
+  })
+);
 app.use(cors(corsOptions));
 app.use(
   express.json({
@@ -67,13 +74,33 @@ app.use(
 );
 app.use(morgan('dev'));
 
+// Static serving for built Flutter client
+const clientBuildPath = path.resolve(__dirname, '../../client/build/web');
+const hasClientBuild = fs.existsSync(clientBuildPath);
+
+if (hasClientBuild) {
+  app.use(express.static(clientBuildPath));
+}
+
 // Rate limit all /api/ endpoints
 app.use('/api/', apiLimiter);
 
-// Health Check
+// Health & Root Status
 app.get('/health', (_req: Request, res: Response) => {
   res.json({ status: 'ok', timestamp: new Date() });
 });
+
+if (!hasClientBuild) {
+  app.get('/', (_req: Request, res: Response) => {
+    res.json({
+      name: 'HABos API',
+      status: 'running',
+      version: '1.0.0',
+      documentation: '/api/v1',
+      health: '/health',
+    });
+  });
+}
 
 // Domain API Routes (Complete 24 Modules)
 app.use('/api/v1/auth', authRoutes);
@@ -95,6 +122,16 @@ app.use('/api/v1/notifications', notificationRoutes);
 app.use('/api/v1/integrations', integrationRoutes);
 app.use('/api/v1/tech', techRoutes);
 app.use('/api/v1/analytics', analyticsRoutes);
+
+// SPA Client Routing fallback
+if (hasClientBuild) {
+  app.get('*', (req: Request, res: Response, next) => {
+    if (req.path.startsWith('/api/') || req.path === '/health') {
+      return next();
+    }
+    res.sendFile(path.join(clientBuildPath, 'index.html'));
+  });
+}
 
 // Global Error Handler
 app.use(errorHandler);

@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import '../../presentation/providers/auth_provider.dart';
 import '../../presentation/screens/auth/login_screen.dart';
 import '../../presentation/screens/auth/register_screen.dart';
+import '../../presentation/screens/auth/auth_callback_screen.dart';
 import '../../presentation/screens/dashboard/dashboard_screen.dart';
 import '../../presentation/screens/habits/habits_screen.dart';
 import '../../presentation/screens/tasks/tasks_screen.dart';
@@ -29,7 +30,7 @@ final routerProvider = Provider<GoRouter>((ref) {
     redirect: (context, state) {
       final isAuth = authState.status == AuthStatus.authenticated;
       final loc = state.matchedLocation;
-      final isPublic = loc == '/login' || loc == '/register';
+      final isPublic = loc == '/login' || loc == '/register' || loc == '/auth/callback';
 
       // Still resolving — don't redirect yet
       if (authState.status == AuthStatus.initial ||
@@ -38,7 +39,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       }
 
       if (!isAuth && !isPublic) return '/login';
-      if (isAuth && isPublic) return '/';
+      if (isAuth && (loc == '/login' || loc == '/register')) return '/';
       return null;
     },
     routes: [
@@ -50,6 +51,19 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/register',
         builder: (context, state) => const RegisterScreen(),
+      ),
+      GoRoute(
+        path: '/auth/callback',
+        builder: (context, state) {
+          final token = state.uri.queryParameters['token'];
+          final refreshToken = state.uri.queryParameters['refreshToken'];
+          final error = state.uri.queryParameters['error'];
+          return AuthCallbackScreen(
+            token: token,
+            refreshToken: refreshToken,
+            error: error,
+          );
+        },
       ),
 
       // ── Authenticated shell (persistent bottom nav) ─────────────────

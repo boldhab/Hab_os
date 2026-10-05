@@ -6,13 +6,21 @@ export const registerSchema = Joi.object({
     'string.email': 'Please provide a valid email address',
     'any.required': 'Email address is required',
   }),
-  password: Joi.string().min(8).required().messages({
-    'string.min': 'Password must be at least 8 characters long',
+  password: Joi.string().min(6).required().messages({
+    'string.min': 'Password must be at least 6 characters long',
     'any.required': 'Password is required',
   }),
   timezone: Joi.string().trim().default('UTC'),
   dateFormat: Joi.string().trim().default('YYYY-MM-DD'),
 });
+
+export const googleAuthSchema = Joi.object({
+  idToken: Joi.string().allow('', null),
+  email: Joi.string().trim().email().allow('', null),
+  name: Joi.string().trim().max(100).allow('', null),
+  avatarUrl: Joi.string().allow('', null),
+  googleId: Joi.string().trim().allow('', null),
+}).or('idToken', 'email');
 
 export const loginSchema = Joi.object({
   email: Joi.string().trim().email().required().messages({
