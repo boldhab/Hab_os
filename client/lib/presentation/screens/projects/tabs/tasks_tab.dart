@@ -30,15 +30,11 @@ class TasksTab extends ConsumerWidget {
           );
         }
 
-        final todo =
-            tasks.where((t) => !t.isCompleted && t.status == 'TODO').toList();
-        final inProgress = tasks
-            .where((t) => !t.isCompleted && t.status == 'IN_PROGRESS')
-            .toList();
-        final blocked = tasks
-            .where((t) => !t.isCompleted && t.status == 'BLOCKED')
-            .toList();
-        final done = tasks.where((t) => t.isCompleted).toList();
+        final grouped = ref.watch(projectTasksGroupedProvider(projectId));
+        final todo = grouped['TODO'] ?? const [];
+        final inProgress = grouped['IN_PROGRESS'] ?? const [];
+        final blocked = grouped['BLOCKED'] ?? const [];
+        final done = grouped['COMPLETED'] ?? const [];
 
         return RefreshIndicator(
           color: primaryRed,
@@ -246,19 +242,43 @@ class TasksTab extends ConsumerWidget {
   }
 
   void _showAddTask(BuildContext context, WidgetRef ref) async {
-    final result = await showModalBottomSheet<Map<String, dynamic>>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => TaskFormDialog(
-        task: null,
-        initialProjectId: projectId,
-      ),
-    );
-    if (result != null) {
-      result.putIfAbsent('projectId', () => projectId);
-      await ref.read(tasksProvider.notifier).createTask(result);
-      ref.invalidate(projectTasksProvider(projectId));
+    try {
+      final result = await showModalBottomSheet<Map<String, dynamic>>(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (_) => TaskFormDialog(
+          task: null,
+          initialProjectId: projectId,
+        ),
+      );
+      if (result != null) {
+        result.putIfAbsent('projectId', () => projectId);
+        final success = await ref.read(tasksProvider.notifier).createTask(result);
+        if (!success && context.mounted) {
+          final errorMsg =
+              ref.read(tasksProvider).errorMessage ?? 'Failed to create task';
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(errorMsg),
+              backgroundColor: AppSemanticColors.of(context).danger,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        } else {
+          ref.invalidate(projectTasksProvider(projectId));
+        }
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString()),
+            backgroundColor: AppSemanticColors.of(context).danger,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
     }
   }
 }

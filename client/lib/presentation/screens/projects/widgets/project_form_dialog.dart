@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../app/theme/app_theme.dart';
+import '../../../widgets/common/form_section_header.dart';
 import '../dialogs/edit_project_dialog.dart';
 
 class ProjectFormDialog extends StatefulWidget {
@@ -73,7 +74,6 @@ class _ProjectFormDialogState extends State<ProjectFormDialog> {
 
   String _status = 'IN_PROGRESS';
   Color _selectedColor = kProjectColorPresets[0];
-  bool _showMoreOptions = false;
   bool _isSaving = false;
 
   static const _statuses = [
@@ -135,7 +135,6 @@ class _ProjectFormDialogState extends State<ProjectFormDialog> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final primaryRed = colorScheme.primary;
 
     return Container(
       decoration: BoxDecoration(
@@ -146,18 +145,44 @@ class _ProjectFormDialogState extends State<ProjectFormDialog> {
         key: _formKey,
         child: Column(
           children: [
-            // Sticky Header
+            // Header with badge and title
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 16, 16, 12),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    'New Project',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w800,
-                          fontSize: 18,
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: colorScheme.primary.withAlpha(25),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(
+                      Icons.rocket_launch_rounded,
+                      color: colorScheme.primary,
+                      size: 22,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'New Project',
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 18,
+                              ),
                         ),
+                        Text(
+                          'Set up repository, tech stack & details',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                   IconButton(
                     icon: const Icon(Icons.close_rounded),
@@ -174,56 +199,64 @@ class _ProjectFormDialogState extends State<ProjectFormDialog> {
                 controller: widget.scrollController,
                 padding: const EdgeInsets.all(AppSpacing.lg),
                 children: [
-                  // Title Field
+                  // Section: Project Details
+                  const FormSectionHeader(
+                    title: 'PROJECT IDENTITY',
+                    icon: Icons.workspaces_rounded,
+                  ),
+                  const SizedBox(height: 10),
                   TextFormField(
                     controller: _titleController,
-                    style: const TextStyle(
-                        fontSize: 18, fontWeight: FontWeight.w700),
-                    decoration: InputDecoration(
-                      hintText: 'Project Name *',
-                      hintStyle: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w500,
-                        color: colorScheme.onSurfaceVariant.withAlpha(120),
-                      ),
-                      border: InputBorder.none,
-                      contentPadding: EdgeInsets.zero,
+                    textInputAction: TextInputAction.next,
+                    decoration: const InputDecoration(
+                      labelText: 'Project Name *',
+                      hintText: 'e.g. HABos Core, Mobile App',
+                      prefixIcon: Icon(Icons.folder_outlined),
                     ),
                     validator: (val) => val == null || val.trim().isEmpty
                         ? 'Project title is required'
                         : null,
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 20),
 
-                  // Tech Stack Input
+                  // Section: Stack & Repository
+                  const FormSectionHeader(
+                    title: 'TECH STACK & REPOSITORY',
+                    icon: Icons.code_rounded,
+                  ),
+                  const SizedBox(height: 10),
                   TextFormField(
                     controller: _techController,
-                    decoration: InputDecoration(
+                    textInputAction: TextInputAction.next,
+                    decoration: const InputDecoration(
                       labelText: 'Tech Stack (comma-separated)',
                       hintText: 'TypeScript, Flutter, Node.js',
-                      filled: true,
-                      fillColor:
-                          colorScheme.surfaceContainerHighest.withAlpha(40),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(14),
-                        borderSide: BorderSide.none,
-                      ),
+                      prefixIcon: Icon(Icons.layers_outlined),
                     ),
                   ),
-                  AppSpacing.verticalGapLg,
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _repoUrlController,
+                    textInputAction: TextInputAction.next,
+                    decoration: const InputDecoration(
+                      labelText: 'GitHub Repository URL',
+                      hintText: 'https://github.com/owner/repo',
+                      prefixIcon: Icon(Icons.link_rounded),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
 
-                  // Status Dropdown
+                  // Section: Status & Color
+                  const FormSectionHeader(
+                    title: 'STATUS & THEME',
+                    icon: Icons.palette_outlined,
+                  ),
+                  const SizedBox(height: 10),
                   DropdownButtonFormField<String>(
-                    initialValue: _status,
-                    decoration: InputDecoration(
+                    value: _status,
+                    decoration: const InputDecoration(
                       labelText: 'Project Status',
-                      filled: true,
-                      fillColor:
-                          colorScheme.surfaceContainerHighest.withAlpha(40),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(14),
-                        borderSide: BorderSide.none,
-                      ),
+                      prefixIcon: Icon(Icons.pending_actions_rounded),
                     ),
                     items: _statuses.map((s) {
                       return DropdownMenuItem(
@@ -235,85 +268,48 @@ class _ProjectFormDialogState extends State<ProjectFormDialog> {
                       if (val != null) setState(() => _status = val);
                     },
                   ),
-                  AppSpacing.verticalGapLg,
-
-                  // GitHub Repo URL Field
-                  TextFormField(
-                    controller: _repoUrlController,
-                    decoration: InputDecoration(
-                      labelText: 'GitHub Repository URL',
-                      hintText: 'https://github.com/owner/repo',
-                      prefixIcon: const Icon(Icons.code_rounded, size: 20),
-                      filled: true,
-                      fillColor:
-                          colorScheme.surfaceContainerHighest.withAlpha(40),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(14),
-                        borderSide: BorderSide.none,
+                  const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.color_lens_outlined,
+                        size: 16,
+                        color: colorScheme.onSurfaceVariant,
                       ),
-                    ),
-                  ),
-                  AppSpacing.verticalGapLg,
-
-                  // Color Swatches Picker (Item 10)
-                  const Text(
-                    'Project Color',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.4,
-                    ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Accent Color',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 8),
                   ProjectColorSwatchRow(
                     selected: _selectedColor,
                     onChanged: (c) => setState(() => _selectedColor = c),
                   ),
-                  AppSpacing.verticalGapLg,
+                  const SizedBox(height: 20),
 
-                  // More Details Collapsible
-                  InkWell(
-                    onTap: () =>
-                        setState(() => _showMoreOptions = !_showMoreOptions),
-                    child: Row(
-                      children: [
-                        Icon(
-                          _showMoreOptions
-                              ? Icons.expand_less_rounded
-                              : Icons.expand_more_rounded,
-                          color: primaryRed,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          _showMoreOptions
-                              ? 'Hide description'
-                              : 'More details (Description)',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            color: primaryRed,
-                          ),
-                        ),
-                      ],
+                  // Section: Description & Scope
+                  const FormSectionHeader(
+                    title: 'DESCRIPTION & SCOPE',
+                    icon: Icons.notes_rounded,
+                  ),
+                  const SizedBox(height: 10),
+                  TextFormField(
+                    controller: _descController,
+                    maxLines: 3,
+                    decoration: const InputDecoration(
+                      labelText: 'Description (optional)',
+                      hintText: 'Project scope, objectives, and deliverables...',
+                      prefixIcon: Icon(Icons.description_outlined),
+                      alignLabelWithHint: true,
                     ),
                   ),
-                  if (_showMoreOptions) ...[
-                    AppSpacing.verticalGapSm,
-                    TextFormField(
-                      controller: _descController,
-                      maxLines: 3,
-                      decoration: InputDecoration(
-                        hintText: 'Project description & scope...',
-                        filled: true,
-                        fillColor:
-                            colorScheme.surfaceContainerHighest.withAlpha(40),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(14),
-                          borderSide: BorderSide.none,
-                        ),
-                      ),
-                    ),
-                  ],
                 ],
               ),
             ),
@@ -323,23 +319,26 @@ class _ProjectFormDialogState extends State<ProjectFormDialog> {
               padding: const EdgeInsets.all(AppSpacing.md),
               child: SizedBox(
                 width: double.infinity,
-                height: 50,
-                child: FilledButton(
+                height: 48,
+                child: FilledButton.icon(
                   onPressed: _isSaving ? null : _submit,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: primaryRed,
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16)),
-                  ),
-                  child: _isSaving
+                  icon: _isSaving
                       ? const SizedBox(
-                          width: 20,
-                          height: 20,
+                          width: 18,
+                          height: 18,
                           child: CircularProgressIndicator(
                               strokeWidth: 2, color: Colors.white),
                         )
-                      : const Text('Create Project',
-                          style: TextStyle(fontWeight: FontWeight.w700)),
+                      : const Icon(Icons.add_rounded, size: 20),
+                  label: Text(
+                    _isSaving ? 'Creating Project...' : 'Create Project',
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  style: FilledButton.styleFrom(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -349,3 +348,4 @@ class _ProjectFormDialogState extends State<ProjectFormDialog> {
     );
   }
 }
+
