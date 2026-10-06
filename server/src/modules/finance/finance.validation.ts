@@ -44,6 +44,16 @@ export const setBudgetSchema = Joi.object({
   year: Joi.number().integer().min(2020).max(2050).default(() => new Date().getFullYear()),
 });
 
+export const getBudgetsQuerySchema = Joi.object({
+  month: Joi.number().integer().min(1).max(12),
+  year: Joi.number().integer().min(2020).max(2050),
+});
+
+export const getAnalyticsQuerySchema = Joi.object({
+  month: Joi.number().integer().min(1).max(12),
+  year: Joi.number().integer().min(2020).max(2050),
+});
+
 export const uuidParamSchema = Joi.object({
   id: Joi.string().uuid().required(),
 });

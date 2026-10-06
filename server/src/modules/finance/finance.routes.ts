@@ -6,6 +6,8 @@ import {
   createTransactionSchema,
   updateTransactionSchema,
   getTransactionsQuerySchema,
+  getBudgetsQuerySchema,
+  getAnalyticsQuerySchema,
   setBudgetSchema,
   uuidParamSchema,
 } from './finance.validation';
@@ -16,11 +18,19 @@ const router = Router();
 router.use(authenticate);
 
 // --- Analytics (UC-110, UC-111) ---
-router.get('/analytics', financeController.getFinancialAnalytics);
+router.get(
+  '/analytics',
+  validate(getAnalyticsQuerySchema, 'query'),
+  financeController.getFinancialAnalytics
+);
 
 // --- Budgets (UC-107, UC-108) ---
 router.post('/budgets', validate(setBudgetSchema), financeController.setBudget);
-router.get('/budgets', financeController.getBudgets);
+router.get(
+  '/budgets',
+  validate(getBudgetsQuerySchema, 'query'),
+  financeController.getBudgets
+);
 
 // --- Transactions (UC-102 to UC-106) ---
 router.post('/transactions', validate(createTransactionSchema), financeController.createTransaction);
