@@ -18,6 +18,7 @@ class FocusCategoryDurationPicker extends StatelessWidget {
     {'id': 'STUDY', 'label': 'Study', 'icon': Icons.menu_book_rounded},
     {'id': 'PROJECT', 'label': 'Project', 'icon': Icons.work_outline_rounded},
     {'id': 'READING', 'label': 'Reading', 'icon': Icons.book_outlined},
+    {'id': 'WELLNESS', 'label': 'Wellness', 'icon': Icons.self_improvement_rounded},
     {'id': 'OTHER', 'label': 'Other', 'icon': Icons.more_horiz_rounded},
   ];
 

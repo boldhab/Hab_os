@@ -19,6 +19,7 @@ class FocusSessionHistory extends StatelessWidget {
       'STUDY' => Icons.menu_book_rounded,
       'PROJECT' => Icons.work_outline_rounded,
       'READING' => Icons.book_outlined,
+      'WELLNESS' => Icons.self_improvement_rounded,
       _ => Icons.more_horiz_rounded,
     };
   }

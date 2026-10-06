@@ -1,8 +1,5 @@
 import 'dart:math' as math;
-import 'dart:ui';
 import 'package:flutter/material.dart';
-import '../../../../data/models/focus_session_model.dart';
-import '../../../../app/theme/app_theme.dart';
 import '../../../providers/focus_provider.dart';
 
 class FocusTimerGauge extends StatefulWidget {
