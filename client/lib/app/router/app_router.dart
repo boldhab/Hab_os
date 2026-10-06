@@ -18,7 +18,14 @@ import '../../presentation/screens/projects/project_detail_screen.dart';
 import '../../presentation/screens/academic/academic_screen.dart';
 import '../../presentation/screens/academic/course_detail_screen.dart';
 import '../../presentation/screens/analytics/analytics_screen.dart';
+import '../../presentation/screens/analytics/time_tracker_screen.dart';
 import '../../presentation/screens/settings/settings_screen.dart';
+import '../../presentation/screens/vault/vault_screen.dart';
+import '../../presentation/screens/vault/note_detail_screen.dart';
+import '../../presentation/screens/vault/note_edit_screen.dart';
+import '../../presentation/screens/search/global_search_screen.dart';
+import '../../presentation/screens/ai/ai_chat_screen.dart';
+import '../../presentation/screens/notifications/notifications_screen.dart';
 import 'scaffold_with_nav_bar.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
@@ -50,6 +57,18 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/register',
         builder: (context, state) => const RegisterScreen(),
+      ),
+      GoRoute(
+        path: '/search',
+        builder: (context, state) => const GlobalSearchScreen(),
+      ),
+      GoRoute(
+        path: '/ai/chat',
+        builder: (context, state) => const AiChatScreen(),
+      ),
+      GoRoute(
+        path: '/notifications',
+        builder: (context, state) => const NotificationsScreen(),
       ),
 
       // ── Authenticated shell (persistent bottom nav) ─────────────────
@@ -120,6 +139,15 @@ final routerProvider = Provider<GoRouter>((ref) {
                   GoRoute(
                     path: 'gym',
                     builder: (context, state) => const GymScreen(),
+                    routes: [
+                      GoRoute(
+                        path: ':id',
+                        builder: (context, state) {
+                          final id = state.pathParameters['id'] ?? '';
+                          return GymScreen(initialWorkoutId: id);
+                        },
+                      ),
+                    ],
                   ),
                   GoRoute(
                     path: 'goals',
@@ -163,6 +191,47 @@ final routerProvider = Provider<GoRouter>((ref) {
                   GoRoute(
                     path: 'analytics',
                     builder: (context, state) => const AnalyticsScreen(),
+                    routes: [
+                      GoRoute(
+                        path: 'time-tracker',
+                        builder: (context, state) =>
+                            const TimeTrackerScreen(),
+                      ),
+                    ],
+                  ),
+                  GoRoute(
+                    path: 'vault',
+                    builder: (context, state) => const VaultScreen(),
+                    routes: [
+                      GoRoute(
+                        path: 'create',
+                        builder: (context, state) => const NoteEditScreen(),
+                      ),
+                      GoRoute(
+                        path: ':id',
+                        builder: (context, state) {
+                          final id = state.pathParameters['id'] ?? '';
+                          return NoteDetailScreen(noteId: id);
+                        },
+                        routes: [
+                          GoRoute(
+                            path: 'edit',
+                            builder: (context, state) {
+                              final id = state.pathParameters['id'] ?? '';
+                              return NoteEditScreen(noteId: id);
+                            },
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  GoRoute(
+                    path: 'ai',
+                    builder: (context, state) => const AiChatScreen(),
+                  ),
+                  GoRoute(
+                    path: 'notifications',
+                    builder: (context, state) => const NotificationsScreen(),
                   ),
                   GoRoute(
                     path: 'settings',

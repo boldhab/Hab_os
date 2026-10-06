@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/auth_provider.dart';
@@ -11,6 +12,7 @@ import '../../../app/theme/app_semantic_colors.dart';
 import '../../../core/utils/app_haptics.dart';
 import '../../widgets/common/app_card.dart';
 import '../../providers/theme_provider.dart';
+import '../../widgets/app_badge.dart';
 
 Widget buildSettingsDetailHeader(
   BuildContext context, {
@@ -258,7 +260,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
                           icon: Icons.lock_reset_rounded,
                           iconColor: AppColors.primaryRed,
                           title: 'Password & Security',
-                          subtitle: 'Last changed 24 days ago',
+                          subtitle: 'Update account password & credentials',
                           onTap: () {
                             Navigator.push(
                               context,
@@ -359,6 +361,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
                           iconColor: semantics.success,
                           title: 'Security & Privacy',
                           subtitle: 'App lock, sessions and export',
+                          trailingBadge: AppBadge.info(
+                            label: 'Roadmap',
+                            context: context,
+                            size: AppBadgeSize.compact,
+                          ),
                           onTap: () {
                             Navigator.push(
                               context,
@@ -375,6 +382,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
                           iconColor: colorScheme.primary,
                           title: 'Connected Accounts',
                           subtitle: 'Google, GitHub and calendar',
+                          trailingBadge: AppBadge.info(
+                            label: 'Coming Soon',
+                            context: context,
+                            size: AppBadgeSize.compact,
+                          ),
                           onTap: () {
                             Navigator.push(
                               context,
@@ -523,7 +535,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
                     borderRadius: BorderRadius.circular(999),
                   ),
                   child: Text(
-                    'Student • DBU • Developer',
+                    (user?.bio != null && (user!.bio as String).isNotEmpty)
+                        ? user.bio!
+                        : 'Student • DBU • Developer',
                     style: AppTypography.bodySmall(context).copyWith(
                       color: Colors.white.withAlpha(220),
                       fontWeight: FontWeight.w700,
@@ -584,6 +598,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
     required String title,
     required String subtitle,
     required VoidCallback onTap,
+    Widget? trailingBadge,
   }) {
     final colorScheme = Theme.of(context).colorScheme;
 
@@ -612,11 +627,21 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    title,
-                    style: AppTypography.bodyLarge(context).copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          title,
+                          style: AppTypography.bodyLarge(context).copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      if (trailingBadge != null) ...[
+                        const SizedBox(width: 8),
+                        trailingBadge,
+                      ],
+                    ],
                   ),
                   const SizedBox(height: 2),
                   Text(
@@ -721,16 +746,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
 // =============================================================================
 
 // ── 1. NOTIFICATION SETTINGS DETAIL SCREEN ──────────────────────────────────
-class _NotificationSettingsScreen extends StatefulWidget {
+class _NotificationSettingsScreen extends ConsumerStatefulWidget {
   const _NotificationSettingsScreen();
 
   @override
-  State<_NotificationSettingsScreen> createState() =>
+  ConsumerState<_NotificationSettingsScreen> createState() =>
       __NotificationSettingsScreenState();
 }
 
 class __NotificationSettingsScreenState
-    extends State<_NotificationSettingsScreen> {
+    extends ConsumerState<_NotificationSettingsScreen> {
   bool _dailyReminder = true;
   bool _habitReminders = true;
   bool _taskDeadlines = true;
@@ -741,6 +766,114 @@ class __NotificationSettingsScreenState
 
   TimeOfDay _morningTime = const TimeOfDay(hour: 8, minute: 0);
   TimeOfDay _eveningTime = const TimeOfDay(hour: 21, minute: 0);
+  TimeOfDay _quietStart = const TimeOfDay(hour: 22, minute: 30);
+  TimeOfDay _quietEnd = const TimeOfDay(hour: 6, minute: 30);
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPreferences();
+  }
+
+  Future<void> _loadPreferences() async {
+    final storage = ref.read(secureStorageProvider);
+    final userPrefs = ref.read(authProvider).user?.preferences;
+
+    final daily = await storage.getBoolSetting('notif_dailyReminder');
+    final habits = await storage.getBoolSetting('notif_habitReminders');
+    final tasks = await storage.getBoolSetting('notif_taskDeadlines');
+    final focus = await storage.getBoolSetting('notif_focusReminder');
+    final workout = await storage.getBoolSetting('notif_workoutReminder');
+    final finance = await storage.getBoolSetting('notif_financeReminder');
+    final streak = await storage.getBoolSetting('notif_streakMilestones');
+
+    final morningStr = await storage.getStringSetting('notif_morningTime');
+    final eveningStr = await storage.getStringSetting('notif_eveningTime');
+
+    final qStartStr = userPrefs?.quietHoursStart ??
+        await storage.getStringSetting('notif_quietHoursStart') ??
+        '22:30';
+    final qEndStr = userPrefs?.quietHoursEnd ??
+        await storage.getStringSetting('notif_quietHoursEnd') ??
+        '06:30';
+
+    if (mounted) {
+      setState(() {
+        if (daily != null) _dailyReminder = daily;
+        if (habits != null) _habitReminders = habits;
+        if (tasks != null) _taskDeadlines = tasks;
+        if (focus != null) _focusReminder = focus;
+        if (workout != null) _workoutReminder = workout;
+        if (finance != null) _financeReminder = finance;
+        if (streak != null) _streakMilestones = streak;
+
+        if (morningStr != null && morningStr.contains(':')) {
+          final parts = morningStr.split(':');
+          _morningTime = TimeOfDay(
+            hour: int.tryParse(parts[0]) ?? 8,
+            minute: int.tryParse(parts[1]) ?? 0,
+          );
+        }
+        if (eveningStr != null && eveningStr.contains(':')) {
+          final parts = eveningStr.split(':');
+          _eveningTime = TimeOfDay(
+            hour: int.tryParse(parts[0]) ?? 21,
+            minute: int.tryParse(parts[1]) ?? 0,
+          );
+        }
+        if (qStartStr.contains(':')) {
+          final parts = qStartStr.split(':');
+          _quietStart = TimeOfDay(
+            hour: int.tryParse(parts[0]) ?? 22,
+            minute: int.tryParse(parts[1]) ?? 30,
+          );
+        }
+        if (qEndStr.contains(':')) {
+          final parts = qEndStr.split(':');
+          _quietEnd = TimeOfDay(
+            hour: int.tryParse(parts[0]) ?? 6,
+            minute: int.tryParse(parts[1]) ?? 30,
+          );
+        }
+      });
+    }
+  }
+
+  Future<void> _updateToggle(
+      String key, bool value, VoidCallback updateState) async {
+    AppHaptics.selection();
+    updateState();
+    await ref.read(secureStorageProvider).saveBoolSetting(key, value);
+  }
+
+  Future<void> _saveQuietHours() async {
+    final startStr =
+        '${_quietStart.hour.toString().padLeft(2, '0')}:${_quietStart.minute.toString().padLeft(2, '0')}';
+    final endStr =
+        '${_quietEnd.hour.toString().padLeft(2, '0')}:${_quietEnd.minute.toString().padLeft(2, '0')}';
+
+    final storage = ref.read(secureStorageProvider);
+    await storage.saveStringSetting('notif_quietHoursStart', startStr);
+    await storage.saveStringSetting('notif_quietHoursEnd', endStr);
+
+    try {
+      final dio = ref.read(dioProvider);
+      await dio.put(
+        ApiEndpoints.updatePreferences,
+        data: {
+          'quietHoursStart': startStr,
+          'quietHoursEnd': endStr,
+        },
+      );
+      await ref.read(authProvider.notifier).checkAuthStatus();
+      if (mounted) {
+        AppHaptics.success();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Quiet hours schedule saved!')),
+        );
+      }
+    } catch (_) {}
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -768,7 +901,7 @@ class __NotificationSettingsScreenState
                   icon: Icons.notifications_active_outlined,
                   title: 'Notifications',
                   subtitle:
-                      'Stay on top of goals, reminders and important moments',
+                      'Stay on top of goals, reminders and quiet moments',
                   accent: AppColors.primaryRed,
                 ),
                 const SizedBox(height: AppSpacing.lg),
@@ -782,10 +915,11 @@ class __NotificationSettingsScreenState
                         title: 'Daily Reminder',
                         subtitle: 'Morning summary & daily planning push',
                         value: _dailyReminder,
-                        onChanged: (v) {
-                          AppHaptics.selection();
-                          setState(() => _dailyReminder = v);
-                        },
+                        onChanged: (v) => _updateToggle(
+                          'notif_dailyReminder',
+                          v,
+                          () => setState(() => _dailyReminder = v),
+                        ),
                         accent: AppColors.primaryRed,
                       ),
                       Divider(height: 1, color: hairlineColor),
@@ -795,10 +929,11 @@ class __NotificationSettingsScreenState
                         title: 'Habit Reminders',
                         subtitle: 'Nudges for scheduled routine habits',
                         value: _habitReminders,
-                        onChanged: (v) {
-                          AppHaptics.selection();
-                          setState(() => _habitReminders = v);
-                        },
+                        onChanged: (v) => _updateToggle(
+                          'notif_habitReminders',
+                          v,
+                          () => setState(() => _habitReminders = v),
+                        ),
                         accent: AppColors.primaryRed,
                       ),
                       Divider(height: 1, color: hairlineColor),
@@ -808,10 +943,11 @@ class __NotificationSettingsScreenState
                         title: 'Task Deadlines',
                         subtitle: 'Alerts before upcoming task due dates',
                         value: _taskDeadlines,
-                        onChanged: (v) {
-                          AppHaptics.selection();
-                          setState(() => _taskDeadlines = v);
-                        },
+                        onChanged: (v) => _updateToggle(
+                          'notif_taskDeadlines',
+                          v,
+                          () => setState(() => _taskDeadlines = v),
+                        ),
                         accent: AppColors.primaryRed,
                       ),
                       Divider(height: 1, color: hairlineColor),
@@ -821,10 +957,11 @@ class __NotificationSettingsScreenState
                         title: 'Focus Session Reminder',
                         subtitle: 'Break times and session completion',
                         value: _focusReminder,
-                        onChanged: (v) {
-                          AppHaptics.selection();
-                          setState(() => _focusReminder = v);
-                        },
+                        onChanged: (v) => _updateToggle(
+                          'notif_focusReminder',
+                          v,
+                          () => setState(() => _focusReminder = v),
+                        ),
                         accent: AppColors.primaryRed,
                       ),
                       Divider(height: 1, color: hairlineColor),
@@ -834,10 +971,11 @@ class __NotificationSettingsScreenState
                         title: 'Workout Reminder',
                         subtitle: 'Gym and physical activity prompts',
                         value: _workoutReminder,
-                        onChanged: (v) {
-                          AppHaptics.selection();
-                          setState(() => _workoutReminder = v);
-                        },
+                        onChanged: (v) => _updateToggle(
+                          'notif_workoutReminder',
+                          v,
+                          () => setState(() => _workoutReminder = v),
+                        ),
                         accent: AppColors.primaryRed,
                       ),
                       Divider(height: 1, color: hairlineColor),
@@ -847,10 +985,11 @@ class __NotificationSettingsScreenState
                         title: 'Finance Reminder',
                         subtitle: 'Budget tracking and subscription alerts',
                         value: _financeReminder,
-                        onChanged: (v) {
-                          AppHaptics.selection();
-                          setState(() => _financeReminder = v);
-                        },
+                        onChanged: (v) => _updateToggle(
+                          'notif_financeReminder',
+                          v,
+                          () => setState(() => _financeReminder = v),
+                        ),
                         accent: AppColors.primaryRed,
                       ),
                       Divider(height: 1, color: hairlineColor),
@@ -860,10 +999,11 @@ class __NotificationSettingsScreenState
                         title: 'Streak Milestones',
                         subtitle: 'Celebrations for habit streak targets',
                         value: _streakMilestones,
-                        onChanged: (v) {
-                          AppHaptics.selection();
-                          setState(() => _streakMilestones = v);
-                        },
+                        onChanged: (v) => _updateToggle(
+                          'notif_streakMilestones',
+                          v,
+                          () => setState(() => _streakMilestones = v),
+                        ),
                         accent: AppColors.primaryRed,
                       ),
                     ],
@@ -886,6 +1026,7 @@ class __NotificationSettingsScreenState
                   child: Column(
                     children: [
                       ListTile(
+                        leading: const Icon(Icons.wb_sunny_outlined),
                         title: const Text('Morning Reminder'),
                         subtitle: Text(_morningTime.format(context)),
                         trailing: const Icon(Icons.access_time_rounded),
@@ -896,11 +1037,17 @@ class __NotificationSettingsScreenState
                           );
                           if (time != null) {
                             setState(() => _morningTime = time);
+                            final timeStr =
+                                '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+                            await ref
+                                .read(secureStorageProvider)
+                                .saveStringSetting('notif_morningTime', timeStr);
                           }
                         },
                       ),
                       Divider(height: 1, color: hairlineColor),
                       ListTile(
+                        leading: const Icon(Icons.nightlight_outlined),
                         title: const Text('Evening Review'),
                         subtitle: Text(_eveningTime.format(context)),
                         trailing: const Icon(Icons.access_time_rounded),
@@ -911,7 +1058,41 @@ class __NotificationSettingsScreenState
                           );
                           if (time != null) {
                             setState(() => _eveningTime = time);
+                            final timeStr =
+                                '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+                            await ref
+                                .read(secureStorageProvider)
+                                .saveStringSetting('notif_eveningTime', timeStr);
                           }
+                        },
+                      ),
+                      Divider(height: 1, color: hairlineColor),
+                      ListTile(
+                        leading: const Icon(Icons.bedtime_outlined),
+                        title: const Text('Quiet Hours (Do Not Disturb)'),
+                        subtitle: Text(
+                            '${_quietStart.format(context)} – ${_quietEnd.format(context)} (Synced to cloud)'),
+                        trailing: const Icon(Icons.chevron_right_rounded),
+                        onTap: () async {
+                          final start = await showTimePicker(
+                            context: context,
+                            initialTime: _quietStart,
+                            helpText: 'Select Quiet Hours Start',
+                          );
+                          if (start == null || !mounted) return;
+
+                          final end = await showTimePicker(
+                            context: context,
+                            initialTime: _quietEnd,
+                            helpText: 'Select Quiet Hours End',
+                          );
+                          if (end == null || !mounted) return;
+
+                          setState(() {
+                            _quietStart = start;
+                            _quietEnd = end;
+                          });
+                          await _saveQuietHours();
                         },
                       ),
                     ],
@@ -938,42 +1119,88 @@ class _LifeScoreSettingsScreen extends ConsumerStatefulWidget {
 class __LifeScoreSettingsScreenState
     extends ConsumerState<_LifeScoreSettingsScreen> {
   bool _savingWeights = false;
-  double _initialHabits = 30;
-  double _initialTasks = 20;
-  double _initialFocus = 20;
-  double _initialGym = 15;
-  double _initialFinance = 15;
 
-  late double _weightHabits;
+  late double _initialTasks;
+  late double _initialHabits;
+  late double _initialCoding;
+  late double _initialStudy;
+  late double _initialGym;
+  late double _initialFinance;
+
   late double _weightTasks;
-  late double _weightFocus;
+  late double _weightHabits;
+  late double _weightCoding;
+  late double _weightStudy;
   late double _weightGym;
   late double _weightFinance;
+
+  static double _parseWeight(dynamic val, double fallback) {
+    if (val is num) {
+      final d = val.toDouble();
+      if (d > 0 && d <= 1.0) {
+        return (d * 100).roundToDouble();
+      }
+      return d.roundToDouble();
+    }
+    return fallback;
+  }
 
   @override
   void initState() {
     super.initState();
-    _weightHabits = _initialHabits;
+    final user = ref.read(authProvider).user;
+    final weights = user?.preferences?.lifeScoreWeights;
+
+    // Backward compatibility: if previous client saved legacy 'focus' but omitted coding/study
+    final legacyFocus = weights?['focus'];
+    double fallbackCoding = 15;
+    double fallbackStudy = 15;
+    if (legacyFocus is num && weights?['coding'] == null && weights?['study'] == null) {
+      final focusVal = _parseWeight(legacyFocus, 30);
+      fallbackCoding = (focusVal / 2).roundToDouble();
+      fallbackStudy = focusVal - fallbackCoding;
+    }
+
+    _initialTasks = _parseWeight(weights?['tasks'], 20);
+    _initialHabits = _parseWeight(weights?['habits'], 20);
+    _initialCoding = _parseWeight(weights?['coding'], fallbackCoding);
+    _initialStudy = _parseWeight(weights?['study'], fallbackStudy);
+    _initialGym = _parseWeight(weights?['gym'], 15);
+    _initialFinance = _parseWeight(weights?['finance'], 15);
+
     _weightTasks = _initialTasks;
-    _weightFocus = _initialFocus;
+    _weightHabits = _initialHabits;
+    _weightCoding = _initialCoding;
+    _weightStudy = _initialStudy;
     _weightGym = _initialGym;
     _weightFinance = _initialFinance;
   }
 
   bool get _hasWeightChanges {
-    return _weightHabits != _initialHabits ||
-        _weightTasks != _initialTasks ||
-        _weightFocus != _initialFocus ||
+    return _weightTasks != _initialTasks ||
+        _weightHabits != _initialHabits ||
+        _weightCoding != _initialCoding ||
+        _weightStudy != _initialStudy ||
         _weightGym != _initialGym ||
         _weightFinance != _initialFinance;
   }
 
   double get _totalWeight =>
-      _weightHabits + _weightTasks + _weightFocus + _weightGym + _weightFinance;
+      _weightTasks +
+      _weightHabits +
+      _weightCoding +
+      _weightStudy +
+      _weightGym +
+      _weightFinance;
 
   @override
   Widget build(BuildContext context) {
     final semantics = AppSemanticColors.of(context);
+    final overallScore =
+        ref.watch(dashboardProvider).feed?.lifeScore?.overallScore;
+    final scoreDisplay = overallScore != null
+        ? '${overallScore.toStringAsFixed(0)} / 100'
+        : '— / 100';
 
     return Scaffold(
       appBar: AppBar(
@@ -1020,7 +1247,7 @@ class __LifeScoreSettingsScreenState
                               borderRadius: BorderRadius.circular(999),
                             ),
                             child: Text(
-                              '78 / 100',
+                              scoreDisplay,
                               style: AppTypography.h3(context).copyWith(
                                 color: AppColors.primaryRed,
                                 fontWeight: FontWeight.w800,
@@ -1030,16 +1257,42 @@ class __LifeScoreSettingsScreenState
                         ],
                       ),
                       const SizedBox(height: AppSpacing.md),
-                      _buildSliderRow('Habits', _weightHabits,
-                          (v) => setState(() => _weightHabits = v)),
-                      _buildSliderRow('Tasks', _weightTasks,
-                          (v) => setState(() => _weightTasks = v)),
-                      _buildSliderRow('Focus', _weightFocus,
-                          (v) => setState(() => _weightFocus = v)),
-                      _buildSliderRow('Fitness', _weightGym,
-                          (v) => setState(() => _weightGym = v)),
-                      _buildSliderRow('Finance', _weightFinance,
-                          (v) => setState(() => _weightFinance = v)),
+                      _buildSliderRow(
+                        label: 'Tasks',
+                        icon: Icons.check_circle_outline_rounded,
+                        value: _weightTasks,
+                        onChanged: (v) => setState(() => _weightTasks = v),
+                      ),
+                      _buildSliderRow(
+                        label: 'Habits',
+                        icon: Icons.repeat_rounded,
+                        value: _weightHabits,
+                        onChanged: (v) => setState(() => _weightHabits = v),
+                      ),
+                      _buildSliderRow(
+                        label: 'Coding',
+                        icon: Icons.code_rounded,
+                        value: _weightCoding,
+                        onChanged: (v) => setState(() => _weightCoding = v),
+                      ),
+                      _buildSliderRow(
+                        label: 'Study',
+                        icon: Icons.school_outlined,
+                        value: _weightStudy,
+                        onChanged: (v) => setState(() => _weightStudy = v),
+                      ),
+                      _buildSliderRow(
+                        label: 'Fitness',
+                        icon: Icons.fitness_center_rounded,
+                        value: _weightGym,
+                        onChanged: (v) => setState(() => _weightGym = v),
+                      ),
+                      _buildSliderRow(
+                        label: 'Finance',
+                        icon: Icons.account_balance_wallet_outlined,
+                        value: _weightFinance,
+                        onChanged: (v) => setState(() => _weightFinance = v),
+                      ),
                       const SizedBox(height: AppSpacing.md),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1086,9 +1339,10 @@ class __LifeScoreSettingsScreenState
                               onPressed: () {
                                 AppHaptics.light();
                                 setState(() {
-                                  _weightHabits = 30;
                                   _weightTasks = 20;
-                                  _weightFocus = 20;
+                                  _weightHabits = 20;
+                                  _weightCoding = 15;
+                                  _weightStudy = 15;
                                   _weightGym = 15;
                                   _weightFinance = 15;
                                 });
@@ -1104,27 +1358,41 @@ class __LifeScoreSettingsScreenState
                                       setState(() => _savingWeights = true);
                                       try {
                                         final dio = ref.read(dioProvider);
+                                        final double total = _totalWeight > 0 ? _totalWeight : 100.0;
+                                        final normalizedWeights = {
+                                          'tasks': double.parse((_weightTasks / total).toStringAsFixed(4)),
+                                          'habits': double.parse((_weightHabits / total).toStringAsFixed(4)),
+                                          'coding': double.parse((_weightCoding / total).toStringAsFixed(4)),
+                                          'study': double.parse((_weightStudy / total).toStringAsFixed(4)),
+                                          'gym': double.parse((_weightGym / total).toStringAsFixed(4)),
+                                          'finance': double.parse((_weightFinance / total).toStringAsFixed(4)),
+                                        };
+
                                         await dio.put(
                                             ApiEndpoints.updatePreferences,
                                             data: {
-                                              'lifeScoreWeights': {
-                                                'habits': _weightHabits,
-                                                'tasks': _weightTasks,
-                                                'focus': _weightFocus,
-                                                'gym': _weightGym,
-                                                'finance': _weightFinance,
-                                              }
+                                              'lifeScoreWeights': normalizedWeights,
                                             });
+
                                         setState(() {
-                                          _initialHabits = _weightHabits;
                                           _initialTasks = _weightTasks;
-                                          _initialFocus = _weightFocus;
+                                          _initialHabits = _weightHabits;
+                                          _initialCoding = _weightCoding;
+                                          _initialStudy = _weightStudy;
                                           _initialGym = _weightGym;
                                           _initialFinance = _weightFinance;
                                         });
+
+                                        // Refresh auth session so preferences stay in sync
+                                        await ref
+                                            .read(authProvider.notifier)
+                                            .checkAuthStatus();
+
+                                        // Refresh dashboard so life score updates immediately
                                         ref
                                             .read(dashboardProvider.notifier)
                                             .load(showLoading: false);
+
                                         if (mounted) {
                                           AppHaptics.success();
                                           ScaffoldMessenger.of(context)
@@ -1134,9 +1402,20 @@ class __LifeScoreSettingsScreenState
                                                     'Life Score weights saved!')),
                                           );
                                         }
-                                      } catch (_) {}
-                                      if (mounted)
-                                        setState(() => _savingWeights = false);
+                                      } catch (_) {
+                                        if (mounted) {
+                                          ScaffoldMessenger.of(context)
+                                              .showSnackBar(
+                                            const SnackBar(
+                                                content: Text(
+                                                    'Failed to save Life Score weights')),
+                                          );
+                                        }
+                                      } finally {
+                                        if (mounted) {
+                                          setState(() => _savingWeights = false);
+                                        }
+                                      }
                                     }
                                   : null,
                               style: FilledButton.styleFrom(
@@ -1157,14 +1436,21 @@ class __LifeScoreSettingsScreenState
     );
   }
 
-  Widget _buildSliderRow(
-      String label, double value, ValueChanged<double> onChanged) {
+  Widget _buildSliderRow({
+    required String label,
+    required IconData icon,
+    required double value,
+    required ValueChanged<double> onChanged,
+  }) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.sm),
       child: Row(
         children: [
+          Icon(icon, size: 18, color: colorScheme.onSurfaceVariant),
+          const SizedBox(width: 8),
           SizedBox(
-              width: 70,
+              width: 58,
               child: Text(label, style: AppTypography.bodyMedium(context))),
           Expanded(
             child: Slider(
@@ -1207,6 +1493,24 @@ class __AppearanceSettingsScreenState
     extends ConsumerState<_AppearanceSettingsScreen> {
   bool _enableAnimations = true;
   bool _enableHaptics = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSettings();
+  }
+
+  Future<void> _loadSettings() async {
+    final storage = ref.read(secureStorageProvider);
+    final anim = await storage.getBoolSetting('appearance_animations');
+    final haptics = await storage.getBoolSetting('appearance_haptics');
+    if (mounted) {
+      setState(() {
+        if (anim != null) _enableAnimations = anim;
+        if (haptics != null) _enableHaptics = haptics;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1297,9 +1601,12 @@ class __AppearanceSettingsScreenState
                         title: 'Animations',
                         subtitle: 'Fluid UI micro-transitions',
                         value: _enableAnimations,
-                        onChanged: (v) {
+                        onChanged: (v) async {
                           AppHaptics.selection();
                           setState(() => _enableAnimations = v);
+                          await ref
+                              .read(secureStorageProvider)
+                              .saveBoolSetting('appearance_animations', v);
                         },
                         accent: AppColors.primaryRed,
                       ),
@@ -1309,9 +1616,12 @@ class __AppearanceSettingsScreenState
                         title: 'Haptic Feedback',
                         subtitle: 'Tactile physical vibrations',
                         value: _enableHaptics,
-                        onChanged: (v) {
+                        onChanged: (v) async {
                           AppHaptics.selection();
                           setState(() => _enableHaptics = v);
+                          await ref
+                              .read(secureStorageProvider)
+                              .saveBoolSetting('appearance_haptics', v);
                         },
                         accent: AppColors.primaryRed,
                       ),
@@ -1328,24 +1638,137 @@ class __AppearanceSettingsScreenState
 }
 
 // ── 4. APP BEHAVIOR DETAIL SCREEN ───────────────────────────────────────────
-class _AppBehaviorSettingsScreen extends StatefulWidget {
+class _AppBehaviorSettingsScreen extends ConsumerStatefulWidget {
   const _AppBehaviorSettingsScreen();
 
   @override
-  State<_AppBehaviorSettingsScreen> createState() =>
+  ConsumerState<_AppBehaviorSettingsScreen> createState() =>
       __AppBehaviorSettingsScreenState();
 }
 
 class __AppBehaviorSettingsScreenState
-    extends State<_AppBehaviorSettingsScreen> {
+    extends ConsumerState<_AppBehaviorSettingsScreen> {
   bool _autoStartFocus = false;
   bool _confirmTaskCompletion = true;
   bool _showCompletedHabits = true;
   String _startPage = 'Home';
   String _weekStartsOn = 'Monday';
+  static const List<Map<String, dynamic>> _availableModules = [
+    {'id': 'LIFE_SCORE', 'name': 'Life Score Momentum', 'icon': Icons.track_changes_rounded},
+    {'id': 'HABITS', 'name': 'Daily Habits Checklist', 'icon': Icons.check_circle_outline_rounded},
+    {'id': 'TASKS', 'name': 'Tasks Due Today', 'icon': Icons.task_alt_rounded},
+    {'id': 'SCHEDULE', 'name': 'Schedule & Timeline', 'icon': Icons.calendar_today_rounded},
+    {'id': 'ACADEMIC', 'name': 'Academic Deadlines', 'icon': Icons.school_outlined},
+    {'id': 'PROJECTS', 'name': 'Active Projects', 'icon': Icons.folder_open_rounded},
+    {'id': 'FITNESS', 'name': 'Fitness & Workouts', 'icon': Icons.fitness_center_rounded},
+    {'id': 'FINANCE', 'name': 'Finance Overview', 'icon': Icons.account_balance_wallet_outlined},
+    {'id': 'RECENT_ACTIVITY', 'name': 'Recent Activity', 'icon': Icons.history_rounded},
+  ];
+
+  Set<String> _enabledModules = {
+    'LIFE_SCORE',
+    'HABITS',
+    'TASKS',
+    'SCHEDULE',
+    'ACADEMIC',
+    'PROJECTS',
+    'FITNESS',
+    'FINANCE',
+    'RECENT_ACTIVITY',
+  };
+  bool _savingModules = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBehavior();
+  }
+
+  Future<void> _loadBehavior() async {
+    final storage = ref.read(secureStorageProvider);
+    final user = ref.read(authProvider).user;
+    final savedModules = user?.preferences?.dashboardModules;
+
+    final startPage = await storage.getStringSetting('behavior_startPage');
+    final autoFocus = await storage.getBoolSetting('behavior_autoStartFocus');
+    final confirmTask =
+        await storage.getBoolSetting('behavior_confirmTaskCompletion');
+    final showHabits =
+        await storage.getBoolSetting('behavior_showCompletedHabits');
+    final weekStarts = await storage.getStringSetting('behavior_weekStartsOn');
+
+    if (mounted) {
+      setState(() {
+        if (startPage != null) _startPage = startPage;
+        if (autoFocus != null) _autoStartFocus = autoFocus;
+        if (confirmTask != null) _confirmTaskCompletion = confirmTask;
+        if (showHabits != null) _showCompletedHabits = showHabits;
+        if (weekStarts != null) _weekStartsOn = weekStarts;
+        if (savedModules != null && savedModules.isNotEmpty) {
+          _enabledModules = savedModules.map((m) => m.toUpperCase()).toSet();
+        }
+      });
+    }
+  }
+
+  Future<void> _toggleModule(String moduleId, bool enabled) async {
+    AppHaptics.selection();
+    final updated = Set<String>.from(_enabledModules);
+    if (enabled) {
+      updated.add(moduleId);
+    } else {
+      if (updated.length <= 1) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('At least one dashboard module must remain enabled.'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+        return;
+      }
+      updated.remove(moduleId);
+    }
+
+    setState(() {
+      _enabledModules = updated;
+      _savingModules = true;
+    });
+
+    try {
+      final dio = ref.read(dioProvider);
+      await dio.put(
+        ApiEndpoints.updatePreferences,
+        data: {
+          'dashboardModules': updated.toList(),
+        },
+      );
+      await ref.read(authProvider.notifier).checkAuthStatus();
+      await ref.read(dashboardProvider.notifier).load(showLoading: false);
+    } catch (_) {
+      // In case of error, revert is handled on next load
+    } finally {
+      if (mounted) setState(() => _savingModules = false);
+    }
+  }
+
+  Future<void> _updateBool(
+      String key, bool value, VoidCallback updateState) async {
+    AppHaptics.selection();
+    updateState();
+    await ref.read(secureStorageProvider).saveBoolSetting(key, value);
+  }
+
+  Future<void> _updateString(
+      String key, String value, VoidCallback updateState) async {
+    AppHaptics.selection();
+    updateState();
+    await ref.read(secureStorageProvider).saveStringSetting(key, value);
+  }
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('App Behavior'),
@@ -1372,6 +1795,7 @@ class __AppBehaviorSettingsScreenState
                   child: Column(
                     children: [
                       ListTile(
+                        leading: const Icon(Icons.home_outlined),
                         title: const Text('Start Page'),
                         trailing: DropdownButton<String>(
                           value: _startPage,
@@ -1381,7 +1805,13 @@ class __AppBehaviorSettingsScreenState
                                   DropdownMenuItem(value: p, child: Text(p)))
                               .toList(),
                           onChanged: (val) {
-                            if (val != null) setState(() => _startPage = val);
+                            if (val != null) {
+                              _updateString(
+                                'behavior_startPage',
+                                val,
+                                () => setState(() => _startPage = val),
+                              );
+                            }
                           },
                         ),
                       ),
@@ -1392,7 +1822,11 @@ class __AppBehaviorSettingsScreenState
                         title: 'Auto-start Focus Timer',
                         subtitle: 'Jump directly into focus sessions',
                         value: _autoStartFocus,
-                        onChanged: (v) => setState(() => _autoStartFocus = v),
+                        onChanged: (v) => _updateBool(
+                          'behavior_autoStartFocus',
+                          v,
+                          () => setState(() => _autoStartFocus = v),
+                        ),
                         accent: AppColors.primaryRed,
                       ),
                       const Divider(height: 1),
@@ -1402,8 +1836,11 @@ class __AppBehaviorSettingsScreenState
                         title: 'Confirm Task Completion',
                         subtitle: 'Double-check before marking a task done',
                         value: _confirmTaskCompletion,
-                        onChanged: (v) =>
-                            setState(() => _confirmTaskCompletion = v),
+                        onChanged: (v) => _updateBool(
+                          'behavior_confirmTaskCompletion',
+                          v,
+                          () => setState(() => _confirmTaskCompletion = v),
+                        ),
                         accent: AppColors.primaryRed,
                       ),
                       const Divider(height: 1),
@@ -1413,12 +1850,16 @@ class __AppBehaviorSettingsScreenState
                         title: 'Show Completed Habits',
                         subtitle: 'Keep finished habits visible in your feed',
                         value: _showCompletedHabits,
-                        onChanged: (v) =>
-                            setState(() => _showCompletedHabits = v),
+                        onChanged: (v) => _updateBool(
+                          'behavior_showCompletedHabits',
+                          v,
+                          () => setState(() => _showCompletedHabits = v),
+                        ),
                         accent: AppColors.primaryRed,
                       ),
                       const Divider(height: 1),
                       ListTile(
+                        leading: const Icon(Icons.calendar_today_outlined),
                         title: const Text('Week Starts On'),
                         trailing: DropdownButton<String>(
                           value: _weekStartsOn,
@@ -1428,11 +1869,64 @@ class __AppBehaviorSettingsScreenState
                                   DropdownMenuItem(value: d, child: Text(d)))
                               .toList(),
                           onChanged: (val) {
-                            if (val != null)
-                              setState(() => _weekStartsOn = val);
+                            if (val != null) {
+                              _updateString(
+                                'behavior_weekStartsOn',
+                                val,
+                                () => setState(() => _weekStartsOn = val),
+                              );
+                            }
                           },
                         ),
                       ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.lg),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'DASHBOARD MODULES',
+                      style: AppTypography.labelMedium(context).copyWith(
+                        color:
+                            colorScheme.onSurfaceVariant.withValues(alpha: 0.8),
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.1,
+                      ),
+                    ),
+                    if (_savingModules)
+                      const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                AppCard(
+                  padding: EdgeInsets.zero,
+                  child: Column(
+                    children: [
+                      for (int i = 0; i < _availableModules.length; i++) ...[
+                        if (i > 0) const Divider(height: 1),
+                        buildSettingsDetailCardToggle(
+                          context,
+                          icon: _availableModules[i]['icon'] as IconData,
+                          title: _availableModules[i]['name'] as String,
+                          subtitle: _enabledModules
+                                  .contains(_availableModules[i]['id'] as String)
+                              ? 'Visible on Dashboard'
+                              : 'Hidden from Dashboard',
+                          value: _enabledModules
+                              .contains(_availableModules[i]['id'] as String),
+                          onChanged: (v) => _toggleModule(
+                            _availableModules[i]['id'] as String,
+                            v,
+                          ),
+                          accent: AppColors.primaryRed,
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -1446,19 +1940,37 @@ class __AppBehaviorSettingsScreenState
 }
 
 // ── 5. SECURITY & PRIVACY DETAIL SCREEN ─────────────────────────────────────
-class _SecurityPrivacyScreen extends StatefulWidget {
+class _SecurityPrivacyScreen extends ConsumerStatefulWidget {
   const _SecurityPrivacyScreen();
 
   @override
-  State<_SecurityPrivacyScreen> createState() => __SecurityPrivacyScreenState();
+  ConsumerState<_SecurityPrivacyScreen> createState() =>
+      __SecurityPrivacyScreenState();
 }
 
-class __SecurityPrivacyScreenState extends State<_SecurityPrivacyScreen> {
+class __SecurityPrivacyScreenState
+    extends ConsumerState<_SecurityPrivacyScreen> {
   bool _appLock = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSecuritySettings();
+  }
+
+  Future<void> _loadSecuritySettings() async {
+    final storage = ref.read(secureStorageProvider);
+    final appLock = await storage.getBoolSetting('security_appLock');
+    if (mounted && appLock != null) {
+      setState(() => _appLock = appLock);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final semantics = AppSemanticColors.of(context);
+    final colorScheme = Theme.of(context).colorScheme;
+    final user = ref.watch(authProvider).user;
 
     return Scaffold(
       appBar: AppBar(
@@ -1477,7 +1989,7 @@ class __SecurityPrivacyScreenState extends State<_SecurityPrivacyScreen> {
                   icon: Icons.shield_outlined,
                   title: 'Security',
                   subtitle:
-                      'Protect your account and manage your data with confidence',
+                      'Protect your account and manage your credentials with confidence',
                   accent: semantics.success,
                 ),
                 const SizedBox(height: AppSpacing.lg),
@@ -1489,34 +2001,91 @@ class __SecurityPrivacyScreenState extends State<_SecurityPrivacyScreen> {
                         context,
                         icon: Icons.fingerprint_rounded,
                         title: 'Biometric / App Lock',
-                        subtitle: 'Require authentication to open HABos',
+                        subtitle: 'Require authentication when launching HABos',
                         value: _appLock,
-                        onChanged: (v) => setState(() => _appLock = v),
+                        onChanged: (v) async {
+                          AppHaptics.selection();
+                          setState(() => _appLock = v);
+                          await ref
+                              .read(secureStorageProvider)
+                              .saveBoolSetting('security_appLock', v);
+                        },
                         accent: semantics.success,
                       ),
                       const Divider(height: 1),
                       ListTile(
+                        leading: const Icon(Icons.devices_rounded),
                         title: const Text('Active Sessions'),
-                        subtitle: const Text('2 active devices logged in'),
-                        trailing: const Icon(Icons.chevron_right_rounded),
+                        subtitle: Text(
+                            'Logged in as ${user?.email ?? 'active user'} (Current device)'),
+                        trailing: AppBadge.info(
+                          label: 'Active',
+                          context: context,
+                          size: AppBadgeSize.compact,
+                        ),
                         onTap: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                                content: Text('Active sessions inspected')),
+                          AppHaptics.light();
+                          showModalBottomSheet(
+                            context: context,
+                            builder: (ctx) => Padding(
+                              padding: const EdgeInsets.all(24),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Active Sessions',
+                                    style: AppTypography.titleLarge(context),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  ListTile(
+                                    leading: const Icon(Icons.smartphone_rounded),
+                                    title: const Text('Current Mobile Device'),
+                                    subtitle: Text(
+                                        'Authenticated via JWT • Active now • User: ${user?.email}'),
+                                    trailing: const Icon(Icons.check_circle,
+                                        color: Colors.green),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  SizedBox(
+                                    width: double.infinity,
+                                    child: FilledButton(
+                                      onPressed: () => Navigator.pop(ctx),
+                                      child: const Text('Close'),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                           );
                         },
                       ),
                       const Divider(height: 1),
                       ListTile(
+                        leading: const Icon(Icons.download_rounded),
                         title: const Text('Export My Data'),
-                        subtitle:
-                            const Text('Download a JSON copy of all data'),
-                        trailing: const Icon(Icons.download_rounded),
+                        subtitle: const Text('Download a JSON copy of all data'),
+                        trailing: AppBadge.info(
+                          label: 'Roadmap',
+                          context: context,
+                          size: AppBadgeSize.compact,
+                        ),
                         onTap: () {
-                          AppHaptics.success();
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                                content: Text('Exporting HABos archive...')),
+                          AppHaptics.light();
+                          showDialog(
+                            context: context,
+                            builder: (ctx) => AlertDialog(
+                              title: const Text('Export Data'),
+                              content: const Text(
+                                'Comprehensive JSON/CSV data export for habits, tasks, focus logs, and gym metrics is scheduled for the v1.1 privacy milestone.',
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(ctx),
+                                  child: const Text('Got it'),
+                                ),
+                              ],
+                            ),
                           );
                         },
                       ),
@@ -1534,7 +2103,7 @@ class __SecurityPrivacyScreenState extends State<_SecurityPrivacyScreen> {
                         builder: (ctx) => AlertDialog(
                           title: const Text('Delete Account?'),
                           content: const Text(
-                              'This will permanently erase your HABos account.'),
+                              'This action is irreversible. All habits, tasks, workout logs, and focus sessions will be permanently purged.'),
                           actions: [
                             TextButton(
                                 onPressed: () => Navigator.pop(ctx),
@@ -1572,22 +2141,13 @@ class __SecurityPrivacyScreenState extends State<_SecurityPrivacyScreen> {
 }
 
 // ── 6. CONNECTED ACCOUNTS SCREEN ────────────────────────────────────────────
-class _ConnectedAccountsScreen extends StatefulWidget {
+class _ConnectedAccountsScreen extends ConsumerWidget {
   const _ConnectedAccountsScreen();
 
   @override
-  State<_ConnectedAccountsScreen> createState() =>
-      __ConnectedAccountsScreenState();
-}
-
-class __ConnectedAccountsScreenState extends State<_ConnectedAccountsScreen> {
-  bool _google = true;
-  bool _github = true;
-  bool _calendar = false;
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final colorScheme = Theme.of(context).colorScheme;
+    final user = ref.watch(authProvider).user;
 
     return Scaffold(
       appBar: AppBar(
@@ -1600,47 +2160,131 @@ class __ConnectedAccountsScreenState extends State<_ConnectedAccountsScreen> {
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 720),
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 buildSettingsDetailHeader(
                   context,
                   icon: Icons.link_rounded,
                   title: 'Connections',
-                  subtitle: 'Link your essential tools and services to HABos',
-                  accent: AppColors.primaryRed,
+                  subtitle: 'Link external developer tools and services to HABos',
+                  accent: colorScheme.primary,
+                ),
+                const SizedBox(height: AppSpacing.md),
+                Container(
+                  padding: const EdgeInsets.all(AppSpacing.md),
+                  decoration: BoxDecoration(
+                    color: colorScheme.surfaceContainerLow,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: colorScheme.outlineVariant.withAlpha(80),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.info_outline_rounded,
+                          size: 20, color: colorScheme.primary),
+                      const SizedBox(width: AppSpacing.md),
+                      Expanded(
+                        child: Text(
+                          'Third-party services sync tasks, repositories, and schedules with HABos.',
+                          style: AppTypography.bodySmall(context),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
                 const SizedBox(height: AppSpacing.lg),
                 AppCard(
                   padding: EdgeInsets.zero,
                   child: Column(
                     children: [
-                      buildSettingsDetailCardToggle(
-                        context,
-                        icon: Icons.g_mobiledata_rounded,
-                        title: 'Google SSO',
-                        subtitle: 'Fast sign-in across your devices',
-                        value: _google,
-                        onChanged: (v) => setState(() => _google = v),
-                        accent: colorScheme.primary,
+                      ListTile(
+                        leading: Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: colorScheme.primary.withAlpha(24),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Icon(Icons.g_mobiledata_rounded,
+                              size: 28, color: colorScheme.primary),
+                        ),
+                        title: const Text('Google Account'),
+                        subtitle: Text(
+                            'Authenticated with ${user?.email ?? 'primary email'}'),
+                        trailing: AppBadge.success(
+                          label: 'Connected',
+                          context: context,
+                          size: AppBadgeSize.compact,
+                        ),
                       ),
                       const Divider(height: 1),
-                      buildSettingsDetailCardToggle(
-                        context,
-                        icon: Icons.code_rounded,
-                        title: 'GitHub',
-                        subtitle: 'Repositories & commits sync',
-                        value: _github,
-                        onChanged: (v) => setState(() => _github = v),
-                        accent: colorScheme.primary,
+                      ListTile(
+                        leading: Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: colorScheme.onSurface.withAlpha(20),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(Icons.code_rounded, size: 20),
+                        ),
+                        title: const Text('GitHub'),
+                        subtitle: const Text(
+                            'Sync commits & repositories via Developer Hub'),
+                        trailing: AppBadge.info(
+                          label: 'Configured',
+                          context: context,
+                          size: AppBadgeSize.compact,
+                        ),
+                        onTap: () {
+                          AppHaptics.light();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                  'GitHub personal access token is configured in Developer Hub / Projects.'),
+                            ),
+                          );
+                        },
                       ),
                       const Divider(height: 1),
-                      buildSettingsDetailCardToggle(
-                        context,
-                        icon: Icons.calendar_month_rounded,
-                        title: 'Google Calendar',
-                        subtitle: 'Keep your schedule in sync',
-                        value: _calendar,
-                        onChanged: (v) => setState(() => _calendar = v),
-                        accent: colorScheme.primary,
+                      ListTile(
+                        leading: Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: Colors.blue.withAlpha(24),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(Icons.calendar_month_rounded,
+                              size: 20, color: Colors.blue),
+                        ),
+                        title: const Text('Google Calendar'),
+                        subtitle: const Text(
+                            'Bi-directional schedule sync planned for v1.1'),
+                        trailing: AppBadge.info(
+                          label: 'Coming Soon',
+                          context: context,
+                          size: AppBadgeSize.compact,
+                        ),
+                        onTap: () {
+                          AppHaptics.light();
+                          showDialog(
+                            context: context,
+                            builder: (ctx) => AlertDialog(
+                              title: const Text('Google Calendar Integration'),
+                              content: const Text(
+                                'Bi-directional calendar event synchronization with HabOS academic deadlines and task scheduling is coming in v1.1.',
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(ctx),
+                                  child: const Text('Got it'),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
                       ),
                     ],
                   ),
@@ -1673,8 +2317,15 @@ class __PersonalInfoScreenState extends ConsumerState<_PersonalInfoScreen> {
     final user = ref.read(authProvider).user;
     _nameController =
         TextEditingController(text: user?.name ?? 'Habtamu Befekadu');
-    _bioController =
-        TextEditingController(text: 'Full-Stack Developer • DBU Student');
+    _bioController = TextEditingController(
+        text: user?.bio ?? 'Full-Stack Developer • DBU Student');
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _bioController.dispose();
+    super.dispose();
   }
 
   @override
@@ -1738,6 +2389,7 @@ class __PersonalInfoScreenState extends ConsumerState<_PersonalInfoScreen> {
                               final dio = ref.read(dioProvider);
                               await dio.put(ApiEndpoints.updateProfile, data: {
                                 'name': _nameController.text.trim(),
+                                'bio': _bioController.text.trim(),
                               });
                               await ref
                                   .read(authProvider.notifier)
@@ -1770,8 +2422,84 @@ class __PersonalInfoScreenState extends ConsumerState<_PersonalInfoScreen> {
 }
 
 // ── 8. PASSWORD & SECURITY SCREEN ───────────────────────────────────────────
-class _PasswordSecurityScreen extends StatelessWidget {
+class _PasswordSecurityScreen extends ConsumerStatefulWidget {
   const _PasswordSecurityScreen();
+
+  @override
+  ConsumerState<_PasswordSecurityScreen> createState() =>
+      __PasswordSecurityScreenState();
+}
+
+class __PasswordSecurityScreenState
+    extends ConsumerState<_PasswordSecurityScreen> {
+  final _formKey = GlobalKey<FormState>();
+  final _currentPasswordController = TextEditingController();
+  final _newPasswordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
+
+  bool _obscureCurrent = true;
+  bool _obscureNew = true;
+  bool _obscureConfirm = true;
+  bool _isSubmitting = false;
+
+  @override
+  void dispose() {
+    _currentPasswordController.dispose();
+    _newPasswordController.dispose();
+    _confirmPasswordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _updatePassword() async {
+    if (!_formKey.currentState!.validate()) return;
+    if (_isSubmitting) return;
+
+    setState(() => _isSubmitting = true);
+
+    try {
+      final dio = ref.read(dioProvider);
+      final currentPass = _currentPasswordController.text;
+      final newPass = _newPasswordController.text;
+
+      await dio.put(
+        ApiEndpoints.updateProfile,
+        data: {
+          'currentPassword': currentPass,
+          'newPassword': newPass,
+        },
+      );
+
+      if (!mounted) return;
+
+      AppHaptics.success();
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Password updated successfully!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      AppHaptics.warning();
+      final String errorMsg = e is DioException && e.response?.data != null
+          ? (e.response!.data['message']?.toString() ??
+              'Failed to update password. Please check your current password.')
+          : 'Failed to update password. Please try again.';
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(errorMsg),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1781,69 +2509,154 @@ class _PasswordSecurityScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Password & Security'),
       ),
-      body: Padding(
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Align(
           alignment: Alignment.topCenter,
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 720),
-            child: Column(
-              children: [
-                buildSettingsDetailHeader(
-                  context,
-                  icon: Icons.lock_reset_rounded,
-                  title: 'Password',
-                  subtitle: 'Keep your account protected and private',
-                  accent: AppColors.primaryRed,
-                ),
-                const SizedBox(height: AppSpacing.lg),
-                AppCard(
-                  padding: const EdgeInsets.all(AppSpacing.md),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Update Credentials',
-                        style: AppTypography.titleMedium(context).copyWith(
-                          fontWeight: FontWeight.w800,
-                          color: colorScheme.onSurface,
-                        ),
-                      ),
-                      const SizedBox(height: AppSpacing.md),
-                      const TextField(
-                        obscureText: true,
-                        decoration: InputDecoration(
-                          labelText: 'Current Password',
-                        ),
-                      ),
-                      const SizedBox(height: AppSpacing.md),
-                      const TextField(
-                        obscureText: true,
-                        decoration: InputDecoration(
-                          labelText: 'New Password',
-                        ),
-                      ),
-                      const SizedBox(height: AppSpacing.lg),
-                      SizedBox(
-                        width: double.infinity,
-                        child: FilledButton(
-                          onPressed: () {
-                            AppHaptics.success();
-                            Navigator.pop(context);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                  content: Text('Password updated!')),
-                            );
-                          },
-                          style: FilledButton.styleFrom(
-                              backgroundColor: AppColors.primaryRed),
-                          child: const Text('Update Password'),
-                        ),
-                      ),
-                    ],
+            child: Form(
+              key: _formKey,
+              child: Column(
+                children: [
+                  buildSettingsDetailHeader(
+                    context,
+                    icon: Icons.lock_reset_rounded,
+                    title: 'Password',
+                    subtitle: 'Keep your account protected with a strong password',
+                    accent: AppColors.primaryRed,
                   ),
-                ),
-              ],
+                  const SizedBox(height: AppSpacing.lg),
+                  AppCard(
+                    padding: const EdgeInsets.all(AppSpacing.md),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Update Credentials',
+                          style: AppTypography.titleMedium(context).copyWith(
+                            fontWeight: FontWeight.w800,
+                            color: colorScheme.onSurface,
+                          ),
+                        ),
+                        const SizedBox(height: AppSpacing.xs),
+                        Text(
+                          'Enter your current password and choose a new password of at least 8 characters.',
+                          style: AppTypography.bodySmall(context).copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                        const SizedBox(height: AppSpacing.md),
+                        TextFormField(
+                          controller: _currentPasswordController,
+                          obscureText: _obscureCurrent,
+                          textInputAction: TextInputAction.next,
+                          decoration: InputDecoration(
+                            labelText: 'Current Password',
+                            prefixIcon: const Icon(Icons.lock_outline_rounded),
+                            suffixIcon: IconButton(
+                              icon: Icon(
+                                _obscureCurrent
+                                    ? Icons.visibility_outlined
+                                    : Icons.visibility_off_outlined,
+                              ),
+                              onPressed: () => setState(
+                                  () => _obscureCurrent = !_obscureCurrent),
+                            ),
+                          ),
+                          validator: (value) {
+                            if (value == null || value.trim().isEmpty) {
+                              return 'Please enter your current password';
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: AppSpacing.md),
+                        TextFormField(
+                          controller: _newPasswordController,
+                          obscureText: _obscureNew,
+                          textInputAction: TextInputAction.next,
+                          decoration: InputDecoration(
+                            labelText: 'New Password',
+                            prefixIcon: const Icon(Icons.key_rounded),
+                            suffixIcon: IconButton(
+                              icon: Icon(
+                                _obscureNew
+                                    ? Icons.visibility_outlined
+                                    : Icons.visibility_off_outlined,
+                              ),
+                              onPressed: () =>
+                                  setState(() => _obscureNew = !_obscureNew),
+                            ),
+                          ),
+                          validator: (value) {
+                            if (value == null || value.isEmpty) {
+                              return 'Please enter a new password';
+                            }
+                            if (value.length < 8) {
+                              return 'Password must be at least 8 characters long';
+                            }
+                            if (value == _currentPasswordController.text) {
+                              return 'New password must be different from current password';
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: AppSpacing.md),
+                        TextFormField(
+                          controller: _confirmPasswordController,
+                          obscureText: _obscureConfirm,
+                          textInputAction: TextInputAction.done,
+                          onFieldSubmitted: (_) => _updatePassword(),
+                          decoration: InputDecoration(
+                            labelText: 'Confirm New Password',
+                            prefixIcon: const Icon(Icons.key_rounded),
+                            suffixIcon: IconButton(
+                              icon: Icon(
+                                _obscureConfirm
+                                    ? Icons.visibility_outlined
+                                    : Icons.visibility_off_outlined,
+                              ),
+                              onPressed: () => setState(
+                                  () => _obscureConfirm = !_obscureConfirm),
+                            ),
+                          ),
+                          validator: (value) {
+                            if (value == null || value.isEmpty) {
+                              return 'Please confirm your new password';
+                            }
+                            if (value != _newPasswordController.text) {
+                              return 'Passwords do not match';
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: AppSpacing.lg),
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton(
+                            onPressed: _isSubmitting ? null : _updatePassword,
+                            style: FilledButton.styleFrom(
+                              backgroundColor: AppColors.primaryRed,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                            ),
+                            child: _isSubmitting
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : const Text('Update Password'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
