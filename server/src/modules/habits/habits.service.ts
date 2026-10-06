@@ -75,23 +75,32 @@ const getDifficultyWeight = (difficulty?: string): number => {
   }
 };
 
+export const MAX_STREAK_FREEZES = 3;
+
 /**
  * Evaluates streaks for a habit, resetting expired streaks and consuming streak freezes when applicable.
+ * @param consumeFreeze - When true, a streak freeze is auto-consumed and written to DB for a missed day.
+ *   Pass `true` only from write paths (scheduled jobs, explicit log actions). GET handlers omit this
+ *   (defaults to false) so that reads are never side-effectful.
  */
-export const evaluateHabitStreak = async (habitId: string, habitRecord?: any) => {
+export const evaluateHabitStreak = async (habitId: string, habitRecord?: any, consumeFreeze = false) => {
   const habit = habitRecord || (await prisma.habit.findUnique({ where: { id: habitId } }));
   if (!habit) return { currentStreak: 0, longestStreak: 0, streakFreezes: 0 };
 
-  const isWeeklyCount =
-    habit.frequency === 'CUSTOM' ||
-    habit.targetFrequencyPeriod === 'WEEK' ||
-    (habit.targetFrequencyCount && habit.targetFrequencyCount > 1);
+  // Evaluate based on targetFrequencyPeriod, not count
+  const isWeeklyCount = habit.targetFrequencyPeriod === 'WEEK';
+
+  const isMonthlyCount = habit.targetFrequencyPeriod === 'MONTH';
 
   if (isWeeklyCount) {
-    return evaluateWeeklyCountStreak(habit);
+    return evaluateWeeklyCountStreak(habit, consumeFreeze);
   }
 
-  // --- Daily Habit Streak Evaluation ---
+  // Monthly habits: evaluate completions within each calendar month
+  if (isMonthlyCount) {
+    return evaluateMonthlyCountStreak(habit, consumeFreeze);
+  }
+
   const logs = await prisma.habitLog.findMany({
     where: { habitId, isCompleted: true },
     select: { date: true, wasFrozen: true },
@@ -102,14 +111,16 @@ export const evaluateHabitStreak = async (habitId: string, habitRecord?: any) =>
     logs.map((log) => new Date(log.date).toISOString().split('T')[0])
   );
 
-  const today = new Date();
-  const todayStr = today.toISOString().split('T')[0];
+  const now = new Date();
+  const todayStr = now.toISOString().split('T')[0];
+  const [tY, tM, tD] = todayStr.split('-').map(Number);
+  const todayUtc = new Date(Date.UTC(tY, tM - 1, tD, 0, 0, 0, 0));
 
-  const yesterday = new Date(today);
-  yesterday.setDate(yesterday.getDate() - 1);
-  const yesterdayStr = yesterday.toISOString().split('T')[0];
+  const yesterdayUtc = new Date(todayUtc);
+  yesterdayUtc.setUTCDate(yesterdayUtc.getUTCDate() - 1);
+  const yesterdayStr = yesterdayUtc.toISOString().split('T')[0];
 
-  let streakFreezes = habit.streakFreezes ?? 2;
+  let streakFreezes = Math.min(habit.streakFreezes ?? 2, MAX_STREAK_FREEZES);
   let currentStreak = habit.currentStreak || 0;
   let longestStreak = habit.longestStreak || 0;
 
@@ -117,16 +128,37 @@ export const evaluateHabitStreak = async (habitId: string, habitRecord?: any) =>
   if (!dateSet.has(todayStr) && !dateSet.has(yesterdayStr)) {
     // If user built a streak and yesterday wasn't logged:
     if (currentStreak > 0) {
-      if (streakFreezes > 0) {
-        // Auto-consume 1 streak freeze for yesterday
-        const yesterdayDate = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate());
-        await prisma.habitLog.upsert({
-          where: { habitId_date: { habitId, date: yesterdayDate } },
-          update: { isCompleted: true, wasFrozen: true, notes: 'Protected by streak freeze' },
-          create: { habitId, date: yesterdayDate, isCompleted: true, wasFrozen: true, notes: 'Protected by streak freeze' },
+      if (streakFreezes > 0 && consumeFreeze) {
+        // Atomic conditional decrement to eliminate race conditions under concurrency
+        const decrementRes = await prisma.habit.updateMany({
+          where: {
+            id: habitId,
+            streakFreezes: { gt: 0 },
+          },
+          data: {
+            streakFreezes: { decrement: 1 },
+          },
         });
 
-        streakFreezes = Math.max(0, streakFreezes - 1);
+        if (decrementRes.count > 0) {
+          // Successfully claimed 1 shield atomically
+          const yesterdayDate = yesterdayUtc;
+          await prisma.habitLog.upsert({
+            where: { habitId_date: { habitId, date: yesterdayDate } },
+            update: { isCompleted: true, wasFrozen: true, notes: 'Protected by streak freeze' },
+            create: { habitId, date: yesterdayDate, isCompleted: true, wasFrozen: true, notes: 'Protected by streak freeze' },
+          });
+          streakFreezes = Math.max(0, streakFreezes - 1);
+          dateSet.add(yesterdayStr);
+        } else {
+          // Shield was consumed by a concurrent request or was 0
+          streakFreezes = 0;
+          longestStreak = Math.max(longestStreak, currentStreak);
+          currentStreak = 0;
+        }
+      } else if (streakFreezes > 0 && !consumeFreeze) {
+        // During reads: preserve streak and freeze count without writing to DB
+        // Show the streak as protected (freeze available) without consuming it
         dateSet.add(yesterdayStr);
       } else {
         // Streak is broken
@@ -139,7 +171,9 @@ export const evaluateHabitStreak = async (habitId: string, habitRecord?: any) =>
   }
 
   // Re-calculate consecutive unbroken streak backwards
-  let checkDate = dateSet.has(todayStr) ? new Date(today) : (dateSet.has(yesterdayStr) ? new Date(yesterday) : null);
+  let checkDate = dateSet.has(todayStr)
+    ? new Date(todayUtc)
+    : (dateSet.has(yesterdayStr) ? new Date(yesterdayUtc) : null);
   let computedStreak = 0;
 
   if (checkDate) {
@@ -147,7 +181,7 @@ export const evaluateHabitStreak = async (habitId: string, habitRecord?: any) =>
       const dStr = checkDate.toISOString().split('T')[0];
       if (dateSet.has(dStr)) {
         computedStreak++;
-        checkDate.setDate(checkDate.getDate() - 1);
+        checkDate.setUTCDate(checkDate.getUTCDate() - 1);
       } else {
         break;
       }
@@ -179,15 +213,17 @@ export const evaluateHabitStreak = async (habitId: string, habitRecord?: any) =>
 
   longestStreak = Math.max(longestStreak, maxConsecutive, currentStreak);
 
-  await prisma.habit.update({
-    where: { id: habitId },
-    data: {
-      currentStreak,
-      longestStreak,
-      streakFreezes,
-      lastEvaluatedDate: new Date(),
-    },
-  });
+  if (consumeFreeze) {
+    await prisma.habit.update({
+      where: { id: habitId },
+      data: {
+        currentStreak,
+        longestStreak,
+        streakFreezes,
+        lastEvaluatedDate: new Date(),
+      },
+    });
+  }
 
   return { currentStreak, longestStreak, streakFreezes };
 };
@@ -196,7 +232,7 @@ export const evaluateHabitStreak = async (habitId: string, habitRecord?: any) =>
  * Evaluates weekly count-based habits (e.g. 3x per week).
  * Streaks increment by 1 for each calendar week meeting the target.
  */
-const evaluateWeeklyCountStreak = async (habit: any) => {
+const evaluateWeeklyCountStreak = async (habit: any, persist = false) => {
   const targetCount = habit.targetFrequencyCount || 1;
 
   const logs = await prisma.habitLog.findMany({
@@ -260,14 +296,77 @@ const evaluateWeeklyCountStreak = async (habit: any) => {
 
   const longestStreak = Math.max(habit.longestStreak || 0, currentStreak);
 
-  await prisma.habit.update({
-    where: { id: habit.id },
-    data: {
-      currentStreak,
-      longestStreak,
-      lastEvaluatedDate: new Date(),
-    },
+  if (persist) {
+    await prisma.habit.update({
+      where: { id: habit.id },
+      data: {
+        currentStreak,
+        longestStreak,
+        lastEvaluatedDate: new Date(),
+      },
+    });
+  }
+
+  return { currentStreak, longestStreak, streakFreezes: habit.streakFreezes ?? 2 };
+};
+
+/**
+ * Evaluates monthly count-based habits (e.g. 10x per month).
+ * Streaks increment by 1 for each calendar month meeting the target count.
+ */
+const evaluateMonthlyCountStreak = async (habit: any, persist = false) => {
+  const targetCount = habit.targetFrequencyCount || 1;
+
+  const logs = await prisma.habitLog.findMany({
+    where: { habitId: habit.id, isCompleted: true },
+    select: { date: true },
+    orderBy: { date: 'desc' },
   });
+
+  // Group logs into "YYYY-MM" month strings
+  const monthCounts = new Map<string, number>();
+  for (const log of logs) {
+    const d = new Date(log.date);
+    const monthKey = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+    monthCounts.set(monthKey, (monthCounts.get(monthKey) || 0) + 1);
+  }
+
+  const now = new Date();
+  const currentMonthKey = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
+
+  // Go back one month
+  const prevMonthDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
+  const prevMonthKey = `${prevMonthDate.getUTCFullYear()}-${String(prevMonthDate.getUTCMonth() + 1).padStart(2, '0')}`;
+
+  const currentMonthMet = (monthCounts.get(currentMonthKey) || 0) >= targetCount;
+  const prevMonthMet = (monthCounts.get(prevMonthKey) || 0) >= targetCount;
+
+  let currentStreak = 0;
+  let checkDate: Date | null = currentMonthMet
+    ? new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
+    : (prevMonthMet ? prevMonthDate : null);
+
+  if (checkDate) {
+    while (true) {
+      const key = `${checkDate.getUTCFullYear()}-${String(checkDate.getUTCMonth() + 1).padStart(2, '0')}`;
+      if ((monthCounts.get(key) || 0) >= targetCount) {
+        currentStreak++;
+        // Go to previous month
+        checkDate = new Date(Date.UTC(checkDate.getUTCFullYear(), checkDate.getUTCMonth() - 1, 1));
+      } else {
+        break;
+      }
+    }
+  }
+
+  const longestStreak = Math.max(habit.longestStreak || 0, currentStreak);
+
+  if (persist) {
+    await prisma.habit.update({
+      where: { id: habit.id },
+      data: { currentStreak, longestStreak, lastEvaluatedDate: new Date() },
+    });
+  }
 
   return { currentStreak, longestStreak, streakFreezes: habit.streakFreezes ?? 2 };
 };
@@ -293,13 +392,13 @@ export const createHabit = async (userId: string, data: CreateHabitDTO) => {
       description: data.description,
       frequency: data.frequency || 'DAILY',
       targetFrequencyCount: data.targetFrequencyCount ?? 1,
-      targetFrequencyPeriod: data.targetFrequencyPeriod ?? 'WEEK',
+      targetFrequencyPeriod: data.targetFrequencyPeriod ?? (data.frequency === 'DAILY' || !data.frequency ? 'DAY' : 'WEEK'),
       targetType: data.targetType || 'CHECKBOX',
       targetValue: data.targetValue || 1,
       reminderTime: data.reminderTime,
       difficulty: data.difficulty || 'MEDIUM',
       weight: calculatedWeight,
-      streakFreezes: data.streakFreezes ?? 2,
+      streakFreezes: Math.min(data.streakFreezes ?? 2, MAX_STREAK_FREEZES),
       lastEvaluatedDate: new Date(),
       userId,
       categoryId: data.categoryId || null,
@@ -319,13 +418,15 @@ export const createHabit = async (userId: string, data: CreateHabitDTO) => {
  */
 export const getHabits = async (userId: string, includeInactive = false, page?: number, limit?: number) => {
   const now = new Date();
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+  const todayStr = now.toISOString().split('T')[0];
+  const [curYear, curMonth, curDay] = todayStr.split('-').map(Number);
+  const startOfToday = new Date(Date.UTC(curYear, curMonth - 1, curDay, 0, 0, 0, 0));
+  const endOfToday = new Date(Date.UTC(curYear, curMonth - 1, curDay, 23, 59, 59, 999));
 
   // Monday of this week for weekly count evaluation
-  const dayOfWeek = (now.getDay() + 6) % 7; // 0 = Monday
+  const dayOfWeek = (startOfToday.getUTCDay() + 6) % 7; // 0 = Monday
   const startOfWeek = new Date(startOfToday);
-  startOfWeek.setDate(startOfWeek.getDate() - dayOfWeek);
+  startOfWeek.setUTCDate(startOfWeek.getUTCDate() - dayOfWeek);
 
   const where = {
     userId,
@@ -490,7 +591,27 @@ export const logHabitCompletion = async (userId: string, habitId: string, data: 
   }
 
   const rawDate = data.date ? new Date(data.date) : new Date();
-  const normalizedDate = new Date(rawDate.getFullYear(), rawDate.getMonth(), rawDate.getDate());
+  const dateStr = rawDate.toISOString().split('T')[0];
+  const [dY, dM, dD] = dateStr.split('-').map(Number);
+  const normalizedDate = new Date(Date.UTC(dY, dM - 1, dD, 0, 0, 0, 0));
+
+  const targetVal = habit.targetValue || 1;
+  const isNumericHabit = habit.targetType === 'COUNT' || habit.targetType === 'DURATION';
+
+  let loggedValue: number;
+  let isCompleted: boolean;
+
+  if (isNumericHabit) {
+    // For COUNT and DURATION habits:
+    // If a value is provided, use it; if client only sent isCompleted boolean, map to targetVal or 0.
+    loggedValue = data.value !== undefined ? data.value : (data.isCompleted ? targetVal : 0);
+    // Completion is authoritatively derived from progress vs target
+    isCompleted = loggedValue >= targetVal;
+  } else {
+    // CHECKBOX habits:
+    isCompleted = data.isCompleted !== undefined ? data.isCompleted : ((data.value ?? 1) >= targetVal);
+    loggedValue = isCompleted ? targetVal : (data.value !== undefined ? data.value : 0);
+  }
 
   const log = await prisma.habitLog.upsert({
     where: {
@@ -500,21 +621,21 @@ export const logHabitCompletion = async (userId: string, habitId: string, data: 
       },
     },
     update: {
-      isCompleted: data.isCompleted !== undefined ? data.isCompleted : true,
-      value: data.value !== undefined ? data.value : 1,
+      isCompleted,
+      value: loggedValue,
       notes: data.notes,
     },
     create: {
       habitId,
       date: normalizedDate,
-      isCompleted: data.isCompleted !== undefined ? data.isCompleted : true,
-      value: data.value !== undefined ? data.value : 1,
+      isCompleted,
+      value: loggedValue,
       notes: data.notes,
     },
   });
 
-  // Re-evaluate streak
-  const streaks = await evaluateHabitStreak(habitId);
+  // Re-evaluate streak (explicit write action: consume freeze if available)
+  const streaks = await evaluateHabitStreak(habitId, undefined, true);
 
   invalidateDashboardCache(userId);
 
@@ -586,12 +707,23 @@ export const refillStreakFreeze = async (userId: string, habitId: string, count 
 
   if (!habit) throw new ApiError(404, 'Habit not found');
 
+  const currentFreezes = habit.streakFreezes ?? 2;
+  if (currentFreezes >= MAX_STREAK_FREEZES) {
+    throw new ApiError(400, `Habit already has the maximum streak freeze capacity (${MAX_STREAK_FREEZES} shields)`);
+  }
+
+  const newFreezes = Math.min(currentFreezes + count, MAX_STREAK_FREEZES);
+
   const updated = await prisma.habit.update({
     where: { id: habitId },
-    data: { streakFreezes: (habit.streakFreezes || 0) + count },
+    data: { streakFreezes: newFreezes },
   });
 
-  return { habitId: updated.id, streakFreezes: updated.streakFreezes };
+  return {
+    habitId: updated.id,
+    streakFreezes: updated.streakFreezes,
+    maxStreakFreezes: MAX_STREAK_FREEZES,
+  };
 };
 
 /**
@@ -618,8 +750,10 @@ export const deleteHabit = async (userId: string, habitId: string) => {
  */
 export const getHabitsSummary = async (userId: string) => {
   const now = new Date();
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+  const todayStr = now.toISOString().split('T')[0];
+  const [curYear, curMonth, curDay] = todayStr.split('-').map(Number);
+  const startOfToday = new Date(Date.UTC(curYear, curMonth - 1, curDay, 0, 0, 0, 0));
+  const endOfToday = new Date(Date.UTC(curYear, curMonth - 1, curDay, 23, 59, 59, 999));
 
   const activeHabits = await prisma.habit.findMany({
     where: { userId, isActive: true },
@@ -651,6 +785,16 @@ export const getHabitsSummary = async (userId: string) => {
 // ==========================================
 
 export const createRoutine = async (userId: string, data: CreateRoutineDTO) => {
+  if (data.habitIds && data.habitIds.length > 0) {
+    const validHabits = await prisma.habit.findMany({
+      where: { id: { in: data.habitIds }, userId },
+      select: { id: true },
+    });
+    if (validHabits.length !== data.habitIds.length) {
+      throw new ApiError(400, 'One or more habit IDs are invalid or unauthorized');
+    }
+  }
+
   const routine = await prisma.routine.create({
     data: {
       name: data.name,
@@ -683,8 +827,10 @@ export const createRoutine = async (userId: string, data: CreateRoutineDTO) => {
 
 export const getRoutines = async (userId: string) => {
   const now = new Date();
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+  const todayStr = now.toISOString().split('T')[0];
+  const [curYear, curMonth, curDay] = todayStr.split('-').map(Number);
+  const startOfToday = new Date(Date.UTC(curYear, curMonth - 1, curDay, 0, 0, 0, 0));
+  const endOfToday = new Date(Date.UTC(curYear, curMonth - 1, curDay, 23, 59, 59, 999));
 
   const routines = await prisma.routine.findMany({
     where: { userId },
@@ -761,36 +907,51 @@ export const updateRoutine = async (userId: string, routineId: string, data: Upd
 
   if (!existing) throw new ApiError(404, 'Routine not found');
 
-  // If habitIds provided, delete old items and recreate
-  if (data.habitIds) {
-    await prisma.routineItem.deleteMany({ where: { routineId } });
-    await prisma.routineItem.createMany({
-      data: data.habitIds.map((hId, idx) => ({
-        routineId,
-        habitId: hId,
-        order: idx,
-      })),
+  // Validate habit ownership
+  if (data.habitIds && data.habitIds.length > 0) {
+    const validHabits = await prisma.habit.findMany({
+      where: { id: { in: data.habitIds }, userId },
+      select: { id: true },
     });
+    if (validHabits.length !== data.habitIds.length) {
+      throw new ApiError(400, 'One or more habit IDs are invalid or unauthorized');
+    }
   }
 
-  const updated = await prisma.routine.update({
-    where: { id: routineId },
-    data: {
-      name: data.name,
-      description: data.description,
-      icon: data.icon,
-      color: data.color,
-      targetTime: data.targetTime,
-    },
-    include: {
-      items: {
-        include: { habit: true },
-        orderBy: { order: 'asc' },
-      },
-    },
-  });
+  return await prisma.$transaction(async (tx) => {
+    // If habitIds provided, delete old items and recreate atomically
+    if (data.habitIds) {
+      await tx.routineItem.deleteMany({ where: { routineId } });
+      if (data.habitIds.length > 0) {
+        await tx.routineItem.createMany({
+          data: data.habitIds.map((hId, idx) => ({
+            routineId,
+            habitId: hId,
+            order: idx,
+          })),
+        });
+      }
+    }
 
-  return updated;
+    const updated = await tx.routine.update({
+      where: { id: routineId },
+      data: {
+        name: data.name,
+        description: data.description,
+        icon: data.icon,
+        color: data.color,
+        targetTime: data.targetTime,
+      },
+      include: {
+        items: {
+          include: { habit: true },
+          orderBy: { order: 'asc' },
+        },
+      },
+    });
+
+    return updated;
+  });
 };
 
 export const deleteRoutine = async (userId: string, routineId: string) => {
@@ -816,27 +977,24 @@ export const completeRoutine = async (userId: string, routineId: string, dateStr
   if (!routine) throw new ApiError(404, 'Routine not found');
 
   const rawDate = dateStr ? new Date(dateStr) : new Date();
-  const normalizedDate = new Date(rawDate.getFullYear(), rawDate.getMonth(), rawDate.getDate());
+  const dStr = rawDate.toISOString().split('T')[0];
+  const [dY, dM, dD] = dStr.split('-').map(Number);
+  const normalizedDate = new Date(Date.UTC(dY, dM - 1, dD, 0, 0, 0, 0));
 
-  const results = await Promise.all(
-    routine.items.map(async (item) => {
-      await prisma.habitLog.upsert({
-        where: {
-          habitId_date: {
-            habitId: item.habitId,
-            date: normalizedDate,
-          },
-        },
+  // Phase 1: atomically write all habit logs in a single transaction
+  await prisma.$transaction(
+    routine.items.map((item) =>
+      prisma.habitLog.upsert({
+        where: { habitId_date: { habitId: item.habitId, date: normalizedDate } },
         update: { isCompleted: true },
-        create: {
-          habitId: item.habitId,
-          date: normalizedDate,
-          isCompleted: true,
-        },
-      });
+        create: { habitId: item.habitId, date: normalizedDate, isCompleted: true },
+      })
+    )
+  );
 
-      return evaluateHabitStreak(item.habitId);
-    })
+  // Phase 2: evaluate streaks after all logs are committed (write path: consume freezes)
+  const results = await Promise.all(
+    routine.items.map((item) => evaluateHabitStreak(item.habitId, undefined, true))
   );
 
   invalidateDashboardCache(userId);
@@ -955,6 +1113,40 @@ export const getHabitCorrelations = async (userId: string) => {
   return insights.slice(0, 5);
 };
 
+/**
+ * Get habit categories for user
+ */
+export const getHabitCategories = async (userId: string) => {
+  let categories = await prisma.category.findMany({
+    where: {
+      userId,
+      type: { in: ['HABIT', 'GENERAL', 'HEALTH', 'PRODUCTIVITY'] },
+    },
+    orderBy: { name: 'asc' },
+  });
+
+  if (categories.length === 0) {
+    const defaultCategories = [
+      { name: 'Health & Fitness', color: '#10B981', icon: 'fitness_center', type: 'HABIT' },
+      { name: 'Mindfulness & Mental', color: '#6366F1', icon: 'self_improvement', type: 'HABIT' },
+      { name: 'Daily Habits', color: '#3B82F6', icon: 'repeat', type: 'HABIT' },
+      { name: 'Learning & Growth', color: '#EC4899', icon: 'school', type: 'HABIT' },
+      { name: 'Productivity', color: '#F59E0B', icon: 'bolt', type: 'HABIT' },
+    ];
+
+    await prisma.category.createMany({
+      data: defaultCategories.map((c) => ({ ...c, userId })),
+    });
+
+    categories = await prisma.category.findMany({
+      where: { userId, type: 'HABIT' },
+      orderBy: { name: 'asc' },
+    });
+  }
+
+  return categories;
+};
+
 export default {
   createHabit,
   getHabits,
@@ -974,4 +1166,5 @@ export default {
   deleteRoutine,
   completeRoutine,
   getHabitCorrelations,
+  getHabitCategories,
 };

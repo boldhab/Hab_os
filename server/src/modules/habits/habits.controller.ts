@@ -52,6 +52,17 @@ export const getHabitCorrelations = asyncHandler(async (req: Request, res: Respo
 });
 
 /**
+ * @desc    Get habit categories
+ * @route   GET /api/v1/habits/categories
+ * @access  Private
+ */
+export const getHabitCategories = asyncHandler(async (req: Request, res: Response) => {
+  const authReq = req as AuthRequest;
+  const categories = await habitsService.getHabitCategories(authReq.user!.id);
+  return ApiResponse.success(res, categories, 'Habit categories retrieved successfully');
+});
+
+/**
  * @desc    Get single habit with recent logs
  * @route   GET /api/v1/habits/:id
  * @access  Private
@@ -181,4 +192,5 @@ export default {
   updateRoutine,
   deleteRoutine,
   completeRoutine,
+  getHabitCategories,
 };
