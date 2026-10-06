@@ -1,6 +1,5 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import '../../../../app/theme/app_theme.dart';
 import '../../../../data/models/dashboard_feed_model.dart';
 import '../../../widgets/common/app_card.dart';
 
@@ -265,11 +264,19 @@ class _DomainComponentBar extends StatelessWidget {
 
   IconData _getDomainIcon(String name) {
     final lower = name.toLowerCase();
-    if (lower.contains('fitness') || lower.contains('gym'))
+    if (lower.contains('fitness') || lower.contains('gym')) {
       return Icons.fitness_center_rounded;
+    }
     if (lower.contains('finance')) return Icons.account_balance_wallet_rounded;
-    if (lower.contains('focus') || lower.contains('deep'))
+    if (lower.contains('coding') || lower.contains('code') || lower.contains('dev')) {
+      return Icons.code_rounded;
+    }
+    if (lower.contains('study') || lower.contains('learn') || lower.contains('academic')) {
+      return Icons.school_rounded;
+    }
+    if (lower.contains('focus') || lower.contains('deep')) {
       return Icons.timer_rounded;
+    }
     if (lower.contains('habit')) return Icons.repeat_rounded;
     return Icons.task_alt_rounded;
   }
@@ -278,8 +285,11 @@ class _DomainComponentBar extends StatelessWidget {
     final lower = name.toLowerCase();
     if (lower.contains('fitness') || lower.contains('gym')) return cs.primary;
     if (lower.contains('finance')) return const Color(0xFF34A853);
-    if (lower.contains('focus') || lower.contains('deep'))
+    if (lower.contains('coding') || lower.contains('code')) return const Color(0xFF00B4D8);
+    if (lower.contains('study') || lower.contains('academic')) return const Color(0xFF8B5CF6);
+    if (lower.contains('focus') || lower.contains('deep')) {
       return const Color(0xFFFBBC05);
+    }
     if (lower.contains('habit')) return const Color(0xFF4285F4);
     return cs.primary;
   }

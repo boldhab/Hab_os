@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../app/theme/app_theme.dart';
+import '../../../widgets/common/form_section_header.dart';
 
 class BugFormDialog extends StatefulWidget {
   final String? initialTitle;
@@ -159,24 +160,69 @@ class _BugFormDialogState extends State<BugFormDialog> {
                   width: 36,
                   height: 4,
                   decoration: BoxDecoration(
-                      color: cs.outlineVariant.withAlpha(100),
-                      borderRadius: BorderRadius.circular(2)),
+                    color: cs.outlineVariant.withAlpha(120),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
                 ),
               ),
-              const SizedBox(height: 12),
-              Text(isEdit ? 'Edit Bug' : 'Report Bug',
-                  style: const TextStyle(
-                      fontSize: 18, fontWeight: FontWeight.w800)),
-              const SizedBox(height: 16),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: semantics.danger.withAlpha(25),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(
+                      Icons.bug_report_rounded,
+                      color: semantics.danger,
+                      size: 22,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          isEdit ? 'Edit Bug Report' : 'Report Bug',
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        Text(
+                          'Triage issue, reproduction steps & severity',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: cs.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+              const Divider(height: 24),
+
+              // Issue Details Section
+              const FormSectionHeader(
+                title: 'ISSUE DETAILS',
+                icon: Icons.error_outline_rounded,
+              ),
+              const SizedBox(height: 10),
               TextFormField(
                 controller: _titleCtrl,
-                decoration: InputDecoration(
+                textInputAction: TextInputAction.next,
+                decoration: const InputDecoration(
                   labelText: 'Bug Title *',
-                  filled: true,
-                  fillColor: cs.surfaceContainerHighest.withAlpha(40),
-                  border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14),
-                      borderSide: BorderSide.none),
+                  hintText: 'e.g. Blank screen on habit completion',
+                  prefixIcon: Icon(Icons.title_rounded),
                 ),
                 validator: (v) =>
                     v == null || v.trim().isEmpty ? 'Title required' : null,
@@ -185,13 +231,11 @@ class _BugFormDialogState extends State<BugFormDialog> {
               TextFormField(
                 controller: _descCtrl,
                 maxLines: 3,
-                decoration: InputDecoration(
+                decoration: const InputDecoration(
                   labelText: 'Description *',
-                  filled: true,
-                  fillColor: cs.surfaceContainerHighest.withAlpha(40),
-                  border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14),
-                      borderSide: BorderSide.none),
+                  hintText: 'Explain the issue, expected behavior, and actual behavior...',
+                  prefixIcon: Icon(Icons.description_outlined),
+                  alignLabelWithHint: true,
                 ),
                 validator: (v) =>
                     v == null || v.trim().isEmpty
@@ -200,44 +244,41 @@ class _BugFormDialogState extends State<BugFormDialog> {
               ),
               const SizedBox(height: 12),
               TextFormField(
-                controller: _milestoneCtrl,
-                decoration: InputDecoration(
-                  labelText: 'Milestone / Sprint (optional)',
-                  hintText: 'e.g. v1.0.0 or Sprint 1',
-                  prefixIcon: const Icon(Icons.flag_outlined, size: 18),
-                  filled: true,
-                  fillColor: cs.surfaceContainerHighest.withAlpha(40),
-                  border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14),
-                      borderSide: BorderSide.none),
+                controller: _stepsCtrl,
+                maxLines: 2,
+                decoration: const InputDecoration(
+                  labelText: 'Steps to Reproduce (optional)',
+                  hintText: '1. Go to screen...\n2. Click button...',
+                  prefixIcon: Icon(Icons.format_list_numbered_rounded),
+                  alignLabelWithHint: true,
                 ),
               ),
               const SizedBox(height: 12),
               TextFormField(
-                controller: _stepsCtrl,
-                maxLines: 2,
-                decoration: InputDecoration(
-                  labelText: 'Steps to Reproduce (optional)',
-                  filled: true,
-                  fillColor: cs.surfaceContainerHighest.withAlpha(40),
-                  border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14),
-                      borderSide: BorderSide.none),
+                controller: _milestoneCtrl,
+                textInputAction: TextInputAction.done,
+                decoration: const InputDecoration(
+                  labelText: 'Milestone / Sprint (optional)',
+                  hintText: 'e.g. v1.0.0 or Hotfix 2',
+                  prefixIcon: Icon(Icons.flag_outlined),
                 ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 20),
+
+              // Triage & Severity Section
+              const FormSectionHeader(
+                title: 'TRIAGE & SEVERITY',
+                icon: Icons.tune_rounded,
+              ),
+              const SizedBox(height: 10),
               Row(
                 children: [
                   Expanded(
                     child: DropdownButtonFormField<String>(
-                      initialValue: _severity,
-                      decoration: InputDecoration(
+                      value: _severity,
+                      decoration: const InputDecoration(
                         labelText: 'Severity',
-                        filled: true,
-                        fillColor: cs.surfaceContainerHighest.withAlpha(40),
-                        border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(14),
-                            borderSide: BorderSide.none),
+                        prefixIcon: Icon(Icons.warning_amber_rounded),
                       ),
                       items: _severities
                           .map((s) =>
@@ -251,14 +292,10 @@ class _BugFormDialogState extends State<BugFormDialog> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: DropdownButtonFormField<String>(
-                      initialValue: _priority,
-                      decoration: InputDecoration(
+                      value: _priority,
+                      decoration: const InputDecoration(
                         labelText: 'Priority',
-                        filled: true,
-                        fillColor: cs.surfaceContainerHighest.withAlpha(40),
-                        border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(14),
-                            borderSide: BorderSide.none),
+                        prefixIcon: Icon(Icons.priority_high_rounded),
                       ),
                       items: _priorities
                           .map((p) =>
@@ -273,14 +310,10 @@ class _BugFormDialogState extends State<BugFormDialog> {
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
-                initialValue: _status,
-                decoration: InputDecoration(
+                value: _status,
+                decoration: const InputDecoration(
                   labelText: 'Status',
-                  filled: true,
-                  fillColor: cs.surfaceContainerHighest.withAlpha(40),
-                  border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14),
-                      borderSide: BorderSide.none),
+                  prefixIcon: Icon(Icons.pending_actions_rounded),
                 ),
                 items: _statuses
                     .map((s) => DropdownMenuItem(
@@ -290,25 +323,32 @@ class _BugFormDialogState extends State<BugFormDialog> {
                   if (v != null) setState(() => _status = v);
                 },
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,
-                height: 50,
-                child: FilledButton(
+                height: 48,
+                child: FilledButton.icon(
                   onPressed: _saving ? null : _submit,
-                  style: FilledButton.styleFrom(
-                      backgroundColor: semantics.danger,
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14))),
-                  child: _saving
+                  icon: _saving
                       ? const SizedBox(
-                          width: 20,
-                          height: 20,
+                          width: 18,
+                          height: 18,
                           child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white))
-                      : Text(isEdit ? 'Save Changes' : 'Report Bug',
-                          style:
-                              const TextStyle(fontWeight: FontWeight.w700)),
+                              strokeWidth: 2, color: Colors.white),
+                        )
+                      : Icon(isEdit ? Icons.check_rounded : Icons.report_problem_rounded, size: 20),
+                  label: Text(
+                    _saving
+                        ? 'Submitting...'
+                        : (isEdit ? 'Save Changes' : 'Report Bug'),
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: semantics.danger,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(height: 8),

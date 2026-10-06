@@ -111,7 +111,7 @@ class _HabitRow extends StatelessWidget {
     return ConstrainedBox(
       constraints: const BoxConstraints(minHeight: 48),
       child: InkWell(
-        onTap: habit.isCompletedToday ? null : () => onTap(habit.id),
+        onTap: () => onTap(habit.id),
         borderRadius: BorderRadius.circular(12),
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
@@ -123,8 +123,7 @@ class _HabitRow extends StatelessWidget {
                 isCircle: true,
                 size: 22,
                 activeColor: activeColor,
-                onChanged:
-                    habit.isCompletedToday ? null : (_) => onTap(habit.id),
+                onChanged: (_) => onTap(habit.id),
               ),
               AppSpacing.horizontalGapMd,
 

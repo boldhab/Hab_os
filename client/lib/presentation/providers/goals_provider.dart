@@ -94,6 +94,7 @@ class GoalsNotifier extends StateNotifier<AsyncValue<void>> {
       _ref.read(dashboardProvider.notifier).load(showLoading: false);
       return true;
     } catch (e) {
+      state = AsyncValue.error(e, StackTrace.current);
       return false;
     }
   }
@@ -112,6 +113,7 @@ class GoalsNotifier extends StateNotifier<AsyncValue<void>> {
       _ref.read(dashboardProvider.notifier).load(showLoading: false);
       return true;
     } catch (e) {
+      state = AsyncValue.error(e, StackTrace.current);
       return false;
     }
   }
@@ -126,6 +128,7 @@ class GoalsNotifier extends StateNotifier<AsyncValue<void>> {
       _ref.read(dashboardProvider.notifier).load(showLoading: false);
       return true;
     } catch (e) {
+      state = AsyncValue.error(e, StackTrace.current);
       return false;
     }
   }
@@ -138,6 +141,7 @@ class GoalsNotifier extends StateNotifier<AsyncValue<void>> {
       _ref.invalidate(goalsHealthProvider);
       return true;
     } catch (e) {
+      state = AsyncValue.error(e, StackTrace.current);
       return false;
     }
   }

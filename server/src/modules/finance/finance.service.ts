@@ -4,7 +4,7 @@ import ApiError from '../../common/apiError';
 import { invalidateDashboardCache } from '../dashboard/dashboard.service';
 
 export interface CreateTransactionDTO {
-  amount: number;
+  amount: number | Prisma.Decimal;
   type: string;
   categoryId?: string | null;
   date?: Date | string;
@@ -13,7 +13,7 @@ export interface CreateTransactionDTO {
 }
 
 export interface UpdateTransactionDTO {
-  amount?: number;
+  amount?: number | Prisma.Decimal;
   type?: string;
   categoryId?: string | null;
   date?: Date | string;
@@ -33,60 +33,128 @@ export interface GetTransactionsQuery {
 
 export interface SetBudgetDTO {
   categoryId: string;
-  monthlyLimit: number;
+  monthlyLimit: number | Prisma.Decimal;
   month?: number;
   year?: number;
 }
 
-interface IdempotencyRecord {
-  response: any;
-  expiresAt: number;
-}
-
-const idempotencyStore = new Map<string, IdempotencyRecord>();
 const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+// Helper to normalize Decimal to number for clean JSON serialization
+export const decimalToNumber = (val: Prisma.Decimal | number | null | undefined): number => {
+  if (val === null || val === undefined) return 0;
+  if (typeof val === 'number') return val;
+  return Number(val.toFixed(2));
+};
 
 // ==========================================
 // 1. TRANSACTIONS (UC-102 to UC-106)
 // ==========================================
 
 export const createTransaction = async (userId: string, data: CreateTransactionDTO, idempotencyKey?: string) => {
-  if (idempotencyKey && idempotencyKey.trim() !== '') {
-    const cacheKey = `${userId}:${idempotencyKey.trim()}`;
-    const cached = idempotencyStore.get(cacheKey);
-    if (cached && cached.expiresAt > Date.now()) {
-      return cached.response;
+  const trimmedKey = idempotencyKey?.trim();
+
+  // 1. Check persistent idempotency store if key is provided
+  if (trimmedKey) {
+    const existingKey = await prisma.idempotencyKey.findUnique({
+      where: {
+        userId_key: {
+          userId,
+          key: trimmedKey,
+        },
+      },
+    });
+
+    if (existingKey) {
+      if (existingKey.expiresAt > new Date()) {
+        return existingKey.response;
+      }
+      // Delete expired key if present
+      await prisma.idempotencyKey.delete({ where: { id: existingKey.id } }).catch(() => {});
     }
   }
 
+  // 2. Validate category ownership and category type (must be FINANCE)
   if (data.categoryId) {
     const category = await prisma.category.findFirst({
-      where: { id: data.categoryId, userId },
+      where: { id: data.categoryId, userId, type: 'FINANCE' },
     });
-    if (!category) throw new ApiError(404, 'Category not found');
+    if (!category) {
+      throw new ApiError(404, 'Category not found or is not a finance category');
+    }
   }
 
-  const transaction = await prisma.transaction.create({
-    data: {
-      amount: data.amount,
-      type: data.type,
-      date: data.date ? new Date(data.date) : new Date(),
-      description: data.description,
-      source: data.source || 'CASH',
-      categoryId: data.categoryId || null,
-      userId,
-    },
-    include: {
-      category: { select: { id: true, name: true, color: true, icon: true } },
-    },
-  });
+  const amountDecimal = new Prisma.Decimal(data.amount);
 
-  if (idempotencyKey && idempotencyKey.trim() !== '') {
-    const cacheKey = `${userId}:${idempotencyKey.trim()}`;
-    idempotencyStore.set(cacheKey, {
-      response: transaction,
-      expiresAt: Date.now() + IDEMPOTENCY_TTL_MS,
+  // 3. Persist transaction (and idempotency key atomically if provided)
+  let transaction: any;
+
+  if (trimmedKey) {
+    try {
+      transaction = await prisma.$transaction(async (tx) => {
+        const createdTx = await tx.transaction.create({
+          data: {
+            amount: amountDecimal,
+            type: data.type,
+            date: data.date ? new Date(data.date) : new Date(),
+            description: data.description,
+            source: data.source || 'CASH',
+            categoryId: data.categoryId || null,
+            userId,
+          },
+          include: {
+            category: { select: { id: true, name: true, color: true, icon: true } },
+          },
+        });
+
+        const serialized = {
+          ...createdTx,
+          amount: decimalToNumber(createdTx.amount),
+        };
+
+        await tx.idempotencyKey.create({
+          data: {
+            key: trimmedKey,
+            userId,
+            response: serialized,
+            expiresAt: new Date(Date.now() + IDEMPOTENCY_TTL_MS),
+          },
+        });
+
+        return serialized;
+      });
+    } catch (err: any) {
+      // If a concurrent request created the key, return the existing idempotent response
+      if (err.code === 'P2002') {
+        const raceKey = await prisma.idempotencyKey.findUnique({
+          where: { userId_key: { userId, key: trimmedKey } },
+        });
+        if (raceKey) {
+          return raceKey.response;
+        }
+      }
+      throw err;
+    }
+  } else {
+    const rawTx = await prisma.transaction.create({
+      data: {
+        amount: amountDecimal,
+        type: data.type,
+        date: data.date ? new Date(data.date) : new Date(),
+        description: data.description,
+        source: data.source || 'CASH',
+        categoryId: data.categoryId || null,
+        userId,
+      },
+      include: {
+        category: { select: { id: true, name: true, color: true, icon: true } },
+      },
     });
+
+    transaction = {
+      ...rawTx,
+      amount: decimalToNumber(rawTx.amount),
+    };
   }
 
   invalidateDashboardCache(userId);
@@ -120,7 +188,7 @@ export const getTransactions = async (userId: string, query: GetTransactionsQuer
     ];
   }
 
-  const [transactions, total] = await Promise.all([
+  const [rawTransactions, total] = await Promise.all([
     prisma.transaction.findMany({
       where,
       skip,
@@ -132,6 +200,11 @@ export const getTransactions = async (userId: string, query: GetTransactionsQuer
     }),
     prisma.transaction.count({ where }),
   ]);
+
+  const transactions = rawTransactions.map((t) => ({
+    ...t,
+    amount: decimalToNumber(t.amount),
+  }));
 
   return {
     transactions,
@@ -156,7 +229,10 @@ export const getTransactionById = async (userId: string, transactionId: string) 
     throw new ApiError(404, 'Transaction not found');
   }
 
-  return transaction;
+  return {
+    ...transaction,
+    amount: decimalToNumber(transaction.amount),
+  };
 };
 
 export const updateTransaction = async (
@@ -174,15 +250,18 @@ export const updateTransaction = async (
 
   if (data.categoryId) {
     const category = await prisma.category.findFirst({
-      where: { id: data.categoryId, userId },
+      where: { id: data.categoryId, userId, type: 'FINANCE' },
     });
-    if (!category) throw new ApiError(404, 'Category not found');
+    if (!category) {
+      throw new ApiError(404, 'Category not found or is not a finance category');
+    }
   }
 
   const updated = await prisma.transaction.update({
     where: { id: transactionId },
     data: {
       ...data,
+      amount: data.amount !== undefined ? new Prisma.Decimal(data.amount) : undefined,
       date: data.date ? new Date(data.date) : undefined,
     },
     include: {
@@ -192,7 +271,10 @@ export const updateTransaction = async (
 
   invalidateDashboardCache(userId);
 
-  return updated;
+  return {
+    ...updated,
+    amount: decimalToNumber(updated.amount),
+  };
 };
 
 export const deleteTransaction = async (userId: string, transactionId: string) => {
@@ -221,9 +303,13 @@ export const setBudget = async (userId: string, data: SetBudgetDTO) => {
   const year = data.year || now.getFullYear();
 
   const category = await prisma.category.findFirst({
-    where: { id: data.categoryId, userId },
+    where: { id: data.categoryId, userId, type: 'FINANCE' },
   });
-  if (!category) throw new ApiError(404, 'Category not found');
+  if (!category) {
+    throw new ApiError(404, 'Category not found or is not a finance category');
+  }
+
+  const monthlyLimitDecimal = new Prisma.Decimal(data.monthlyLimit);
 
   const budget = await prisma.budget.upsert({
     where: {
@@ -235,11 +321,11 @@ export const setBudget = async (userId: string, data: SetBudgetDTO) => {
       },
     },
     update: {
-      monthlyLimit: data.monthlyLimit,
+      monthlyLimit: monthlyLimitDecimal,
     },
     create: {
       categoryId: data.categoryId,
-      monthlyLimit: data.monthlyLimit,
+      monthlyLimit: monthlyLimitDecimal,
       month,
       year,
       userId,
@@ -249,7 +335,12 @@ export const setBudget = async (userId: string, data: SetBudgetDTO) => {
     },
   });
 
-  return budget;
+  invalidateDashboardCache(userId);
+
+  return {
+    ...budget,
+    monthlyLimit: decimalToNumber(budget.monthlyLimit),
+  };
 };
 
 export const getBudgets = async (userId: string, monthQuery?: number, yearQuery?: number) => {
@@ -267,36 +358,58 @@ export const getBudgets = async (userId: string, monthQuery?: number, yearQuery?
     },
   });
 
-  // Calculate actual spending for each budgeted category
-  const results = await Promise.all(
-    budgets.map(async (b) => {
-      const expenses = await prisma.transaction.aggregate({
+  // Optimize: Single batch aggregation using groupBy instead of N separate queries
+  const categoryIds = budgets.map((b) => b.categoryId).filter((id): id is string => Boolean(id));
+  const expenseAggregations = categoryIds.length > 0
+    ? await prisma.transaction.groupBy({
+        by: ['categoryId'],
         where: {
           userId,
-          categoryId: b.categoryId,
+          categoryId: { in: categoryIds },
           type: 'EXPENSE',
           date: { gte: startOfMonth, lte: endOfMonth },
         },
         _sum: { amount: true },
-      });
+      })
+    : [];
 
-      const spent = expenses._sum.amount || 0;
-      const percentageUsed = Number(((spent / b.monthlyLimit) * 100).toFixed(1));
-      const isExceeded = spent > b.monthlyLimit;
-      const isWarning = percentageUsed >= 80 && !isExceeded;
+  const spentMap = new Map<string, Prisma.Decimal>();
+  expenseAggregations.forEach((agg) => {
+    if (agg.categoryId && agg._sum && agg._sum.amount) {
+      spentMap.set(agg.categoryId, new Prisma.Decimal(agg._sum.amount));
+    }
+  });
 
-      return {
-        id: b.id,
-        category: b.category,
-        monthlyLimit: b.monthlyLimit,
-        spent,
-        remaining: Math.max(0, b.monthlyLimit - spent),
-        percentageUsed,
-        isWarning,
-        isExceeded,
-      };
-    })
-  );
+  // Calculate actual spending for each budgeted category in O(1) map lookups
+  const results = budgets.map((b) => {
+    const spentDecimal = (b.categoryId ? spentMap.get(b.categoryId) : undefined) || new Prisma.Decimal(0);
+    const monthlyLimitDecimal = new Prisma.Decimal(b.monthlyLimit);
+
+    const spent = decimalToNumber(spentDecimal);
+    const monthlyLimit = decimalToNumber(monthlyLimitDecimal);
+
+    const percentageUsed = monthlyLimit > 0
+      ? Number(spentDecimal.dividedBy(monthlyLimitDecimal).times(100).toFixed(1))
+      : 0;
+
+    const isExceeded = spentDecimal.greaterThan(monthlyLimitDecimal);
+    const isWarning = percentageUsed >= 80 && !isExceeded;
+    const remainingDecimal = spentDecimal.greaterThan(monthlyLimitDecimal)
+      ? new Prisma.Decimal(0)
+      : monthlyLimitDecimal.minus(spentDecimal);
+    const remaining = decimalToNumber(remainingDecimal);
+
+    return {
+      id: b.id,
+      category: b.category,
+      monthlyLimit,
+      spent,
+      remaining,
+      percentageUsed,
+      isWarning,
+      isExceeded,
+    };
+  });
 
   return {
     month,
@@ -349,24 +462,34 @@ export const getFinancialAnalytics = async (
     }),
   ]);
 
-  const totalIncome = incomeAgg._sum.amount || 0;
-  const totalExpenses = expenseAgg._sum.amount || 0;
-  const netSavings = totalIncome - totalExpenses;
-  const savingsRate = totalIncome > 0 ? Number(((netSavings / totalIncome) * 100).toFixed(1)) : 0;
+  const totalIncomeDecimal = incomeAgg._sum.amount ? new Prisma.Decimal(incomeAgg._sum.amount) : new Prisma.Decimal(0);
+  const totalExpensesDecimal = expenseAgg._sum.amount ? new Prisma.Decimal(expenseAgg._sum.amount) : new Prisma.Decimal(0);
+  const netSavingsDecimal = totalIncomeDecimal.minus(totalExpensesDecimal);
 
-  // Resolve category details
+  const totalIncome = decimalToNumber(totalIncomeDecimal);
+  const totalExpenses = decimalToNumber(totalExpensesDecimal);
+  const netSavings = decimalToNumber(netSavingsDecimal);
+
+  const savingsRate = totalIncomeDecimal.greaterThan(0)
+    ? Number(netSavingsDecimal.dividedBy(totalIncomeDecimal).times(100).toFixed(1))
+    : 0;
+
+  // Resolve category details (strictly scoped to user for defense in depth)
   const categoryIds = expensesByCategory.map((e) => e.categoryId).filter(Boolean) as string[];
   const categories = await prisma.category.findMany({
-    where: { id: { in: categoryIds } },
+    where: { id: { in: categoryIds }, userId },
     select: { id: true, name: true, color: true, icon: true },
   });
 
   const categoryMap = new Map(categories.map((c) => [c.id, c]));
 
   const categoryBreakdown = expensesByCategory.map((item) => {
-    const amount = item._sum.amount || 0;
+    const itemAmountDecimal = item._sum.amount ? new Prisma.Decimal(item._sum.amount) : new Prisma.Decimal(0);
+    const amount = decimalToNumber(itemAmountDecimal);
     const cat = item.categoryId ? categoryMap.get(item.categoryId) : null;
-    const percentage = totalExpenses > 0 ? Number(((amount / totalExpenses) * 100).toFixed(1)) : 0;
+    const percentage = totalExpensesDecimal.greaterThan(0)
+      ? Number(itemAmountDecimal.dividedBy(totalExpensesDecimal).times(100).toFixed(1))
+      : 0;
 
     return {
       categoryId: item.categoryId,

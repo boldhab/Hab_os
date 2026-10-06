@@ -1,10 +1,14 @@
 import 'package:flutter/foundation.dart';
-import 'dart:io' show Platform;
 
 class ApiEndpoints {
-  // Default base URL: 10.0.2.2 for Android emulator, localhost for desktop/iOS/web
+  // Support custom base URL passed at build/run time via:
+  // flutter run --dart-define=API_BASE_URL=http://<YOUR_COMPUTER_IP>:5000/api/v1
   static String get baseUrl {
-    if (!kIsWeb && Platform.isAndroid) {
+    const envUrl = String.fromEnvironment('API_BASE_URL');
+    if (envUrl.isNotEmpty) {
+      return envUrl;
+    }
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
       return 'http://10.0.2.2:5000/api/v1';
     }
     return 'http://localhost:5000/api/v1';
@@ -57,10 +61,14 @@ class ApiEndpoints {
       '/tasks/$taskId/dependencies';
   static String taskDependency(String taskId, String blockingId) =>
       '/tasks/$taskId/dependencies/$blockingId';
+  static const String taskReorder = '/tasks/reorder';
+  static const String taskSyncCalendar = '/tasks/sync-calendar';
+  static String taskSyncCalendarSingle(String id) => '/tasks/$id/sync-calendar';
 
   // Focus
   static const String focusStart = '/focus/start';
   static String focusEnd(String id) => '/focus/$id/end';
+  static String focusCancel(String id) => '/focus/$id/cancel';
   static const String focusLog = '/focus/log';
   static const String focusStats = '/focus/stats';
   static String focusById(String id) => '/focus/$id';
@@ -72,8 +80,13 @@ class ApiEndpoints {
   static const String financeBudgets = '/finance/budgets';
   static const String financeAnalytics = '/finance/analytics';
 
-  // Analytics
+  // Analytics & Time Tracking
   static const String analyticsRetrospective = '/analytics/retrospective';
+  static const String analyticsExportCsv = '/analytics/export/csv';
+  static const String analyticsExportPdf = '/analytics/export/pdf';
+  static const String analyticsTime = '/analytics/time';
+  static String analyticsTimeById(String id) => '/analytics/time/$id';
+  static String analyticsTimeStop(String id) => '/analytics/time/$id/stop';
 
   // Developer Hub & Projects
   static String projectById(String id) => '/projects/$id';
@@ -141,4 +154,42 @@ class ApiEndpoints {
   static String goalCheckIns(String id) => '/goals/$id/checkins';
   static const String goalsHealth = '/goals/health';
   static const String goalsRoadmap = '/goals/roadmap';
+
+  // AI Assistant & Insights Engine (UC-136 to UC-143)
+  static const String aiNeglectedAreas = '/ai/neglected-areas';
+  static const String aiRecommendTasks = '/ai/recommend-tasks';
+  static const String aiPlan = '/ai/plan';
+  static const String aiInsights = '/ai/insights';
+  static String aiInsightByDomain(String domain) => '/ai/insights/$domain';
+  static const String aiBriefing = '/ai/briefing';
+  static const String aiRecommendation = '/ai/recommendation';
+  static const String aiAsk = '/ai/ask';
+
+  // Knowledge Vault (UC-120 to UC-130)
+  static const String vaultNotes = '/vault/notes';
+  static String vaultNoteById(String id) => '/vault/notes/$id';
+  static const String vaultTags = '/vault/tags';
+  static const String vaultSearch = '/vault/search';
+  static const String vaultGraph = '/vault/graph';
+  static const String vaultLinks = '/vault/links';
+
+  // Global Search (UC-167 to UC-172)
+  static const String globalSearch = '/search';
+
+  // Notifications Center (UC-159 to UC-166)
+  static const String notificationsUnreadCount = '/notifications/unread-count';
+  static const String notificationsReadAll = '/notifications/read-all';
+  static const String notificationsGenerateAlerts = '/notifications/generate-alerts';
+  static String notificationRead(String id) => '/notifications/$id/read';
+  static String notificationById(String id) => '/notifications/$id';
+
+  // Developer Hub Integrations (UC-53 to UC-64)
+  static const String integrationsLeetCodeStats = '/integrations/leetcode/stats';
+  static const String integrationsLeetCodeSync = '/integrations/leetcode/sync';
+  static const String integrationsGitHubStats = '/integrations/github/stats';
+  static const String integrationsGitHubSync = '/integrations/github/sync';
+  static const String integrationsGitHubRepos = '/integrations/github/repos';
+  static const String integrationsGitHubImport = '/integrations/github/import';
+  static String integrationsGitHubAnalyze(String owner, String repo) =>
+      '/integrations/github/repos/$owner/$repo/analyze';
 }

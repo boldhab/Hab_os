@@ -9,6 +9,7 @@ import 'models/project_models.dart';
 import 'widgets/project_time_by_stack_card.dart';
 import 'widgets/project_card.dart';
 import 'widgets/project_form_dialog.dart';
+import 'widgets/leetcode_stats_card.dart';
 import 'project_detail_screen.dart';
 
 export 'controllers/projects_controller.dart';
@@ -259,6 +260,11 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
                             loading: () => const SizedBox.shrink(),
                             error: (_, __) => const SizedBox.shrink(),
                           ),
+                          const SizedBox(height: 16),
+
+                          // 1.1 LeetCode Stats Breakdown (UC-60 to UC-64)
+                          const LeetCodeStatsCard(),
+                          const SizedBox(height: 20),
 
                           // 2. Project List Header
                           Text(

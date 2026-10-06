@@ -1,6 +1,6 @@
+import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
-import crypto from 'crypto';
 import ApiError from '../../common/apiError';
 import env from '../../config/env';
 
@@ -17,6 +17,7 @@ interface InMemoryUser {
   id: string;
   email: string;
   name: string | null;
+  bio?: string | null;
   password: string; // bcrypt hash
   googleId?: string;
   authProvider?: string;
@@ -130,6 +131,7 @@ function safeUserPayload(user: InMemoryUser) {
     id: user.id,
     email: user.email,
     name: user.name,
+    bio: user.bio || null,
     timezone: user.timezone,
     dateFormat: user.dateFormat,
     avatarUrl: user.avatarUrl,
@@ -144,6 +146,7 @@ function safeUserPayload(user: InMemoryUser) {
 
 export interface RegisterDTO {
   name?: string | null;
+  bio?: string | null;
   email: string;
   password: string;
   timezone?: string;
@@ -165,6 +168,7 @@ export interface GoogleAuthDTO {
 
 export interface UpdateProfileDTO {
   name?: string;
+  bio?: string;
   avatarUrl?: string;
   timezone?: string;
   dateFormat?: string;
@@ -232,6 +236,7 @@ export const register = async (data: RegisterDTO) => {
     id,
     email: emailKey,
     name: data.name || null,
+    bio: data.bio || null,
     password: hashedPassword,
     avatarUrl: null,
     timezone: data.timezone || 'UTC',
@@ -564,6 +569,7 @@ export const getProfile = async (userId: string) => {
     id: user.id,
     email: user.email,
     name: user.name,
+    bio: user.bio || null,
     avatarUrl: user.avatarUrl,
     timezone: user.timezone,
     dateFormat: user.dateFormat,
@@ -581,9 +587,10 @@ export const updateProfile = async (userId: string, data: UpdateProfileDTO) => {
   const user = usersById.get(userId);
   if (!user) throw new ApiError(404, 'User not found');
 
-  const { name, avatarUrl, timezone, dateFormat, currentPassword, newPassword } = data;
+  const { name, bio, avatarUrl, timezone, dateFormat, currentPassword, newPassword } = data;
 
   if (name !== undefined) user.name = name;
+  if (bio !== undefined) user.bio = bio;
   if (avatarUrl !== undefined) user.avatarUrl = avatarUrl;
   if (timezone !== undefined) user.timezone = timezone;
   if (dateFormat !== undefined) user.dateFormat = dateFormat;
@@ -605,6 +612,7 @@ export const updateProfile = async (userId: string, data: UpdateProfileDTO) => {
     id: user.id,
     email: user.email,
     name: user.name,
+    bio: user.bio || null,
     avatarUrl: user.avatarUrl,
     timezone: user.timezone,
     dateFormat: user.dateFormat,

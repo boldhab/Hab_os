@@ -101,6 +101,15 @@ export const getLetterGradeAndPoints = (percentage: number): GradeScaleResult =>
   return { letter: 'F', points: 0.0 };
 };
 
+export const calculateAttendanceRate = (attendances: Array<{ status: string }>): number => {
+  const evaluable = attendances.filter((a) => a.status !== 'EXCUSED');
+  if (evaluable.length === 0) return 100.0;
+  const presentCount = evaluable.filter((a) => a.status === 'PRESENT').length;
+  const lateCount = evaluable.filter((a) => a.status === 'LATE').length;
+  const effectiveAttended = presentCount + lateCount * 0.5;
+  return Number(((effectiveAttended / evaluable.length) * 100).toFixed(1));
+};
+
 export const computeCourseGrade = (
   assignments: Array<{ grade: number | null; maxGrade: number | null; weight?: number | null }>,
   exams: Array<{ grade: number | null; maxGrade: number | null; weight?: number | null }>
@@ -151,14 +160,61 @@ export const computeCourseGrade = (
 };
 
 /**
+ * Deduplicate study intervals between StudySession (manual logs) and FocusSession (timer logs)
+ * to prevent double-counting overlapping study time.
+ */
+export const calculateDeduplicatedStudyMinutes = (
+  studySessions: Array<{ startTime: Date | string; durationMinutes: number; endTime?: Date | string | null }>,
+  focusSessions: Array<{ startTime: Date | string; durationMinutes: number; endTime?: Date | string | null }>
+): number => {
+  type Interval = { start: number; end: number };
+  const intervals: Interval[] = [];
+
+  const addIntervals = (
+    sessions: Array<{ startTime: Date | string; durationMinutes: number; endTime?: Date | string | null }>
+  ) => {
+    for (const s of sessions) {
+      const start = new Date(s.startTime).getTime();
+      const durationMs = (s.durationMinutes || 0) * 60 * 1000;
+      if (durationMs <= 0 || isNaN(start)) continue;
+      const end = s.endTime ? new Date(s.endTime).getTime() : start + durationMs;
+      intervals.push({ start, end: Math.max(start, isNaN(end) ? start + durationMs : end) });
+    }
+  };
+
+  addIntervals(studySessions);
+  addIntervals(focusSessions);
+
+  if (intervals.length === 0) return 0;
+
+  intervals.sort((a, b) => a.start - b.start);
+
+  let mergedMinutes = 0;
+  let current = { ...intervals[0] };
+
+  for (let i = 1; i < intervals.length; i++) {
+    const next = intervals[i];
+    if (next.start <= current.end) {
+      current.end = Math.max(current.end, next.end);
+    } else {
+      mergedMinutes += Math.round((current.end - current.start) / 60000);
+      current = { ...next };
+    }
+  }
+  mergedMinutes += Math.round((current.end - current.start) / 60000);
+
+  return mergedMinutes;
+};
+
+/**
  * Auto-recalculate course progress based on completed assignments & exams (UC-74)
  */
-export const recalculateCourseProgress = async (courseId: string) => {
+export const recalculateCourseProgress = async (courseId: string, client: any = prisma) => {
   const [totalAssignments, completedAssignments, totalExams, gradedExams] = await Promise.all([
-    prisma.assignment.count({ where: { courseId } }),
-    prisma.assignment.count({ where: { courseId, status: { in: ['SUBMITTED', 'GRADED'] } } }),
-    prisma.exam.count({ where: { courseId } }),
-    prisma.exam.count({ where: { courseId, grade: { not: null } } }),
+    client.assignment.count({ where: { courseId } }),
+    client.assignment.count({ where: { courseId, status: { in: ['SUBMITTED', 'GRADED'] } } }),
+    client.exam.count({ where: { courseId } }),
+    client.exam.count({ where: { courseId, grade: { not: null } } }),
   ]);
 
   const totalEvaluations = totalAssignments + totalExams;
@@ -167,12 +223,51 @@ export const recalculateCourseProgress = async (courseId: string) => {
   const completedEvaluations = completedAssignments + gradedExams;
   const progress = Number(((completedEvaluations / totalEvaluations) * 100).toFixed(1));
 
-  await prisma.course.update({
+  await client.course.update({
     where: { id: courseId },
     data: { progress },
   });
 
   return progress;
+};
+
+/**
+ * Validate that combined assignment and exam weights do not exceed 100%
+ */
+export const checkTotalWeightWithinLimit = async (
+  courseId: string,
+  newWeight: number,
+  excludeAssignmentId?: string,
+  excludeExamId?: string,
+  client: any = prisma
+) => {
+  const [assignments, exams] = await Promise.all([
+    client.assignment.findMany({
+      where: {
+        courseId,
+        ...(excludeAssignmentId ? { id: { not: excludeAssignmentId } } : {}),
+      },
+      select: { weight: true },
+    }),
+    client.exam.findMany({
+      where: {
+        courseId,
+        ...(excludeExamId ? { id: { not: excludeExamId } } : {}),
+      },
+      select: { weight: true },
+    }),
+  ]);
+
+  const currentTotal =
+    assignments.reduce((sum: number, a: { weight: number | null }) => sum + (a.weight ?? 0), 0) +
+    exams.reduce((sum: number, e: { weight: number | null }) => sum + (e.weight ?? 0), 0);
+
+  if (currentTotal + newWeight > 100.0) {
+    throw new ApiError(
+      400,
+      `Combined course deliverables weight cannot exceed 100%. Current total is ${currentTotal.toFixed(1)}%, adding ${newWeight}% would result in ${(currentTotal + newWeight).toFixed(1)}%.`
+    );
+  }
 };
 
 // ==========================================
@@ -193,6 +288,7 @@ export const createCourse = async (userId: string, data: CreateCourseDTO) => {
     },
   });
 
+  invalidateDashboardCache(userId);
   return course;
 };
 
@@ -200,7 +296,7 @@ export const getCourses = async (userId: string, semester?: string) => {
   const courses = await prisma.course.findMany({
     where: {
       userId,
-      ...(semester ? { semester } : {}),
+      ...(semester && semester !== 'ALL' ? { semester } : {}),
     },
     orderBy: [{ progress: 'asc' }, { name: 'asc' }],
     include: {
@@ -231,13 +327,7 @@ export const getCourses = async (userId: string, semester?: string) => {
 
   return courses.map((course) => {
     const gradeDetails = computeCourseGrade(course.assignments, course.exams);
-
-    const totalAttendances = course.attendances.length;
-    const presentCount = course.attendances.filter((a) => a.status === 'PRESENT').length;
-    const attendanceRate =
-      totalAttendances > 0
-        ? Number(((presentCount / totalAttendances) * 100).toFixed(1))
-        : 100.0;
+    const attendanceRate = calculateAttendanceRate(course.attendances);
 
     return {
       id: course.id,
@@ -307,26 +397,49 @@ export const getCourseById = async (userId: string, courseId: string) => {
     throw new ApiError(404, 'Course not found');
   }
 
-  // Attendance percentage
-  const totalAttendances = course.attendances.length;
-  const presentCount = course.attendances.filter((a) => a.status === 'PRESENT').length;
-  const attendanceRate =
-    totalAttendances > 0 ? Number(((presentCount / totalAttendances) * 100).toFixed(1)) : 100.0;
+  // Attendance percentage across ALL records of this course
+  const allCourseAttendances = await prisma.attendance.findMany({
+    where: { courseId },
+    select: { status: true },
+  });
+  const attendanceRate = calculateAttendanceRate(allCourseAttendances);
 
   // Grade details
   const gradeDetails = computeCourseGrade(course.assignments, course.exams);
 
-  // Total study time
-  let totalStudyMinutes = 0;
-  course.studySessions.forEach((s) => (totalStudyMinutes += s.durationMinutes || 0));
-  course.focusSessions.forEach((f) => (totalStudyMinutes += f.durationMinutes || 0));
+  // Total study time across study and focus sessions for this course
+  const [allStudySessions, allFocusSessions] = await Promise.all([
+    prisma.studySession.findMany({
+      where: { courseId, userId },
+      select: { startTime: true, durationMinutes: true, endTime: true },
+    }),
+    prisma.focusSession.findMany({
+      where: { courseId, userId, status: 'COMPLETED' },
+      select: { startTime: true, durationMinutes: true, endTime: true },
+    }),
+  ]);
+
+  const studySessionMinutes = allStudySessions.reduce(
+    (acc: number, s: { durationMinutes: number }) => acc + (s.durationMinutes || 0),
+    0
+  );
+  const focusSessionMinutes = allFocusSessions.reduce(
+    (acc: number, f: { durationMinutes: number }) => acc + (f.durationMinutes || 0),
+    0
+  );
+
+  // Time-interval union deduplication prevents double-counting overlapping study logs
+  const totalStudyMinutes = calculateDeduplicatedStudyMinutes(allStudySessions, allFocusSessions);
+  const totalStudyHours = Number((totalStudyMinutes / 60.0).toFixed(1));
 
   return {
     ...course,
     attendanceRate,
     gradeDetails,
+    studySessionMinutes,
+    focusSessionMinutes,
     totalStudyMinutes,
-    totalStudyHours: Number((totalStudyMinutes / 60.0).toFixed(1)),
+    totalStudyHours,
   };
 };
 
@@ -344,6 +457,7 @@ export const updateCourse = async (userId: string, courseId: string, data: Updat
     data,
   });
 
+  invalidateDashboardCache(userId);
   return updatedCourse;
 };
 
@@ -357,6 +471,7 @@ export const deleteCourse = async (userId: string, courseId: string) => {
   }
 
   await prisma.course.delete({ where: { id: courseId } });
+  invalidateDashboardCache(userId);
   return { message: 'Course deleted successfully' };
 };
 
@@ -365,26 +480,41 @@ export const deleteCourse = async (userId: string, courseId: string) => {
 // ==========================================
 
 export const createAssignment = async (userId: string, courseId: string, data: CreateAssignmentDTO) => {
-  const course = await prisma.course.findFirst({ where: { id: courseId, userId } });
-  if (!course) throw new ApiError(404, 'Course not found');
+  const maxGrade = data.maxGrade !== undefined ? Number(data.maxGrade) : 100.0;
+  if (data.grade !== null && data.grade !== undefined) {
+    if (Number(data.grade) > maxGrade) {
+      throw new ApiError(400, 'Grade cannot exceed maximum grade');
+    }
+  }
 
-  const assignment = await prisma.assignment.create({
-    data: {
-      title: data.title,
-      description: data.description,
-      dueDate: new Date(data.dueDate),
-      type: data.type || 'HOMEWORK',
-      weight: data.weight !== undefined ? Number(data.weight) : 10.0,
-      status: data.status || 'NOT_STARTED',
-      grade: data.grade,
-      maxGrade: data.maxGrade || 100.0,
-      courseId,
-    },
+  const weight = data.weight !== undefined ? Number(data.weight) : 10.0;
+  const status = data.status || (data.grade !== null && data.grade !== undefined ? 'GRADED' : 'NOT_STARTED');
+
+  const assignment = await prisma.$transaction(async (tx) => {
+    const course = await tx.course.findFirst({ where: { id: courseId, userId } });
+    if (!course) throw new ApiError(404, 'Course not found');
+
+    await checkTotalWeightWithinLimit(courseId, weight, undefined, undefined, tx);
+
+    const created = await tx.assignment.create({
+      data: {
+        title: data.title,
+        description: data.description,
+        dueDate: new Date(data.dueDate),
+        type: data.type || 'HOMEWORK',
+        weight,
+        status,
+        grade: data.grade !== null && data.grade !== undefined ? Number(data.grade) : null,
+        maxGrade,
+        courseId,
+      },
+    });
+
+    await recalculateCourseProgress(courseId, tx);
+    return created;
   });
 
-  await recalculateCourseProgress(courseId);
   invalidateDashboardCache(userId);
-
   return assignment;
 };
 
@@ -394,48 +524,69 @@ export const updateAssignment = async (
   assignmentId: string,
   data: UpdateAssignmentDTO
 ) => {
-  const course = await prisma.course.findFirst({ where: { id: courseId, userId } });
-  if (!course) throw new ApiError(404, 'Course not found');
-
-  const assignment = await prisma.assignment.findFirst({
-    where: { id: assignmentId, courseId },
-  });
-  if (!assignment) throw new ApiError(404, 'Assignment not found');
-
   const updateData: any = { ...data };
   if (data.dueDate) updateData.dueDate = new Date(data.dueDate);
-  if (data.weight !== undefined) updateData.weight = Number(data.weight);
-  if (data.grade !== undefined) updateData.grade = data.grade !== null ? Number(data.grade) : null;
-  if (data.maxGrade !== undefined) updateData.maxGrade = Number(data.maxGrade);
 
-  const updatedAssignment = await prisma.assignment.update({
-    where: { id: assignmentId },
-    data: updateData,
+  const updatedAssignment = await prisma.$transaction(async (tx) => {
+    const course = await tx.course.findFirst({ where: { id: courseId, userId } });
+    if (!course) throw new ApiError(404, 'Course not found');
+
+    const assignment = await tx.assignment.findFirst({
+      where: { id: assignmentId, courseId },
+    });
+    if (!assignment) throw new ApiError(404, 'Assignment not found');
+
+    if (data.weight !== undefined) {
+      updateData.weight = Number(data.weight);
+      await checkTotalWeightWithinLimit(courseId, updateData.weight, assignmentId, undefined, tx);
+    }
+    const targetMaxGrade = (data.maxGrade !== undefined && data.maxGrade !== null ? Number(data.maxGrade) : assignment.maxGrade) || 100.0;
+    if (data.grade !== undefined) {
+      if (data.grade !== null) {
+        const numericGrade = Number(data.grade);
+        if (numericGrade > targetMaxGrade) {
+          throw new ApiError(400, 'Grade cannot exceed maximum grade');
+        }
+        updateData.grade = numericGrade;
+        if (!data.status) {
+          updateData.status = 'GRADED';
+        }
+      } else {
+        updateData.grade = null;
+      }
+    }
+    if (data.maxGrade !== undefined) updateData.maxGrade = targetMaxGrade;
+
+    const updated = await tx.assignment.update({
+      where: { id: assignmentId },
+      data: updateData,
+    });
+
+    if (data.status !== undefined || data.grade !== undefined) {
+      await recalculateCourseProgress(courseId, tx);
+    }
+    return updated;
   });
 
-  if (data.status !== undefined || data.grade !== undefined) {
-    await recalculateCourseProgress(courseId);
-  }
-
   invalidateDashboardCache(userId);
-
   return updatedAssignment;
 };
 
 export const deleteAssignment = async (userId: string, courseId: string, assignmentId: string) => {
-  const course = await prisma.course.findFirst({ where: { id: courseId, userId } });
-  if (!course) throw new ApiError(404, 'Course not found');
+  await prisma.$transaction(async (tx) => {
+    const course = await tx.course.findFirst({ where: { id: courseId, userId } });
+    if (!course) throw new ApiError(404, 'Course not found');
 
-  const assignment = await prisma.assignment.findFirst({
-    where: { id: assignmentId, courseId },
+    const assignment = await tx.assignment.findFirst({
+      where: { id: assignmentId, courseId },
+    });
+    if (!assignment) throw new ApiError(404, 'Assignment not found');
+
+    await tx.assignment.delete({ where: { id: assignmentId } });
+    await recalculateCourseProgress(courseId, tx);
   });
-  if (!assignment) throw new ApiError(404, 'Assignment not found');
-
-  await prisma.assignment.delete({ where: { id: assignmentId } });
-  await recalculateCourseProgress(courseId);
 
   invalidateDashboardCache(userId);
-
   return { message: 'Assignment deleted successfully' };
 };
 
@@ -444,23 +595,39 @@ export const deleteAssignment = async (userId: string, courseId: string, assignm
 // ==========================================
 
 export const createExam = async (userId: string, courseId: string, data: CreateExamDTO) => {
-  const course = await prisma.course.findFirst({ where: { id: courseId, userId } });
-  if (!course) throw new ApiError(404, 'Course not found');
+  const maxGrade = data.maxGrade !== undefined ? Number(data.maxGrade) : 100.0;
+  if (data.grade !== null && data.grade !== undefined) {
+    if (Number(data.grade) > maxGrade) {
+      throw new ApiError(400, 'Grade cannot exceed maximum grade');
+    }
+  }
 
-  const exam = await prisma.exam.create({
-    data: {
-      title: data.title,
-      examDate: new Date(data.examDate),
-      startTime: data.startTime,
-      examType: data.examType || 'MIDTERM',
-      weight: data.weight !== undefined ? Number(data.weight) : 25.0,
-      grade: data.grade,
-      maxGrade: data.maxGrade || 100.0,
-      courseId,
-    },
+  const weight = data.weight !== undefined && data.weight !== null ? Number(data.weight) : 25.0;
+
+  const exam = await prisma.$transaction(async (tx) => {
+    const course = await tx.course.findFirst({ where: { id: courseId, userId } });
+    if (!course) throw new ApiError(404, 'Course not found');
+
+    await checkTotalWeightWithinLimit(courseId, weight, undefined, undefined, tx);
+
+    const created = await tx.exam.create({
+      data: {
+        title: data.title,
+        examDate: new Date(data.examDate),
+        startTime: data.startTime,
+        examType: data.examType || 'MIDTERM',
+        weight,
+        grade: data.grade !== null && data.grade !== undefined ? Number(data.grade) : null,
+        maxGrade,
+        courseId,
+      },
+    });
+
+    await recalculateCourseProgress(courseId, tx);
+    return created;
   });
 
-  await recalculateCourseProgress(courseId);
+  invalidateDashboardCache(userId);
   return exam;
 };
 
@@ -470,44 +637,61 @@ export const updateExam = async (
   examId: string,
   data: UpdateExamDTO
 ) => {
-  const course = await prisma.course.findFirst({ where: { id: courseId, userId } });
-  if (!course) throw new ApiError(404, 'Course not found');
-
-  const exam = await prisma.exam.findFirst({
-    where: { id: examId, courseId },
-  });
-  if (!exam) throw new ApiError(404, 'Exam not found');
-
   const updateData: any = { ...data };
   if (data.examDate) updateData.examDate = new Date(data.examDate);
-  if (data.weight !== undefined) updateData.weight = Number(data.weight);
-  if (data.grade !== undefined) updateData.grade = data.grade !== null ? Number(data.grade) : null;
-  if (data.maxGrade !== undefined) updateData.maxGrade = Number(data.maxGrade);
 
-  const updatedExam = await prisma.exam.update({
-    where: { id: examId },
-    data: updateData,
+  const updatedExam = await prisma.$transaction(async (tx) => {
+    const course = await tx.course.findFirst({ where: { id: courseId, userId } });
+    if (!course) throw new ApiError(404, 'Course not found');
+
+    const exam = await tx.exam.findFirst({
+      where: { id: examId, courseId },
+    });
+    if (!exam) throw new ApiError(404, 'Exam not found');
+
+    if (data.weight !== undefined && data.weight !== null) {
+      updateData.weight = Number(data.weight);
+      await checkTotalWeightWithinLimit(courseId, updateData.weight, undefined, examId, tx);
+    }
+    const targetMaxGrade = (data.maxGrade !== undefined && data.maxGrade !== null ? Number(data.maxGrade) : exam.maxGrade) || 100.0;
+    if (data.grade !== undefined) {
+      updateData.grade = data.grade !== null ? Number(data.grade) : null;
+      if (updateData.grade !== null && updateData.grade > targetMaxGrade) {
+        throw new ApiError(400, 'Grade cannot exceed maximum grade');
+      }
+    }
+    if (data.maxGrade !== undefined) updateData.maxGrade = targetMaxGrade;
+
+    const updated = await tx.exam.update({
+      where: { id: examId },
+      data: updateData,
+    });
+
+    if (data.grade !== undefined) {
+      await recalculateCourseProgress(courseId, tx);
+    }
+    return updated;
   });
 
-  if (data.grade !== undefined) {
-    await recalculateCourseProgress(courseId);
-  }
-
+  invalidateDashboardCache(userId);
   return updatedExam;
 };
 
 export const deleteExam = async (userId: string, courseId: string, examId: string) => {
-  const course = await prisma.course.findFirst({ where: { id: courseId, userId } });
-  if (!course) throw new ApiError(404, 'Course not found');
+  await prisma.$transaction(async (tx) => {
+    const course = await tx.course.findFirst({ where: { id: courseId, userId } });
+    if (!course) throw new ApiError(404, 'Course not found');
 
-  const exam = await prisma.exam.findFirst({
-    where: { id: examId, courseId },
+    const exam = await tx.exam.findFirst({
+      where: { id: examId, courseId },
+    });
+    if (!exam) throw new ApiError(404, 'Exam not found');
+
+    await tx.exam.delete({ where: { id: examId } });
+    await recalculateCourseProgress(courseId, tx);
   });
-  if (!exam) throw new ApiError(404, 'Exam not found');
 
-  await prisma.exam.delete({ where: { id: examId } });
-  await recalculateCourseProgress(courseId);
-
+  invalidateDashboardCache(userId);
   return { message: 'Exam deleted successfully' };
 };
 
@@ -520,7 +704,10 @@ export const recordAttendance = async (userId: string, courseId: string, data: R
   if (!course) throw new ApiError(404, 'Course not found');
 
   const rawDate = data.date ? new Date(data.date) : new Date();
-  const normalizedDate = new Date(rawDate.getFullYear(), rawDate.getMonth(), rawDate.getDate());
+  const dateKey = typeof data.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(data.date)
+    ? data.date
+    : rawDate.toISOString().slice(0, 10);
+  const normalizedDate = new Date(`${dateKey}T00:00:00.000Z`);
 
   const attendance = await prisma.attendance.upsert({
     where: {
@@ -541,6 +728,7 @@ export const recordAttendance = async (userId: string, courseId: string, data: R
     },
   });
 
+  invalidateDashboardCache(userId);
   return attendance;
 };
 
@@ -549,32 +737,58 @@ export const recordAttendance = async (userId: string, courseId: string, data: R
 // ==========================================
 
 export const addClassSchedule = async (userId: string, courseId: string, data: AddClassScheduleDTO) => {
-  const course = await prisma.course.findFirst({ where: { id: courseId, userId } });
-  if (!course) throw new ApiError(404, 'Course not found');
+  if (data.startTime >= data.endTime) {
+    throw new ApiError(400, 'End time must be after start time');
+  }
 
-  const schedule = await prisma.classSchedule.create({
-    data: {
-      courseId,
-      dayOfWeek: data.dayOfWeek,
-      startTime: data.startTime,
-      endTime: data.endTime,
-      room: data.room || null,
-    },
+  const schedule = await prisma.$transaction(async (tx) => {
+    const course = await tx.course.findFirst({ where: { id: courseId, userId } });
+    if (!course) throw new ApiError(404, 'Course not found');
+
+    const existingSchedules = await tx.classSchedule.findMany({
+      where: {
+        course: { userId },
+        dayOfWeek: data.dayOfWeek,
+      },
+    });
+
+    const hasOverlap = existingSchedules.some((s) => {
+      return data.startTime < s.endTime && data.endTime > s.startTime;
+    });
+
+    if (hasOverlap) {
+      throw new ApiError(400, 'Schedule time overlaps with an existing class on this day');
+    }
+
+    return tx.classSchedule.create({
+      data: {
+        courseId,
+        dayOfWeek: data.dayOfWeek,
+        startTime: data.startTime,
+        endTime: data.endTime,
+        room: data.room || null,
+      },
+    });
   });
 
+  invalidateDashboardCache(userId);
   return schedule;
 };
 
 export const deleteClassSchedule = async (userId: string, courseId: string, scheduleId: string) => {
-  const course = await prisma.course.findFirst({ where: { id: courseId, userId } });
-  if (!course) throw new ApiError(404, 'Course not found');
+  await prisma.$transaction(async (tx) => {
+    const course = await tx.course.findFirst({ where: { id: courseId, userId } });
+    if (!course) throw new ApiError(404, 'Course not found');
 
-  const schedule = await prisma.classSchedule.findFirst({
-    where: { id: scheduleId, courseId },
+    const schedule = await tx.classSchedule.findFirst({
+      where: { id: scheduleId, courseId },
+    });
+    if (!schedule) throw new ApiError(404, 'Class schedule not found');
+
+    await tx.classSchedule.delete({ where: { id: scheduleId } });
   });
-  if (!schedule) throw new ApiError(404, 'Class schedule not found');
 
-  await prisma.classSchedule.delete({ where: { id: scheduleId } });
+  invalidateDashboardCache(userId);
   return { message: 'Class schedule removed successfully' };
 };
 
@@ -677,7 +891,7 @@ export const calculateWhatIfFinalGrade = async (
   userId: string,
   courseId: string,
   targetPercentage: number,
-  finalExamWeight: number = 30.0
+  finalExamWeight?: number
 ) => {
   const course = await prisma.course.findFirst({
     where: { id: courseId, userId },
@@ -691,27 +905,68 @@ export const calculateWhatIfFinalGrade = async (
 
   const grade = computeCourseGrade(course.assignments, course.exams);
 
-  // Total weight currently accounted for
+  // Accounting for graded vs remaining work
   const completedWeightFraction = grade.totalEvaluatedWeight / 100.0;
-  // Weighted percentage earned toward 100% of course grade so far
-  const currentEarnedTowardsFinal = (grade.runningPercentage * completedWeightFraction);
+  const earnedContributionTowardsFinal = Number(
+    (grade.runningPercentage * completedWeightFraction).toFixed(2)
+  );
+  const remainingUngradedWeight = Number(
+    Math.max(0, 100.0 - grade.totalEvaluatedWeight).toFixed(2)
+  );
+  const maxAchievableGrade = Number(
+    Math.min(100.0, earnedContributionTowardsFinal + remainingUngradedWeight).toFixed(1)
+  );
 
-  // Target points remaining
-  const neededFromFinal = targetPercentage - currentEarnedTowardsFinal;
-  const weightFraction = finalExamWeight / 100.0;
+  let effectiveWeight: number;
 
-  const requiredScorePercentage = Number((neededFromFinal / weightFraction).toFixed(1));
-  const maxPossibleGrade = Number((currentEarnedTowardsFinal + finalExamWeight).toFixed(1));
+  if (finalExamWeight !== undefined && finalExamWeight !== null) {
+    if (finalExamWeight <= 0 || finalExamWeight > 100) {
+      throw new ApiError(400, 'Final exam weight must be between 1 and 100');
+    }
+    if (remainingUngradedWeight <= 0) {
+      throw new ApiError(400, 'Course is already 100% evaluated. No remaining ungraded weight.');
+    }
+    if (finalExamWeight > remainingUngradedWeight + 0.01) {
+      throw new ApiError(
+        400,
+        `Requested final exam weight (${finalExamWeight}%) exceeds remaining ungraded course weight (${remainingUngradedWeight}%).`
+      );
+    }
+    effectiveWeight = finalExamWeight;
+  } else {
+    effectiveWeight = remainingUngradedWeight;
+  }
 
   let status: 'ACHIEVABLE' | 'ALREADY_SECURED' | 'MATHEMATICALLY_IMPOSSIBLE' = 'ACHIEVABLE';
-  let message = `You need ${requiredScorePercentage}% on the final exam (${finalExamWeight}% of course) to achieve a ${targetPercentage}% overall grade.`;
+  let requiredScorePercentage = 0;
+  let maxPossibleGrade = maxAchievableGrade;
+  let message = '';
 
-  if (requiredScorePercentage <= 0) {
-    status = 'ALREADY_SECURED';
-    message = `Congratulations! You have already secured at least ${targetPercentage}% in this course.`;
-  } else if (requiredScorePercentage > 100.0) {
-    status = 'MATHEMATICALLY_IMPOSSIBLE';
-    message = `Reaching ${targetPercentage}% is mathematically unattainable (requires ${requiredScorePercentage}%). The maximum possible grade is ${maxPossibleGrade}%.`;
+  if (effectiveWeight <= 0) {
+    maxPossibleGrade = earnedContributionTowardsFinal;
+    if (targetPercentage <= earnedContributionTowardsFinal) {
+      status = 'ALREADY_SECURED';
+      message = `Congratulations! You have already secured at least ${targetPercentage}% in this course (final grade: ${earnedContributionTowardsFinal}%).`;
+    } else {
+      status = 'MATHEMATICALLY_IMPOSSIBLE';
+      message = `Reaching ${targetPercentage}% is mathematically unattainable. All coursework is evaluated and the final grade is ${earnedContributionTowardsFinal}%.`;
+    }
+  } else {
+    const neededFromFinal = targetPercentage - earnedContributionTowardsFinal;
+    const weightFraction = effectiveWeight / 100.0;
+    requiredScorePercentage = Number((neededFromFinal / weightFraction).toFixed(1));
+    maxPossibleGrade = Number((earnedContributionTowardsFinal + effectiveWeight).toFixed(1));
+
+    if (requiredScorePercentage <= 0) {
+      status = 'ALREADY_SECURED';
+      message = `Congratulations! You have already secured at least ${targetPercentage}% in this course.`;
+    } else if (requiredScorePercentage > 100.0) {
+      status = 'MATHEMATICALLY_IMPOSSIBLE';
+      message = `Reaching ${targetPercentage}% is mathematically unattainable (requires ${requiredScorePercentage}%). The maximum possible grade is ${maxPossibleGrade}%.`;
+    } else {
+      status = 'ACHIEVABLE';
+      message = `You need ${requiredScorePercentage}% on the final evaluation (${effectiveWeight}% of course) to achieve a ${targetPercentage}% overall grade.`;
+    }
   }
 
   const { letter: targetLetter } = getLetterGradeAndPoints(targetPercentage);
@@ -721,12 +976,17 @@ export const calculateWhatIfFinalGrade = async (
     courseName: course.name,
     targetPercentage,
     targetLetter,
-    finalExamWeight,
+    finalExamWeight: effectiveWeight,
+    currentAverageOnGradedWork: grade.runningPercentage,
     currentRunningPercentage: grade.runningPercentage,
     currentRunningLetter: grade.letter,
-    currentEarnedTowardsFinal: Number(currentEarnedTowardsFinal.toFixed(1)),
-    requiredScorePercentage,
+    earnedContributionTowardsFinal,
+    currentEarnedTowardsFinal: earnedContributionTowardsFinal,
+    totalEvaluatedWeight: grade.totalEvaluatedWeight,
+    remainingUngradedWeight,
+    maxAchievableGrade,
     maxPossibleGrade,
+    requiredScorePercentage,
     status,
     message,
   };
@@ -736,12 +996,23 @@ export const calculateWhatIfFinalGrade = async (
 // 7. ACADEMIC OVERVIEW & COUNTDOWNS
 // ==========================================
 
-export const getAcademicSummary = async (userId: string) => {
+export const getAcademicSummary = async (userId: string, semester?: string) => {
   const now = new Date();
+  const semesterFilter = semester && semester !== 'ALL' ? { semester } : {};
 
-  const [courses, upcomingAssignments, upcomingExams, schedules] = await Promise.all([
+  const [
+    courses,
+    upcomingAssignments,
+    upcomingAssignmentsTotal,
+    upcomingExams,
+    upcomingExamsTotal,
+    schedules,
+  ] = await Promise.all([
     prisma.course.findMany({
-      where: { userId },
+      where: {
+        userId,
+        ...semesterFilter,
+      },
       include: {
         assignments: { select: { grade: true, maxGrade: true, weight: true } },
         exams: { select: { grade: true, maxGrade: true, weight: true } },
@@ -750,40 +1021,46 @@ export const getAcademicSummary = async (userId: string) => {
     }),
     prisma.assignment.findMany({
       where: {
-        course: { userId },
+        course: { userId, ...semesterFilter },
         dueDate: { gte: now },
         status: { notIn: ['SUBMITTED', 'GRADED'] },
       },
       orderBy: { dueDate: 'asc' },
-      take: 6,
+      take: 8,
       include: { course: { select: { id: true, name: true, code: true, color: true } } },
+    }),
+    prisma.assignment.count({
+      where: {
+        course: { userId, ...semesterFilter },
+        dueDate: { gte: now },
+        status: { notIn: ['SUBMITTED', 'GRADED'] },
+      },
     }),
     prisma.exam.findMany({
       where: {
-        course: { userId },
+        course: { userId, ...semesterFilter },
         examDate: { gte: now },
       },
       orderBy: { examDate: 'asc' },
-      take: 6,
+      take: 8,
       include: { course: { select: { id: true, name: true, code: true, color: true } } },
     }),
+    prisma.exam.count({
+      where: {
+        course: { userId, ...semesterFilter },
+        examDate: { gte: now },
+      },
+    }),
     prisma.classSchedule.findMany({
-      where: { course: { userId } },
+      where: { course: { userId, ...semesterFilter } },
       include: { course: { select: { id: true, name: true, code: true, color: true } } },
       orderBy: [{ dayOfWeek: 'asc' }, { startTime: 'asc' }],
     }),
   ]);
 
-  // Overall attendance rate across all courses
-  let totalAttendances = 0;
-  let presentAttendances = 0;
-  courses.forEach((c) => {
-    totalAttendances += c.attendances.length;
-    presentAttendances += c.attendances.filter((a) => a.status === 'PRESENT').length;
-  });
-
-  const overallAttendanceRate =
-    totalAttendances > 0 ? Number(((presentAttendances / totalAttendances) * 100).toFixed(1)) : 100.0;
+  // Overall attendance rate across filtered courses
+  const allAttendances = courses.flatMap((c) => c.attendances);
+  const overallAttendanceRate = calculateAttendanceRate(allAttendances);
 
   // Calculate cumulative GPA across active courses
   let totalPoints = 0;
@@ -807,8 +1084,10 @@ export const getAcademicSummary = async (userId: string) => {
     overallAttendanceRate,
     cumulativeGpa,
     cumulativeLetter,
-    upcomingAssignmentsCount: upcomingAssignments.length,
-    upcomingExamsCount: upcomingExams.length,
+    upcomingAssignmentsCount: upcomingAssignmentsTotal,
+    upcomingAssignmentsTotal,
+    upcomingExamsCount: upcomingExamsTotal,
+    upcomingExamsTotal,
     upcomingAssignments,
     upcomingExams,
     weeklyClassSchedules: schedules,
@@ -827,6 +1106,10 @@ export const recordStudySession = async (
   const course = await prisma.course.findFirst({ where: { id: courseId, userId } });
   if (!course) throw new ApiError(404, 'Course not found');
 
+  if (data.durationMinutes <= 0) {
+    throw new ApiError(400, 'Duration must be greater than 0 minutes');
+  }
+
   const startTime = data.startTime ? new Date(data.startTime) : new Date();
   const endTime = new Date(startTime.getTime() + data.durationMinutes * 60 * 1000);
 
@@ -841,6 +1124,7 @@ export const recordStudySession = async (
     },
   });
 
+  invalidateDashboardCache(userId);
   return session;
 };
 

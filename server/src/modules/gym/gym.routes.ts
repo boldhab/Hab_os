@@ -12,7 +12,10 @@ import {
   addExerciseToWorkoutSchema,
   recordSetSchema,
   recordBodyMetricSchema,
+  createTemplateSchema,
+  paginationQuerySchema,
   uuidParamSchema,
+  workoutExerciseIdParamSchema,
 } from './gym.validation';
 
 const router = Router();
@@ -62,6 +65,7 @@ router.get(
 
 router.post(
   '/templates',
+  validate(createTemplateSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const authReq = req as AuthRequest;
     const template = await gymService.createTemplate(authReq.user!.id, req.body);
@@ -71,6 +75,7 @@ router.post(
 
 router.get(
   '/templates/:id',
+  validate(uuidParamSchema, 'params'),
   asyncHandler(async (req: Request, res: Response) => {
     const authReq = req as AuthRequest;
     const template = await gymService.getTemplateById(authReq.user!.id, req.params.id);
@@ -80,6 +85,7 @@ router.get(
 
 router.delete(
   '/templates/:id',
+  validate(uuidParamSchema, 'params'),
   asyncHandler(async (req: Request, res: Response) => {
     const authReq = req as AuthRequest;
     await gymService.deleteTemplate(authReq.user!.id, req.params.id);
@@ -93,6 +99,7 @@ router.get('/exercises', gymController.getExercises);
 
 router.get(
   '/exercises/:id/history',
+  validate(uuidParamSchema, 'params'),
   asyncHandler(async (req: Request, res: Response) => {
     const authReq = req as AuthRequest;
     const history = await gymService.getExerciseHistory(authReq.user!.id, req.params.id);
@@ -102,12 +109,13 @@ router.get(
 
 // --- Body Metrics ---
 router.post('/metrics', validate(recordBodyMetricSchema), gymController.recordBodyMetric);
-router.get('/metrics', gymController.getBodyMetrics);
+router.get('/metrics', validate(paginationQuerySchema, 'query'), gymController.getBodyMetrics);
 router.post('/body-metrics', validate(recordBodyMetricSchema), gymController.recordBodyMetric);
-router.get('/body-metrics', gymController.getBodyMetrics);
+router.get('/body-metrics', validate(paginationQuerySchema, 'query'), gymController.getBodyMetrics);
 
 router.delete(
   '/body-metrics/:id',
+  validate(uuidParamSchema, 'params'),
   asyncHandler(async (req: Request, res: Response) => {
     const authReq = req as AuthRequest;
     await gymService.deleteBodyMetric(authReq.user!.id, req.params.id);
@@ -119,8 +127,8 @@ router.delete(
 router.post('/', validate(createWorkoutSchema), gymController.createWorkout);
 router.post('/workouts', validate(createWorkoutSchema), gymController.createWorkout);
 
-router.get('/', gymController.getWorkouts);
-router.get('/workouts', gymController.getWorkouts);
+router.get('/', validate(paginationQuerySchema, 'query'), gymController.getWorkouts);
+router.get('/workouts', validate(paginationQuerySchema, 'query'), gymController.getWorkouts);
 
 router.get('/:id', validate(uuidParamSchema, 'params'), gymController.getWorkoutById);
 router.get('/workouts/:id', validate(uuidParamSchema, 'params'), gymController.getWorkoutById);
@@ -163,6 +171,7 @@ router.post(
 
 router.post(
   '/exercises/:workoutExerciseId/sets',
+  validate(workoutExerciseIdParamSchema, 'params'),
   validate(recordSetSchema),
   gymController.recordSet
 );

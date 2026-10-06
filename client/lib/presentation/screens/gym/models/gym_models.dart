@@ -7,6 +7,10 @@ class SetEntryModel {
   final int? rir;
   final double? estimatedOneRepMax;
   final bool isPR;
+  final String tag;
+  final int? durationSeconds;
+  final double? distanceMeters;
+  final int? caloriesBurned;
   final String? notes;
 
   SetEntryModel({
@@ -18,6 +22,10 @@ class SetEntryModel {
     this.rir,
     this.estimatedOneRepMax,
     required this.isPR,
+    this.tag = 'N',
+    this.durationSeconds,
+    this.distanceMeters,
+    this.caloriesBurned,
     this.notes,
   });
 
@@ -31,6 +39,10 @@ class SetEntryModel {
       rir: json['rir'] as int?,
       estimatedOneRepMax: (json['estimatedOneRepMax'] as num?)?.toDouble(),
       isPR: json['isPR'] == true,
+      tag: json['tag'] ?? 'N',
+      durationSeconds: json['durationSeconds'] as int?,
+      distanceMeters: (json['distanceMeters'] as num?)?.toDouble(),
+      caloriesBurned: json['caloriesBurned'] as int?,
       notes: json['notes'],
     );
   }
@@ -42,6 +54,7 @@ class WorkoutExerciseModel {
   final String exerciseId;
   final String exerciseName;
   final String muscleGroup;
+  final String category;
   final String equipmentType;
   final List<SetEntryModel> sets;
 
@@ -51,6 +64,7 @@ class WorkoutExerciseModel {
     required this.exerciseId,
     required this.exerciseName,
     required this.muscleGroup,
+    this.category = 'CHEST',
     required this.equipmentType,
     required this.sets,
   });
@@ -68,6 +82,7 @@ class WorkoutExerciseModel {
       exerciseId: json['exerciseId'] ?? ex['id'] ?? '',
       exerciseName: ex['name'] ?? 'Exercise',
       muscleGroup: ex['muscleGroup'] ?? ex['category'] ?? 'CHEST',
+      category: ex['category'] ?? 'CHEST',
       equipmentType: ex['equipmentType'] ?? 'BARBELL',
       sets: setsList,
     );
@@ -104,15 +119,40 @@ class WorkoutDetailModel {
             .toList() ??
         [];
 
+    double volume = (json['totalVolume'] as num?)?.toDouble() ??
+        (json['totalTonnage'] as num?)?.toDouble() ??
+        0.0;
+    int sets = json['totalSets'] as int? ??
+        json['totalSetsCount'] as int? ??
+        0;
+    int prs = json['prCount'] as int? ??
+        (json['detectedPRs'] is List ? (json['detectedPRs'] as List).length : 0);
+
+    if (volume == 0.0 || sets == 0) {
+      double calcVol = 0.0;
+      int calcSets = 0;
+      int calcPrs = 0;
+      for (final we in exList) {
+        for (final s in we.sets) {
+          calcSets++;
+          calcVol += s.weightKg * s.repetitions;
+          if (s.isPR) calcPrs++;
+        }
+      }
+      if (volume == 0.0) volume = calcVol;
+      if (sets == 0) sets = calcSets;
+      if (prs == 0) prs = calcPrs;
+    }
+
     return WorkoutDetailModel(
       id: json['id'] ?? '',
       name: json['name'] ?? 'Workout',
       date: json['date'] ?? '',
       durationMinutes: json['durationMinutes'] ?? 60,
       notes: json['notes'],
-      totalSets: json['totalSets'] ?? 0,
-      totalVolume: (json['totalVolume'] as num?)?.toDouble() ?? 0.0,
-      prCount: json['prCount'] ?? 0,
+      totalSets: sets,
+      totalVolume: volume,
+      prCount: prs,
       exercises: exList,
     );
   }
@@ -286,19 +326,70 @@ class MuscleVolumeModel {
   }
 }
 
+class MuscleHypertrophySummaryModel {
+  final String muscleGroup;
+  final double stimulativeVolumeKg;
+  final double totalStructuralVolumeKg;
+  final int effectiveSetsCount;
+  final int totalSetsCount;
+  final double efficiencyPercentage;
+
+  MuscleHypertrophySummaryModel({
+    required this.muscleGroup,
+    required this.stimulativeVolumeKg,
+    required this.totalStructuralVolumeKg,
+    required this.effectiveSetsCount,
+    required this.totalSetsCount,
+    required this.efficiencyPercentage,
+  });
+
+  factory MuscleHypertrophySummaryModel.fromJson(Map<String, dynamic> json) {
+    return MuscleHypertrophySummaryModel(
+      muscleGroup: json['muscleGroup'] ?? 'CHEST',
+      stimulativeVolumeKg: (json['stimulativeVolumeKg'] as num?)?.toDouble() ?? 0.0,
+      totalStructuralVolumeKg: (json['totalStructuralVolumeKg'] as num?)?.toDouble() ?? 0.0,
+      effectiveSetsCount: json['effectiveSetsCount'] ?? 0,
+      totalSetsCount: json['totalSetsCount'] ?? 0,
+      efficiencyPercentage: (json['efficiencyPercentage'] as num?)?.toDouble() ?? 0.0,
+    );
+  }
+}
+
 class GymStatsModel {
   final int workoutsThisWeek;
   final int weeklyTarget;
   final bool workedOutToday;
   final double totalLifetimeTonnage;
+  final int calisthenicsTotalReps;
+  final double calisthenicsVolumeKg;
+  final double stimulativeWorkingVolumeKg;
+  final double totalStructuralVolumeKg;
+  final double warmupVolumeKg;
+  final int stimulativeSetsCount;
+  final int warmupSetsCount;
+  final double hypertrophicEfficiencyPercentage;
+  final List<MuscleHypertrophySummaryModel> hypertrophyMuscleBreakdown;
   final List<MuscleVolumeModel> muscleDistribution;
+  final List<WeeklyVolumeBucketModel> weeklyVolumeTrend;
+
+  int get totalSetsCount => stimulativeSetsCount + warmupSetsCount;
 
   GymStatsModel({
     required this.workoutsThisWeek,
     required this.weeklyTarget,
     required this.workedOutToday,
     required this.totalLifetimeTonnage,
+    this.calisthenicsTotalReps = 0,
+    this.calisthenicsVolumeKg = 0.0,
+    this.stimulativeWorkingVolumeKg = 0.0,
+    this.totalStructuralVolumeKg = 0.0,
+    this.warmupVolumeKg = 0.0,
+    this.stimulativeSetsCount = 0,
+    this.warmupSetsCount = 0,
+    this.hypertrophicEfficiencyPercentage = 0.0,
+    this.hypertrophyMuscleBreakdown = const [],
     required this.muscleDistribution,
+    this.weeklyVolumeTrend = const [],
   });
 
   factory GymStatsModel.fromJson(Map<String, dynamic> json) {
@@ -308,13 +399,87 @@ class GymStatsModel {
             .toList() ??
         [];
 
+    final hypertrophyBreakdown = (json['hypertrophyMuscleBreakdown'] as List?)
+            ?.map((m) =>
+                MuscleHypertrophySummaryModel.fromJson(Map<String, dynamic>.from(m)))
+            .toList() ??
+        [];
+
+    final weeklyTrend = (json['weeklyVolumeTrend'] as List?)
+            ?.map((b) =>
+                WeeklyVolumeBucketModel.fromJson(Map<String, dynamic>.from(b)))
+            .toList() ??
+        [];
+
+    final totalTonnage = (json['totalLifetimeTonnage'] as num?)?.toDouble() ?? 0.0;
+
     return GymStatsModel(
       workoutsThisWeek: json['workoutsThisWeek'] ?? 0,
       weeklyTarget: json['weeklyTarget'] ?? 4,
       workedOutToday: json['workedOutToday'] == true,
-      totalLifetimeTonnage:
-          (json['totalLifetimeTonnage'] as num?)?.toDouble() ?? 0.0,
+      totalLifetimeTonnage: totalTonnage,
+      calisthenicsTotalReps:
+          (json['calisthenicsTotalReps'] as num?)?.toInt() ?? 0,
+      calisthenicsVolumeKg:
+          (json['calisthenicsVolumeKg'] as num?)?.toDouble() ?? 0.0,
+      stimulativeWorkingVolumeKg:
+          (json['stimulativeWorkingVolumeKg'] as num?)?.toDouble() ?? 0.0,
+      totalStructuralVolumeKg:
+          (json['totalStructuralVolumeKg'] as num?)?.toDouble() ?? totalTonnage,
+      warmupVolumeKg: (json['warmupVolumeKg'] as num?)?.toDouble() ?? 0.0,
+      stimulativeSetsCount: json['stimulativeSetsCount'] ?? 0,
+      warmupSetsCount: json['warmupSetsCount'] ?? 0,
+      hypertrophicEfficiencyPercentage:
+          (json['hypertrophicEfficiencyPercentage'] as num?)?.toDouble() ?? 0.0,
+      hypertrophyMuscleBreakdown: hypertrophyBreakdown,
       muscleDistribution: dist,
+      weeklyVolumeTrend: weeklyTrend,
+    );
+  }
+}
+
+class WeeklyVolumeBucketModel {
+  final String weekStart;
+  final double volumeKg;
+  final int workoutsCount;
+
+  WeeklyVolumeBucketModel({
+    required this.weekStart,
+    required this.volumeKg,
+    required this.workoutsCount,
+  });
+
+  factory WeeklyVolumeBucketModel.fromJson(Map<String, dynamic> json) {
+    return WeeklyVolumeBucketModel(
+      weekStart: json['weekStart'] ?? '',
+      volumeKg: (json['volumeKg'] as num?)?.toDouble() ?? 0.0,
+      workoutsCount: (json['workoutsCount'] as num?)?.toInt() ?? 0,
+    );
+  }
+}
+
+class TemplateSelectionModel {
+  final String templateId;
+  final String name;
+  final String? description;
+  final String category;
+  final List<WorkoutTemplateExerciseModel> exercises;
+
+  TemplateSelectionModel({
+    required this.templateId,
+    required this.name,
+    this.description,
+    required this.category,
+    required this.exercises,
+  });
+
+  factory TemplateSelectionModel.fromTemplate(WorkoutTemplateModel template) {
+    return TemplateSelectionModel(
+      templateId: template.id,
+      name: template.name,
+      description: template.description,
+      category: template.category,
+      exercises: template.exercises,
     );
   }
 }
@@ -325,6 +490,7 @@ class WorkoutTemplateExerciseModel {
   final String exerciseId;
   final String exerciseName;
   final String muscleGroup;
+  final String category;
   final int targetSets;
   final int targetReps;
   final double? targetRpe;
@@ -336,6 +502,7 @@ class WorkoutTemplateExerciseModel {
     required this.exerciseId,
     required this.exerciseName,
     required this.muscleGroup,
+    this.category = 'CHEST',
     required this.targetSets,
     required this.targetReps,
     this.targetRpe,
@@ -355,6 +522,7 @@ class WorkoutTemplateExerciseModel {
       exerciseId: json['exerciseId'] ?? ex['id'] ?? '',
       exerciseName: ex['name'] ?? 'Exercise',
       muscleGroup: ex['muscleGroup'] ?? ex['category'] ?? 'CHEST',
+      category: ex['category'] ?? 'CHEST',
       targetSets: json['targetSets'] ?? 3,
       targetReps: json['targetReps'] ?? 10,
       targetRpe: (json['targetRpe'] as num?)?.toDouble(),
@@ -446,12 +614,14 @@ class GymInsightModel {
   final String title;
   final String message;
   final String severity;
+  final Map<String, dynamic>? metrics;
 
   GymInsightModel({
     required this.type,
     required this.title,
     required this.message,
     required this.severity,
+    this.metrics,
   });
 
   factory GymInsightModel.fromJson(Map<String, dynamic> json) {
@@ -460,6 +630,9 @@ class GymInsightModel {
       title: json['title'] ?? '',
       message: json['message'] ?? '',
       severity: json['severity'] ?? 'INFO',
+      metrics: json['metrics'] is Map
+          ? Map<String, dynamic>.from(json['metrics'])
+          : null,
     );
   }
 }

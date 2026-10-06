@@ -82,6 +82,19 @@ class _FocusScreenState extends ConsumerState<FocusScreen>
           next.status == PomodoroStatus.idle) {
         AppHaptics.celebration();
       }
+      if (next.errorMessage != null && prev?.errorMessage != next.errorMessage) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(next.errorMessage!),
+            backgroundColor: colorScheme.error,
+            action: SnackBarAction(
+              label: 'Retry',
+              textColor: colorScheme.onError,
+              onPressed: () => notifier.retrySaveSession(),
+            ),
+          ),
+        );
+      }
     });
 
     return Scaffold(
@@ -271,6 +284,63 @@ class _FocusScreenState extends ConsumerState<FocusScreen>
               ),
             ],
           ),
+          if (state.activeHabit != null) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: colorScheme.primary.withAlpha(22),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: colorScheme.primary.withAlpha(50)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.track_changes_rounded,
+                      size: 13, color: colorScheme.primary),
+                  const SizedBox(width: 5),
+                  Text(
+                    'Habit: ${state.activeHabit!.name} (${state.activeHabit!.currentTodayValue}/${state.activeHabit!.targetValue}m)',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: colorScheme.primary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          if (state.activeTask != null) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: colorScheme.primary.withAlpha(22),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: colorScheme.primary.withAlpha(50)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.task_alt_rounded,
+                      size: 13, color: colorScheme.primary),
+                  const SizedBox(width: 5),
+                  Flexible(
+                    child: Text(
+                      'Task: ${state.activeTask!.title}',
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: colorScheme.primary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 8),
           FocusTimerGauge(
             state: state,

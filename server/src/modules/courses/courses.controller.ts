@@ -21,7 +21,8 @@ export const getCourses = asyncHandler(async (req: Request, res: Response) => {
 
 export const getAcademicSummary = asyncHandler(async (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
-  const summary = await coursesService.getAcademicSummary(authReq.user!.id);
+  const { semester } = req.query;
+  const summary = await coursesService.getAcademicSummary(authReq.user!.id, semester as string);
   return ApiResponse.success(res, summary, 'Academic summary retrieved successfully');
 });
 
@@ -153,7 +154,7 @@ export const calculateWhatIfFinalGrade = asyncHandler(async (req: Request, res: 
     authReq.user!.id,
     req.params.courseId,
     Number(targetPercentage),
-    finalExamWeight ? Number(finalExamWeight) : undefined
+    finalExamWeight !== undefined && finalExamWeight !== null ? Number(finalExamWeight) : undefined
   );
   return ApiResponse.success(res, result, 'What-if calculation completed successfully');
 });

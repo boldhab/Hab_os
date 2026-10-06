@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../app/theme/app_theme.dart';
+import '../../widgets/app_bar_search_button.dart';
+import '../../widgets/app_bar_notifications_button.dart';
 
 /// "More" tab — organized navigation hub for secondary domain screens.
 class MoreScreen extends StatelessWidget {
@@ -51,6 +53,24 @@ class MoreScreen extends StatelessWidget {
       route: '/more/analytics',
       description: 'Performance insights and trends',
     ),
+    _MoreItem(
+      icon: Icons.menu_book_rounded,
+      label: 'Vault',
+      route: '/more/vault',
+      description: 'Second brain, notes & code snippets',
+    ),
+    _MoreItem(
+      icon: Icons.auto_awesome_rounded,
+      label: 'AI Assistant',
+      route: '/more/ai',
+      description: 'Chat with AI across all domains',
+    ),
+    _MoreItem(
+      icon: Icons.notifications_outlined,
+      label: 'Notifications',
+      route: '/more/notifications',
+      description: 'Inbox center, deadline alerts & reminders',
+    ),
   ];
 
   @override
@@ -62,6 +82,11 @@ class MoreScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('More'),
         backgroundColor: colorScheme.surface,
+        actions: const [
+          AppBarSearchButton(),
+          AppBarNotificationsButton(),
+          SizedBox(width: 4),
+        ],
       ),
       body: SafeArea(
         child: SingleChildScrollView(

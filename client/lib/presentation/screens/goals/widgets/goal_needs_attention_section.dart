@@ -118,14 +118,30 @@ class GoalNeedsAttentionSection extends StatelessWidget {
                           fontWeight: FontWeight.w700,
                         ),
                       ),
-                      Text(
-                        alert.daysUntilTarget != null
-                            ? '${alert.daysUntilTarget} days left'
-                            : 'No target date',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: colorScheme.onSurfaceVariant.withAlpha(140),
-                        ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            alert.daysUntilTarget != null
+                                ? (alert.daysUntilTarget! < 0
+                                    ? '${alert.daysUntilTarget!.abs()}d overdue'
+                                    : '${alert.daysUntilTarget}d left')
+                                : 'No target date',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: colorScheme.onSurfaceVariant.withAlpha(140),
+                            ),
+                          ),
+                          if (alert.expectedProgress != null)
+                            Text(
+                              'Pace: ${alert.expectedProgress!.toInt()}%',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                color: dotColor,
+                              ),
+                            ),
+                        ],
                       ),
                     ],
                   ),

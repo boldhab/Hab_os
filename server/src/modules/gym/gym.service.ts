@@ -1,6 +1,8 @@
 import prisma from '../../config/db';
 import ApiError from '../../common/apiError';
 import { invalidateDashboardCache } from '../dashboard/dashboard.service';
+import { runSportsScienceDiagnostics } from './engines/sports_science_engine';
+import { calculateHypertrophyTelemetry } from './engines/rpe_analytics_engine';
 
 export interface CreateWorkoutDTO {
   name: string;
@@ -88,11 +90,20 @@ const DEFAULT_EXERCISE_CATALOG = [
 ];
 
 export const ensureDefaultExercises = async (userId: string) => {
-  const count = await prisma.exercise.count({ where: { userId } });
-  if (count > 0) return;
+  const existing = await prisma.exercise.findMany({
+    where: { userId },
+    select: { name: true },
+  });
+  const existingNames = new Set(existing.map((e) => e.name.toLowerCase()));
+
+  const missing = DEFAULT_EXERCISE_CATALOG.filter(
+    (e) => !existingNames.has(e.name.toLowerCase())
+  );
+
+  if (missing.length === 0) return;
 
   await prisma.exercise.createMany({
-    data: DEFAULT_EXERCISE_CATALOG.map((e) => ({
+    data: missing.map((e) => ({
       userId,
       name: e.name,
       category: e.category,
@@ -216,11 +227,35 @@ export const ensureDefaultTemplates = async (userId: string) => {
 };
 
 /**
+ * Sports-Science helper: Calculate effective load.
+ * For bodyweight movements, factors in the athlete's current bodyweight (or baseline 70kg).
+ */
+export const getEffectiveLoad = (
+  weightKg: number,
+  equipmentType?: string | null,
+  userBodyweight: number = 70.0
+): number => {
+  const isBW = equipmentType?.toUpperCase() === 'BODYWEIGHT';
+  if (isBW) {
+    return weightKg > 0 ? Number((userBodyweight + weightKg).toFixed(1)) : Number(userBodyweight.toFixed(1));
+  }
+  return weightKg > 0 ? Number(weightKg.toFixed(1)) : 0;
+};
+
+export const getUserCurrentBodyweight = async (userId: string): Promise<number> => {
+  const latestMetric = await prisma.bodyMetric.findFirst({
+    where: { userId },
+    orderBy: { date: 'desc' },
+  });
+  return latestMetric?.weightKg || 70.0;
+};
+
+/**
  * Calculate One-Rep Max (1RM) using Epley Formula: 1RM = weight * (1 + repetitions / 30)
  */
 export const calculateOneRepMax = (weightKg: number, reps: number): number => {
   if (reps <= 0 || weightKg <= 0) return 0;
-  if (reps === 1) return weightKg;
+  if (reps === 1) return Number(weightKg.toFixed(1));
   return Number((weightKg * (1 + reps / 30)).toFixed(1));
 };
 
@@ -231,12 +266,19 @@ export const evaluatePersonalRecord = async (
   userId: string,
   exerciseId: string,
   weightKg: number,
-  repetitions: number
+  repetitions: number,
+  workoutId?: string,
+  setEntryId?: string,
+  equipmentType?: string | null,
+  userBodyweight?: number,
+  txClient?: any
 ): Promise<{ isPR: boolean; calculated1RM: number }> => {
-  const calculated1RM = calculateOneRepMax(weightKg, repetitions);
+  const db = txClient || prisma;
+  const effectiveWeight = getEffectiveLoad(weightKg, equipmentType, userBodyweight || 70.0);
+  const calculated1RM = calculateOneRepMax(effectiveWeight, repetitions);
   if (calculated1RM <= 0) return { isPR: false, calculated1RM: 0 };
 
-  const currentPR = await prisma.personalRecord.findFirst({
+  const currentPR = await db.personalRecord.findFirst({
     where: { userId, exerciseId },
     orderBy: { calculatedOneRepMax: 'desc' },
   });
@@ -244,7 +286,7 @@ export const evaluatePersonalRecord = async (
   const isPR = !currentPR || (currentPR.calculatedOneRepMax !== null && calculated1RM > currentPR.calculatedOneRepMax);
 
   if (isPR) {
-    await prisma.personalRecord.create({
+    await db.personalRecord.create({
       data: {
         weightKg,
         repetitions,
@@ -252,6 +294,8 @@ export const evaluatePersonalRecord = async (
         achievedDate: new Date(),
         exerciseId,
         userId,
+        workoutId: workoutId || null,
+        setEntryId: setEntryId || null,
       },
     });
   }
@@ -267,6 +311,7 @@ export const createWorkout = async (userId: string, data: CreateWorkoutDTO) => {
   await ensureDefaultExercises(userId);
 
   const rawExercises: any[] = Array.isArray(data.exercises) ? data.exercises : [];
+  const userBodyweight = await getUserCurrentBodyweight(userId);
 
   if (rawExercises.length > 0) {
     const workoutDate = data.date ? new Date(data.date) : new Date();
@@ -293,6 +338,14 @@ export const createWorkout = async (userId: string, data: CreateWorkoutDTO) => {
         const exItem = rawExercises[i];
         const exerciseId = exItem.exerciseId;
 
+        const exerciseRecord = await tx.exercise.findFirst({
+          where: { id: exerciseId, userId },
+        });
+
+        if (!exerciseRecord) {
+          throw new ApiError(404, `Exercise not found: ${exerciseId}`);
+        }
+
         const we = await tx.workoutExercise.create({
           data: {
             workoutId: workout.id,
@@ -301,21 +354,49 @@ export const createWorkout = async (userId: string, data: CreateWorkoutDTO) => {
           },
         });
 
-        const rawSets: any[] = Array.isArray(exItem.sets) ? exItem.sets : [];
+          const rawSets: any[] = Array.isArray(exItem.sets) ? exItem.sets : [];
         for (let sIdx = 0; sIdx < rawSets.length; sIdx++) {
           const s = rawSets[sIdx];
           const weightKg = Number(s.weightKg || 0);
           const repetitions = Number(s.repetitions || 0);
-          const calculated1RM = calculateOneRepMax(weightKg, repetitions);
-          totalTonnage += weightKg * repetitions;
+          const tag = s.tag || 'N';
+          const durationSeconds = s.durationSeconds !== undefined ? Number(s.durationSeconds) : null;
+          const distanceMeters = s.distanceMeters !== undefined ? Number(s.distanceMeters) : null;
+          const caloriesBurned = s.caloriesBurned !== undefined ? Number(s.caloriesBurned) : null;
+
+          const effectiveLoad = getEffectiveLoad(weightKg, exerciseRecord?.equipmentType, userBodyweight);
+          const calculated1RM = calculateOneRepMax(effectiveLoad, repetitions);
+          if (tag !== 'W') {
+            totalTonnage += effectiveLoad * repetitions;
+          }
           totalSetsCount++;
 
-          const existingPR = await tx.personalRecord.findFirst({
-            where: { userId, exerciseId },
-            orderBy: { calculatedOneRepMax: 'desc' },
-          });
+          let isPR = false;
+          // Omit warm-up sets ('W') from PR evaluations
+          if (tag !== 'W' && calculated1RM > 0) {
+            const existingPR = await tx.personalRecord.findFirst({
+              where: { userId, exerciseId },
+              orderBy: { calculatedOneRepMax: 'desc' },
+            });
+            isPR = !existingPR || (existingPR.calculatedOneRepMax !== null && calculated1RM > existingPR.calculatedOneRepMax);
+          }
 
-          const isPR = !existingPR || (existingPR.calculatedOneRepMax !== null && calculated1RM > existingPR.calculatedOneRepMax);
+          const setEntry = await tx.setEntry.create({
+            data: {
+              workoutExerciseId: we.id,
+              setNumber: s.setNumber || sIdx + 1,
+              weightKg,
+              repetitions,
+              rpe: s.rpe !== undefined ? Number(s.rpe) : null,
+              estimatedOneRepMax: calculated1RM,
+              isPR,
+              tag,
+              durationSeconds,
+              distanceMeters,
+              caloriesBurned,
+              notes: s.notes || null,
+            },
+          });
 
           if (isPR && calculated1RM > 0) {
             const newPR = await tx.personalRecord.create({
@@ -326,23 +407,12 @@ export const createWorkout = async (userId: string, data: CreateWorkoutDTO) => {
                 repetitions,
                 calculatedOneRepMax: calculated1RM,
                 achievedDate: workoutDate,
+                workoutId: workout.id,
+                setEntryId: setEntry.id,
               },
             });
             detectedPRs.push(newPR);
           }
-
-          await tx.setEntry.create({
-            data: {
-              workoutExerciseId: we.id,
-              setNumber: s.setNumber || sIdx + 1,
-              weightKg,
-              repetitions,
-              rpe: s.rpe !== undefined ? Number(s.rpe) : null,
-              estimatedOneRepMax: calculated1RM,
-              isPR,
-              notes: s.notes || null,
-            },
-          });
         }
       }
 
@@ -363,8 +433,11 @@ export const createWorkout = async (userId: string, data: CreateWorkoutDTO) => {
 
       return {
         ...fullWorkout,
-        totalTonnage,
+        totalVolume: Number(totalTonnage.toFixed(1)),
+        totalTonnage: Number(totalTonnage.toFixed(1)),
+        totalSets: totalSetsCount,
         totalSetsCount,
+        prCount: detectedPRs.length,
         detectedPRs,
       };
     });
@@ -385,8 +458,11 @@ export const createWorkout = async (userId: string, data: CreateWorkoutDTO) => {
   invalidateDashboardCache(userId);
   return {
     ...workout,
+    totalVolume: 0,
     totalTonnage: 0,
+    totalSets: 0,
     totalSetsCount: 0,
+    prCount: 0,
     detectedPRs: [],
   };
 };
@@ -396,43 +472,95 @@ export const logWorkout = createWorkout;
 export const getWorkouts = async (userId: string, limit: any = 20) => {
   const take = typeof limit === 'number' ? limit : 20;
 
-  const workouts = await prisma.workout.findMany({
-    where: { userId },
-    orderBy: { date: 'desc' },
-    take,
-    include: {
-      exercises: {
-        orderBy: { order: 'asc' },
-        include: {
-          exercise: true,
-          sets: { orderBy: { setNumber: 'asc' } },
+  const [workouts, userBodyweight] = await Promise.all([
+    prisma.workout.findMany({
+      where: { userId },
+      orderBy: { date: 'desc' },
+      take,
+      include: {
+        exercises: {
+          orderBy: { order: 'asc' },
+          include: {
+            exercise: true,
+            sets: { orderBy: { setNumber: 'asc' } },
+          },
         },
       },
-    },
-  });
+    }),
+    getUserCurrentBodyweight(userId),
+  ]);
 
-  return workouts;
+  return workouts.map((w) => {
+    let totalVolume = 0;
+    let totalSets = 0;
+    let prCount = 0;
+
+    for (const we of w.exercises) {
+      for (const s of we.sets) {
+        totalSets++;
+        const effLoad = getEffectiveLoad(s.weightKg, we.exercise.equipmentType, userBodyweight);
+        totalVolume += effLoad * s.repetitions;
+        if (s.isPR) {
+          prCount++;
+        }
+      }
+    }
+
+    return {
+      ...w,
+      totalVolume: Number(totalVolume.toFixed(1)),
+      totalTonnage: Number(totalVolume.toFixed(1)),
+      totalSets,
+      totalSetsCount: totalSets,
+      prCount,
+    };
+  });
 };
 
 export const getWorkoutById = async (userId: string, workoutId: string) => {
-  const workout = await prisma.workout.findFirst({
-    where: { id: workoutId, userId },
-    include: {
-      exercises: {
-        orderBy: { order: 'asc' },
-        include: {
-          exercise: true,
-          sets: { orderBy: { setNumber: 'asc' } },
+  const [workout, userBodyweight] = await Promise.all([
+    prisma.workout.findFirst({
+      where: { id: workoutId, userId },
+      include: {
+        exercises: {
+          orderBy: { order: 'asc' },
+          include: {
+            exercise: true,
+            sets: { orderBy: { setNumber: 'asc' } },
+          },
         },
       },
-    },
-  });
+    }),
+    getUserCurrentBodyweight(userId),
+  ]);
 
   if (!workout) {
     throw new ApiError(404, 'Workout not found');
   }
 
-  return workout;
+  let totalVolume = 0;
+  let totalSets = 0;
+  let prCount = 0;
+
+  for (const we of workout.exercises) {
+    for (const s of we.sets) {
+      totalSets++;
+      const effLoad = getEffectiveLoad(s.weightKg, we.exercise.equipmentType, userBodyweight);
+      totalVolume += effLoad * s.repetitions;
+      if (s.isPR) {
+        prCount++;
+      }
+    }
+  }
+
+  return {
+    ...workout,
+    totalVolume: Number(totalVolume.toFixed(1)),
+    totalTonnage: Number(totalVolume.toFixed(1)),
+    totalSets,
+    totalSetsCount: totalSets,
+    prCount,
+  };
 };
 
 export const updateWorkout = async (userId: string, workoutId: string, data: Partial<CreateWorkoutDTO>) => {
@@ -446,6 +574,131 @@ export const updateWorkout = async (userId: string, workoutId: string, data: Par
 
   const { exercises, ...restData } = data;
 
+  if (Array.isArray(exercises)) {
+    const userBodyweight = await getUserCurrentBodyweight(userId);
+    return await prisma.$transaction(async (tx) => {
+      await tx.personalRecord.deleteMany({ where: { workoutId } });
+      await tx.workoutExercise.deleteMany({ where: { workoutId } });
+
+      await tx.workout.update({
+        where: { id: workoutId },
+        data: {
+          ...restData,
+          date: data.date ? new Date(data.date) : undefined,
+        },
+      });
+
+      let totalTonnage = 0;
+      let totalSetsCount = 0;
+      let prCount = 0;
+
+      for (let i = 0; i < exercises.length; i++) {
+        const exItem = exercises[i];
+        const exerciseId = exItem.exerciseId;
+        const exerciseRecord = await tx.exercise.findFirst({
+          where: { id: exerciseId, userId },
+        });
+
+        if (!exerciseRecord) {
+          throw new ApiError(404, `Exercise not found: ${exerciseId}`);
+        }
+
+        const we = await tx.workoutExercise.create({
+          data: {
+            workoutId,
+            exerciseId,
+            order: exItem.order || i + 1,
+          },
+        });
+
+        const rawSets: any[] = Array.isArray(exItem.sets) ? exItem.sets : [];
+        for (let sIdx = 0; sIdx < rawSets.length; sIdx++) {
+          const s = rawSets[sIdx];
+          const weightKg = Number(s.weightKg || 0);
+          const repetitions = Number(s.repetitions || 0);
+          const tag = s.tag || 'N';
+          const durationSeconds = s.durationSeconds !== undefined ? Number(s.durationSeconds) : null;
+          const distanceMeters = s.distanceMeters !== undefined ? Number(s.distanceMeters) : null;
+          const caloriesBurned = s.caloriesBurned !== undefined ? Number(s.caloriesBurned) : null;
+
+          const effectiveLoad = getEffectiveLoad(weightKg, exerciseRecord?.equipmentType, userBodyweight);
+          const calculated1RM = calculateOneRepMax(effectiveLoad, repetitions);
+          if (tag !== 'W') {
+            totalTonnage += effectiveLoad * repetitions;
+          }
+          totalSetsCount++;
+
+          let isPR = false;
+          // Omit warm-up sets ('W') from PR evaluations
+          if (tag !== 'W' && calculated1RM > 0) {
+            const existingPR = await tx.personalRecord.findFirst({
+              where: { userId, exerciseId },
+              orderBy: { calculatedOneRepMax: 'desc' },
+            });
+            isPR = !existingPR || (existingPR.calculatedOneRepMax !== null && calculated1RM > existingPR.calculatedOneRepMax);
+          }
+          if (isPR) prCount++;
+
+          const setEntry = await tx.setEntry.create({
+            data: {
+              workoutExerciseId: we.id,
+              setNumber: s.setNumber || sIdx + 1,
+              weightKg,
+              repetitions,
+              rpe: s.rpe !== undefined ? Number(s.rpe) : null,
+              estimatedOneRepMax: calculated1RM,
+              isPR,
+              tag,
+              durationSeconds,
+              distanceMeters,
+              caloriesBurned,
+              notes: s.notes || null,
+            },
+          });
+
+          if (isPR && calculated1RM > 0) {
+            await tx.personalRecord.create({
+              data: {
+                userId,
+                exerciseId,
+                weightKg,
+                repetitions,
+                calculatedOneRepMax: calculated1RM,
+                achievedDate: data.date ? new Date(data.date) : existing.date,
+                workoutId,
+                setEntryId: setEntry.id,
+              },
+            });
+          }
+        }
+      }
+
+      invalidateDashboardCache(userId);
+
+      const fullWorkout = await tx.workout.findUnique({
+        where: { id: workoutId },
+        include: {
+          exercises: {
+            orderBy: { order: 'asc' },
+            include: {
+              exercise: true,
+              sets: { orderBy: { setNumber: 'asc' } },
+            },
+          },
+        },
+      });
+
+      return {
+        ...fullWorkout,
+        totalVolume: Number(totalTonnage.toFixed(1)),
+        totalTonnage: Number(totalTonnage.toFixed(1)),
+        totalSets: totalSetsCount,
+        totalSetsCount,
+        prCount,
+      };
+    });
+  }
+
   const updated = await prisma.workout.update({
     where: { id: workoutId },
     data: {
@@ -455,7 +708,7 @@ export const updateWorkout = async (userId: string, workoutId: string, data: Par
   });
 
   invalidateDashboardCache(userId);
-  return updated;
+  return getWorkoutById(userId, workoutId);
 };
 
 export const deleteWorkout = async (userId: string, workoutId: string) => {
@@ -467,6 +720,7 @@ export const deleteWorkout = async (userId: string, workoutId: string) => {
     throw new ApiError(404, 'Workout not found');
   }
 
+  await prisma.personalRecord.deleteMany({ where: { workoutId } });
   await prisma.workout.delete({ where: { id: workoutId } });
   invalidateDashboardCache(userId);
   return { message: 'Workout deleted successfully' };
@@ -535,29 +789,61 @@ export const addExerciseToWorkout = async (
   const exercise = await prisma.exercise.findFirst({ where: { id: data.exerciseId, userId } });
   if (!exercise) throw new ApiError(404, 'Exercise not found');
 
-  const workoutExercise = await prisma.workoutExercise.create({
-    data: {
-      workoutId,
-      exerciseId: data.exerciseId,
-      order: data.order || 1,
-    },
-  });
+  const userBodyweight = await getUserCurrentBodyweight(userId);
 
-  if (data.sets && data.sets.length > 0) {
-    for (const set of data.sets) {
-      const { isPR } = await evaluatePersonalRecord(userId, data.exerciseId, set.weightKg, set.repetitions);
-      await prisma.setEntry.create({
-        data: {
-          setNumber: set.setNumber,
-          weightKg: set.weightKg,
-          repetitions: set.repetitions,
-          isPR,
-          notes: set.notes,
-          workoutExerciseId: workoutExercise.id,
-        },
-      });
+  await prisma.$transaction(async (tx) => {
+    const workoutExercise = await tx.workoutExercise.create({
+      data: {
+        workoutId,
+        exerciseId: data.exerciseId,
+        order: data.order || 1,
+      },
+    });
+
+    if (data.sets && data.sets.length > 0) {
+      for (const set of data.sets) {
+        const tag = (set as any).tag || 'N';
+        const durationSeconds = (set as any).durationSeconds !== undefined ? Number((set as any).durationSeconds) : null;
+        const distanceMeters = (set as any).distanceMeters !== undefined ? Number((set as any).distanceMeters) : null;
+        const caloriesBurned = (set as any).caloriesBurned !== undefined ? Number((set as any).caloriesBurned) : null;
+
+        const setEntry = await tx.setEntry.create({
+          data: {
+            setNumber: set.setNumber,
+            weightKg: set.weightKg,
+            repetitions: set.repetitions,
+            rpe: set.rpe !== undefined ? Number(set.rpe) : null,
+            tag,
+            durationSeconds,
+            distanceMeters,
+            caloriesBurned,
+            isPR: false,
+            notes: set.notes,
+            workoutExerciseId: workoutExercise.id,
+          },
+        });
+
+        if (tag !== 'W') {
+          const { isPR, calculated1RM } = await evaluatePersonalRecord(
+            userId,
+            data.exerciseId,
+            set.weightKg,
+            set.repetitions,
+            workoutId,
+            setEntry.id,
+            exercise.equipmentType,
+            userBodyweight,
+            tx
+          );
+
+          await tx.setEntry.update({
+            where: { id: setEntry.id },
+            data: { isPR, estimatedOneRepMax: calculated1RM },
+          });
+        }
+      }
     }
-  }
+  });
 
   return getWorkoutById(userId, workoutId);
 };
@@ -569,38 +855,68 @@ export const recordSet = async (
 ) => {
   const workoutExercise = await prisma.workoutExercise.findUnique({
     where: { id: workoutExerciseId },
-    include: { workout: true },
+    include: { workout: true, exercise: true },
   });
 
   if (!workoutExercise || workoutExercise.workout.userId !== userId) {
     throw new ApiError(404, 'Workout exercise not found');
   }
 
-  const { isPR } = await evaluatePersonalRecord(
-    userId,
-    workoutExercise.exerciseId,
-    data.weightKg,
-    data.repetitions
-  );
+  const userBodyweight = await getUserCurrentBodyweight(userId);
+  const tag = (data as any).tag || 'N';
+  const durationSeconds = (data as any).durationSeconds !== undefined ? Number((data as any).durationSeconds) : null;
+  const distanceMeters = (data as any).distanceMeters !== undefined ? Number((data as any).distanceMeters) : null;
+  const caloriesBurned = (data as any).caloriesBurned !== undefined ? Number((data as any).caloriesBurned) : null;
 
-  const setEntry = await prisma.setEntry.create({
-    data: {
-      setNumber: data.setNumber,
-      weightKg: data.weightKg,
-      repetitions: data.repetitions,
-      isPR,
-      notes: data.notes,
-      workoutExerciseId,
-    },
+  return await prisma.$transaction(async (tx) => {
+    const setEntry = await tx.setEntry.create({
+      data: {
+        setNumber: data.setNumber,
+        weightKg: data.weightKg,
+        repetitions: data.repetitions,
+        rpe: data.rpe !== undefined ? Number(data.rpe) : null,
+        tag,
+        durationSeconds,
+        distanceMeters,
+        caloriesBurned,
+        isPR: false,
+        notes: data.notes,
+        workoutExerciseId,
+      },
+    });
+
+    let finalSetEntry = setEntry;
+    if (tag !== 'W') {
+      const { isPR, calculated1RM } = await evaluatePersonalRecord(
+        userId,
+        workoutExercise.exerciseId,
+        data.weightKg,
+        data.repetitions,
+        workoutExercise.workoutId,
+        setEntry.id,
+        workoutExercise.exercise.equipmentType,
+        userBodyweight,
+        tx
+      );
+
+      finalSetEntry = await tx.setEntry.update({
+        where: { id: setEntry.id },
+        data: { isPR, estimatedOneRepMax: calculated1RM },
+      });
+    }
+
+    return finalSetEntry;
   });
-
-  return { setEntry, isPR };
 };
 
 export const getExerciseHistory = async (userId: string, exerciseId: string) => {
-  const exercise = await prisma.exercise.findFirst({
-    where: { id: exerciseId, userId },
-  });
+  const [exercise, userBodyweight] = await Promise.all([
+    prisma.exercise.findFirst({
+      where: { id: exerciseId, userId },
+    }),
+    getUserCurrentBodyweight(userId),
+  ]);
+
   if (!exercise) throw new ApiError(404, 'Exercise not found');
 
   const workoutExercises = await prisma.workoutExercise.findMany({
@@ -622,9 +938,12 @@ export const getExerciseHistory = async (userId: string, exerciseId: string) => 
 
     we.sets.forEach((s) => {
       if (s.weightKg > maxWeight) maxWeight = s.weightKg;
-      const est1RM = s.estimatedOneRepMax || calculateOneRepMax(s.weightKg, s.repetitions);
+      const effectiveLoad = getEffectiveLoad(s.weightKg, exercise.equipmentType, userBodyweight);
+      const est1RM = s.estimatedOneRepMax || calculateOneRepMax(effectiveLoad, s.repetitions);
       if (est1RM > maxEst1RM) maxEst1RM = est1RM;
-      totalVolume += s.weightKg * s.repetitions;
+      if (s.tag !== 'W') {
+        totalVolume += effectiveLoad * s.repetitions;
+      }
     });
 
     return {
@@ -633,8 +952,8 @@ export const getExerciseHistory = async (userId: string, exerciseId: string) => 
       date: we.workout.date,
       sets: we.sets,
       maxWeight,
-      maxEst1RM,
-      totalVolume,
+      maxEst1RM: Number(maxEst1RM.toFixed(1)),
+      totalVolume: Number(totalVolume.toFixed(1)),
     };
   });
 
@@ -686,10 +1005,29 @@ export const getBodyMetrics = async (userId: string, limit: any = 30) => {
     take,
   });
 
+  if (metrics.length === 0) return [];
+
   const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
+  const oldestDateInPage = new Date(metrics[metrics.length - 1].date);
+  const bufferStartDate = new Date(oldestDateInPage.getTime() - sevenDaysMs);
+
+  // Fetch metrics that fall within the 7-day window before the oldest page entry
+  const bufferMetrics = await prisma.bodyMetric.findMany({
+    where: {
+      userId,
+      date: {
+        gte: bufferStartDate,
+        lt: oldestDateInPage,
+      },
+    },
+    orderBy: { date: 'desc' },
+  });
+
+  const allAvailableMetrics = [...metrics, ...bufferMetrics];
+
   const enriched = metrics.map((m) => {
     const mTime = new Date(m.date).getTime();
-    const windowEntries = metrics.filter((other) => {
+    const windowEntries = allAvailableMetrics.filter((other) => {
       const oTime = new Date(other.date).getTime();
       return oTime <= mTime && oTime >= mTime - sevenDaysMs;
     });
@@ -726,12 +1064,7 @@ export const getGymAnalytics = async (userId: string) => {
       where: { userId },
       orderBy: { date: 'desc' },
     }),
-    prisma.personalRecord.findMany({
-      where: { userId },
-      orderBy: { calculatedOneRepMax: 'desc' },
-      take: 5,
-      include: { exercise: { select: { name: true, category: true } } },
-    }),
+    getPersonalRecords(userId),
   ]);
 
   return {
@@ -739,44 +1072,79 @@ export const getGymAnalytics = async (userId: string) => {
     workoutsThisMonth: monthWorkouts,
     totalPersonalRecords: totalPRs,
     currentWeightKg: latestWeight?.weightKg || null,
-    topPersonalRecords: topPRs,
+    topPersonalRecords: topPRs.slice(0, 5),
   };
 };
 
+/**
+ * Group all-time highest PR per unique exercise (Bug 6 Fix)
+ */
 export const getPersonalRecords = async (userId: string) => {
-  return prisma.personalRecord.findMany({
+  const allPrs = await prisma.personalRecord.findMany({
     where: { userId },
-    orderBy: { achievedDate: 'desc' },
+    orderBy: { calculatedOneRepMax: 'desc' },
     include: { exercise: true },
   });
+
+  const bestMap = new Map<string, typeof allPrs[0]>();
+  for (const pr of allPrs) {
+    if (!bestMap.has(pr.exerciseId)) {
+      bestMap.set(pr.exerciseId, pr);
+    }
+  }
+
+  return Array.from(bestMap.values()).sort(
+    (a, b) => (b.calculatedOneRepMax || 0) - (a.calculatedOneRepMax || 0)
+  );
+};
+
+const formatLocalDateKey = (date: Date): string => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const getMondayOfDate = (d: Date): Date => {
+  const date = new Date(d);
+  const day = date.getDay();
+  const diff = date.getDate() - day + (day === 0 ? -6 : 1);
+  date.setDate(diff);
+  date.setHours(0, 0, 0, 0);
+  return date;
 };
 
 export const getGymStats = async (userId: string) => {
-  const workouts = await prisma.workout.findMany({
-    where: { userId },
-    include: {
-      exercises: {
-        include: {
-          exercise: true,
-          sets: true,
+  const [workouts, userPref, userBodyweight] = await Promise.all([
+    prisma.workout.findMany({
+      where: { userId },
+      include: {
+        exercises: {
+          include: {
+            exercise: true,
+            sets: true,
+          },
         },
       },
-    },
-  });
+    }),
+    prisma.userPreference.findUnique({
+      where: { userId },
+    }),
+    getUserCurrentBodyweight(userId),
+  ]);
 
   const now = new Date();
-  const dayOfWeek = now.getDay();
-  const diffToMonday = now.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
-  const currentWeekMonday = new Date(new Date(now).setDate(diffToMonday));
-  currentWeekMonday.setHours(0, 0, 0, 0);
+  const currentWeekMonday = getMondayOfDate(now);
 
   const workoutsThisWeek = workouts.filter((w) => new Date(w.date) >= currentWeekMonday);
   const workedOutToday = workouts.some(
-    (w) => new Date(w.date).toDateString() === now.toDateString()
+    (w) => formatLocalDateKey(new Date(w.date)) === formatLocalDateKey(now)
   );
-  const weeklyTarget = 4;
+  const weeklyTarget = userPref?.weeklyGymTarget ?? 4;
 
   let totalLifetimeTonnage = 0;
+  let calisthenicsTotalReps = 0;
+  let calisthenicsVolumeKg = 0;
   const muscleVolume: Record<string, number> = {
     CHEST: 0,
     BACK: 0,
@@ -789,28 +1157,33 @@ export const getGymStats = async (userId: string) => {
   const weeklyBuckets: Record<string, { weekStart: string; volumeKg: number; workoutsCount: number }> = {};
   for (let i = 7; i >= 0; i--) {
     const d = new Date(currentWeekMonday.getTime() - i * 7 * 24 * 60 * 60 * 1000);
-    const key = d.toISOString().split('T')[0];
+    const key = formatLocalDateKey(d);
     weeklyBuckets[key] = { weekStart: key, volumeKg: 0, workoutsCount: 0 };
   }
 
   workouts.forEach((w) => {
     const wDate = new Date(w.date);
-    const day = wDate.getDay();
-    const diff = wDate.getDate() - day + (day === 0 ? -6 : 1);
-    const monday = new Date(new Date(wDate).setDate(diff)).toISOString().split('T')[0];
+    const monday = formatLocalDateKey(getMondayOfDate(wDate));
 
     if (weeklyBuckets[monday]) {
       weeklyBuckets[monday].workoutsCount += 1;
     }
 
     w.exercises.forEach((we) => {
+      const isCalisthenics = we.exercise.equipmentType === 'BODYWEIGHT';
       const mGroup = we.exercise.muscleGroup || we.exercise.category || 'CHEST';
       we.sets.forEach((s) => {
-        const vol = s.weightKg * s.repetitions;
+        const effLoad = getEffectiveLoad(s.weightKg, we.exercise.equipmentType, userBodyweight);
+        const vol = effLoad * s.repetitions;
         totalLifetimeTonnage += vol;
         muscleVolume[mGroup] = (muscleVolume[mGroup] || 0) + vol;
         if (weeklyBuckets[monday]) {
           weeklyBuckets[monday].volumeKg += vol;
+        }
+
+        if (isCalisthenics) {
+          calisthenicsTotalReps += s.repetitions;
+          calisthenicsVolumeKg += vol;
         }
       });
     });
@@ -828,37 +1201,78 @@ export const getGymStats = async (userId: string) => {
 
   const [totalPRs, prs] = await Promise.all([
     prisma.personalRecord.count({ where: { userId } }),
-    prisma.personalRecord.findMany({
-      where: { userId },
-      orderBy: { calculatedOneRepMax: 'desc' },
-      take: 5,
-      include: { exercise: true },
-    }),
+    getPersonalRecords(userId),
   ]);
+
+  const hypertrophyTelemetry = calculateHypertrophyTelemetry(workouts);
 
   return {
     workoutsThisWeek: workoutsThisWeek.length,
     weeklyTarget,
     workedOutToday,
-    totalLifetimeTonnage,
+    totalLifetimeTonnage: Number(totalLifetimeTonnage.toFixed(1)),
+    calisthenicsTotalReps,
+    calisthenicsVolumeKg: Number(calisthenicsVolumeKg.toFixed(1)),
+    stimulativeWorkingVolumeKg: hypertrophyTelemetry.stimulativeWorkingVolumeKg,
+    totalStructuralVolumeKg: hypertrophyTelemetry.totalStructuralVolumeKg,
+    warmupVolumeKg: hypertrophyTelemetry.warmupVolumeKg,
+    stimulativeSetsCount: hypertrophyTelemetry.stimulativeSetsCount,
+    warmupSetsCount: hypertrophyTelemetry.warmupSetsCount,
+    hypertrophicEfficiencyPercentage: hypertrophyTelemetry.hypertrophicEfficiencyPercentage,
+    hypertrophyMuscleBreakdown: hypertrophyTelemetry.muscleBreakdown,
     weeklyVolumeTrend: Object.values(weeklyBuckets),
     muscleDistribution,
-    topPRs: prs,
+    topPRs: prs.slice(0, 5),
     totalPersonalRecords: totalPRs,
   };
 };
 
 export const getGymInsights = async (userId: string) => {
-  return {
-    insights: [
-      {
-        type: 'REST_DAY_CORRELATION',
-        title: 'Rest Day Strength Supercompensation',
-        message: 'Quality recovery directly accelerates progressive overload.',
-        severity: 'POSITIVE',
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+  const [workouts, focusSessions, lifeScoreLogs] = await Promise.all([
+    prisma.workout.findMany({
+      where: { userId },
+      orderBy: { date: 'desc' },
+      include: {
+        exercises: {
+          include: {
+            exercise: true,
+            sets: true,
+          },
+        },
       },
-    ],
-  };
+    }),
+    prisma.focusSession.findMany({
+      where: {
+        userId,
+        startTime: { gte: thirtyDaysAgo },
+      },
+      select: {
+        durationMinutes: true,
+        category: true,
+        status: true,
+        startTime: true,
+      },
+    }),
+    prisma.lifeScoreLog.findMany({
+      where: {
+        userId,
+        date: { gte: thirtyDaysAgo },
+      },
+      select: {
+        date: true,
+        overallScore: true,
+        gymScore: true,
+      },
+    }),
+  ]);
+
+  return runSportsScienceDiagnostics(workouts, new Date(), {
+    focusSessions,
+    lifeScoreLogs,
+  });
 };
 
 // ==========================================
@@ -879,7 +1293,38 @@ export const getTemplates = async (userId: string) => {
     orderBy: { createdAt: 'asc' },
   });
 
-  return templates;
+  const exerciseIds = Array.from(
+    new Set(templates.flatMap((t) => t.exercises.map((e) => e.exerciseId)))
+  );
+
+  const recentWorkoutExercises =
+    exerciseIds.length > 0
+      ? await prisma.workoutExercise.findMany({
+          where: {
+            exerciseId: { in: exerciseIds },
+            workout: { userId },
+          },
+          orderBy: { workout: { date: 'desc' } },
+          include: {
+            sets: { orderBy: { setNumber: 'asc' } },
+          },
+        })
+      : [];
+
+  const lastPerformanceMap = new Map<string, any[]>();
+  for (const we of recentWorkoutExercises) {
+    if (!lastPerformanceMap.has(we.exerciseId)) {
+      lastPerformanceMap.set(we.exerciseId, we.sets);
+    }
+  }
+
+  return templates.map((tmpl) => ({
+    ...tmpl,
+    exercises: tmpl.exercises.map((te) => ({
+      ...te,
+      lastPerformance: lastPerformanceMap.get(te.exerciseId) || [],
+    })),
+  }));
 };
 
 export const getTemplateById = async (userId: string, id: string) => {
@@ -894,7 +1339,36 @@ export const getTemplateById = async (userId: string, id: string) => {
   });
 
   if (!template) throw new ApiError(404, 'Workout template not found');
-  return template;
+
+  const exerciseIds = template.exercises.map((e) => e.exerciseId);
+  const recentWorkoutExercises =
+    exerciseIds.length > 0
+      ? await prisma.workoutExercise.findMany({
+          where: {
+            exerciseId: { in: exerciseIds },
+            workout: { userId },
+          },
+          orderBy: { workout: { date: 'desc' } },
+          include: {
+            sets: { orderBy: { setNumber: 'asc' } },
+          },
+        })
+      : [];
+
+  const lastPerformanceMap = new Map<string, any[]>();
+  for (const we of recentWorkoutExercises) {
+    if (!lastPerformanceMap.has(we.exerciseId)) {
+      lastPerformanceMap.set(we.exerciseId, we.sets);
+    }
+  }
+
+  return {
+    ...template,
+    exercises: template.exercises.map((te) => ({
+      ...te,
+      lastPerformance: lastPerformanceMap.get(te.exerciseId) || [],
+    })),
+  };
 };
 
 export const createTemplate = async (userId: string, data: any) => {

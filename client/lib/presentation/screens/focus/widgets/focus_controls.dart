@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../app/theme/app_theme.dart';
 import '../../../providers/focus_provider.dart';
+import 'focus_completion_sheet.dart';
 
 class FocusControls extends StatelessWidget {
   final FocusState state;
@@ -11,6 +12,24 @@ class FocusControls extends StatelessWidget {
     required this.state,
     required this.notifier,
   });
+
+  void _openCompletionSheet(BuildContext context) {
+    final elapsedSeconds = (state.targetMinutes * 60) - state.remainingSeconds;
+    final elapsedMinutes = (elapsedSeconds / 60).ceil().clamp(1, 1440);
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => FocusCompletionSheet(
+        durationMinutes: elapsedMinutes,
+        category: state.category,
+        onSave: (notes) async {
+          await notifier.finishAndSaveSession(notes: notes);
+        },
+      ),
+    );
+  }
 
   void _confirmReset(BuildContext context) {
     AppHaptics.light();
@@ -129,7 +148,7 @@ class FocusControls extends StatelessWidget {
                 label: 'Finish',
                 onPressed: () {
                   AppHaptics.success();
-                  notifier.finishAndSaveSession();
+                  _openCompletionSheet(context);
                 },
               ),
             ],
@@ -170,9 +189,64 @@ class FocusControls extends StatelessWidget {
                 label: 'Save',
                 onPressed: () {
                   AppHaptics.success();
-                  notifier.finishAndSaveSession();
+                  _openCompletionSheet(context);
                 },
               ),
+            ],
+          ),
+        PomodoroStatus.completed => Row(
+            key: const ValueKey('completed_controls'),
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (state.isSaving) ...[
+                const SizedBox(
+                  width: 28,
+                  height: 28,
+                  child: CircularProgressIndicator(strokeWidth: 2.5),
+                ),
+                const SizedBox(width: 14),
+                Text(
+                  'Saving session...',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: colorScheme.onSurface,
+                  ),
+                ),
+              ] else if (state.errorMessage != null) ...[
+                _ControlButton(
+                  size: 52,
+                  color: colorScheme.surfaceContainerHighest,
+                  iconColor: colorScheme.onSurfaceVariant,
+                  icon: Icons.close_rounded,
+                  iconSize: 24,
+                  label: 'Discard',
+                  onPressed: () => _confirmReset(context),
+                ),
+                const SizedBox(width: 20),
+                _ControlButton(
+                  size: 64,
+                  color: primaryRed,
+                  iconColor: Colors.white,
+                  icon: Icons.replay_rounded,
+                  iconSize: 32,
+                  label: 'Retry Save',
+                  elevation: 4,
+                  onPressed: () {
+                    AppHaptics.medium();
+                    notifier.retrySaveSession();
+                  },
+                ),
+              ] else ...[
+                _ControlButton(
+                  size: 64,
+                  color: primaryRed,
+                  iconColor: Colors.white,
+                  icon: Icons.check_rounded,
+                  iconSize: 32,
+                  label: 'Done',
+                  onPressed: () => notifier.resetTimer(skipServerCancel: true),
+                ),
+              ],
             ],
           ),
         _ => Row(

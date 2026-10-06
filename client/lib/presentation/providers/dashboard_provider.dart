@@ -87,14 +87,37 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
     }
   }
 
+  final Set<String> _pendingItemIds = {};
+
+  bool isItemPending(String id) => _pendingItemIds.contains(id);
+
+  void clearError() {
+    state = state.copyWith(errorMessage: null);
+  }
+
   /// Optimistically toggle habit completion and refresh feed silently.
   Future<void> logHabit(String habitId) async {
+    if (_pendingItemIds.contains(habitId)) return;
+    _pendingItemIds.add(habitId);
+
     // 1. Optimistic UI update
     final current = state.feed;
-    if (current == null) return;
+    if (current == null) {
+      _pendingItemIds.remove(habitId);
+      return;
+    }
+
+    final habitIndex = current.habits.items.indexWhere((h) => h.id == habitId);
+    if (habitIndex == -1) {
+      _pendingItemIds.remove(habitId);
+      return;
+    }
+
+    final targetHabit = current.habits.items[habitIndex];
+    final newCompletedState = !targetHabit.isCompletedToday;
 
     final updatedItems = current.habits.items.map((h) {
-      if (h.id == habitId) return h.copyWith(isCompletedToday: true);
+      if (h.id == habitId) return h.copyWith(isCompletedToday: newCompletedState);
       return h;
     }).toList();
 
@@ -110,20 +133,38 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
       feed: current.copyWith(habits: updatedHabits),
     );
 
-    // 2. Fire API call (no await — fire & forget; silent refresh on success)
+    // 2. Fire API call
     try {
-      await _repository.logHabit(habitId);
+      final value = targetHabit.targetType == 'CHECKBOX'
+          ? (newCompletedState ? 1 : 0)
+          : (newCompletedState ? targetHabit.targetValue : 0);
+      await _repository.logHabit(
+        habitId,
+        isCompleted: newCompletedState,
+        value: value,
+      );
       await load(showLoading: false); // refresh streak count etc.
-    } catch (_) {
-      // Revert optimistic update on failure
-      state = state.copyWith(feed: current);
+    } catch (e) {
+      // Revert optimistic update on failure with visible error message
+      state = state.copyWith(
+        feed: current,
+        errorMessage: 'Failed to update habit: ${e.toString().replaceAll('Exception: ', '')}',
+      );
+    } finally {
+      _pendingItemIds.remove(habitId);
     }
   }
 
   /// Optimistically toggle task completion.
   Future<void> toggleTask(String taskId, bool currentValue) async {
+    if (_pendingItemIds.contains(taskId)) return;
+    _pendingItemIds.add(taskId);
+
     final current = state.feed;
-    if (current == null) return;
+    if (current == null) {
+      _pendingItemIds.remove(taskId);
+      return;
+    }
 
     final newValue = !currentValue;
     final updatedTasks = current.tasksDueToday.map((t) {
@@ -140,8 +181,13 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
     try {
       await _repository.toggleTask(taskId, newValue);
       await load(showLoading: false);
-    } catch (_) {
-      state = state.copyWith(feed: current);
+    } catch (e) {
+      state = state.copyWith(
+        feed: current,
+        errorMessage: 'Failed to update task: ${e.toString().replaceAll('Exception: ', '')}',
+      );
+    } finally {
+      _pendingItemIds.remove(taskId);
     }
   }
 }

@@ -117,7 +117,8 @@ class _FocusCompletionSheetState extends State<FocusCompletionSheet> {
                     : () async {
                         setState(() => _isSaving = true);
                         await widget.onSave(_notesController.text.trim());
-                        if (mounted) Navigator.pop(context);
+                        if (!context.mounted) return;
+                        Navigator.pop(context);
                       },
                 style: FilledButton.styleFrom(
                   backgroundColor: primaryRed,

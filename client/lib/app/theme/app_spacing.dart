@@ -126,6 +126,7 @@ class AppRadius {
   static const BorderRadius dialogRadius = borderRadiusXl;
 
   /// Bottom sheet radius (top xl)
+  static const double sheet = xl;
   static const BorderRadius sheetRadius =
       BorderRadius.vertical(top: Radius.circular(xl));
 }

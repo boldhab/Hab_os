@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../../presentation/screens/main_scaffold.dart';
 import '../theme/app_theme.dart';
 
 /// Persistent bottom NavigationBar shell wrapping all authenticated tabs.
@@ -41,9 +42,13 @@ class ScaffoldWithNavBar extends StatelessWidget {
 
     return Scaffold(
       body: navigationShell,
-      bottomNavigationBar: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-        child: Container(
+      bottomNavigationBar: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const RestTimerFloatingOverlay(),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: Container(
           decoration: BoxDecoration(
             color: colorScheme.surfaceContainerLow,
             borderRadius: BorderRadius.circular(28),
@@ -85,7 +90,9 @@ class ScaffoldWithNavBar extends StatelessWidget {
           ),
         ),
       ),
-    );
+    ],
+  ),
+);
   }
 
   void _onTabTap(int index) {

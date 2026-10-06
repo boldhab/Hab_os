@@ -156,6 +156,29 @@ export class CalendarSyncService {
 
     return { updatedCount };
   }
+
+  /**
+   * Full two-way sync: Pushes all due tasks to calendar and pulls remote changes
+   */
+  async syncAllTasks(userId: string): Promise<{ pushedCount: number; pulledCount: number }> {
+    const tasksWithDueDate = await prisma.task.findMany({
+      where: { userId, dueDate: { not: null } },
+      select: { id: true },
+    });
+
+    let pushedCount = 0;
+    for (const t of tasksWithDueDate) {
+      try {
+        await this.syncTaskToCalendar(userId, t.id);
+        pushedCount++;
+      } catch (err) {
+        logger.error(`[CalendarSync] Failed to push task ${t.id} to calendar:`, err);
+      }
+    }
+
+    const { updatedCount: pulledCount } = await this.syncFromCalendar(userId);
+    return { pushedCount, pulledCount };
+  }
 }
 
 export const calendarSyncService = new CalendarSyncService();

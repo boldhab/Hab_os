@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../widgets/common/app_card.dart';
+import '../../ai/ai_chat_bottom_sheet.dart';
 
 /// Displays the AI-generated next-action recommendation.
 class AiTipCard extends StatelessWidget {
@@ -14,14 +15,17 @@ class AiTipCard extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primaryRed = colorScheme.primary;
 
-    return AppCard(
-      borderRadius: 20.0,
-      backgroundColor: primaryRed.withAlpha(isDark ? 30 : 16),
-      border: BorderSide(
-        color: primaryRed.withAlpha(isDark ? 60 : 40),
-        width: 1.0,
-      ),
-      padding: AppSpacing.cardPadding,
+    return InkWell(
+      onTap: () => AiChatBottomSheet.show(context),
+      borderRadius: BorderRadius.circular(20.0),
+      child: AppCard(
+        borderRadius: 20.0,
+        backgroundColor: primaryRed.withAlpha(isDark ? 30 : 16),
+        border: BorderSide(
+          color: primaryRed.withAlpha(isDark ? 60 : 40),
+          width: 1.0,
+        ),
+        padding: AppSpacing.cardPadding,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -66,6 +70,7 @@ class AiTipCard extends StatelessWidget {
             ),
           ),
         ],
+      ),
       ),
     );
   }

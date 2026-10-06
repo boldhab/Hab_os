@@ -363,6 +363,7 @@ class GoalHealthAlert extends Equatable {
   final double progress;
   final int? daysUntilTarget;
   final int daysSinceActivity;
+  final double? expectedProgress;
   final String? latestConfidence;
   final String healthStatus; // 'ON_TRACK', 'BEHIND', 'AT_RISK'
   final String? riskReason;
@@ -376,6 +377,7 @@ class GoalHealthAlert extends Equatable {
     required this.progress,
     this.daysUntilTarget,
     required this.daysSinceActivity,
+    this.expectedProgress,
     this.latestConfidence,
     required this.healthStatus,
     this.riskReason,
@@ -391,6 +393,7 @@ class GoalHealthAlert extends Equatable {
       progress: (json['progress'] as num?)?.toDouble() ?? 0.0,
       daysUntilTarget: (json['daysUntilTarget'] as num?)?.toInt(),
       daysSinceActivity: (json['daysSinceActivity'] as num?)?.toInt() ?? 0,
+      expectedProgress: (json['expectedProgress'] as num?)?.toDouble(),
       latestConfidence: json['latestConfidence'],
       healthStatus: json['healthStatus'] ?? 'ON_TRACK',
       riskReason: json['riskReason'],
@@ -407,6 +410,7 @@ class GoalHealthAlert extends Equatable {
         progress,
         daysUntilTarget,
         daysSinceActivity,
+        expectedProgress,
         healthStatus,
       ];
 }

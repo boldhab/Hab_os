@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../app/theme/app_theme.dart';
+import '../../../widgets/common/form_section_header.dart';
 
 /// Preset accent colors offered in the project color picker.
 const List<Color> kProjectColorPresets = [
@@ -187,25 +188,61 @@ class _EditProjectDialogState extends State<EditProjectDialog> {
             children: [
               Row(
                 children: [
-                  const Expanded(
-                      child: Text('Edit Project',
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: primaryRed.withAlpha(25),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(
+                      Icons.edit_note_rounded,
+                      color: primaryRed,
+                      size: 22,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Edit Project',
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 18,
+                              ),
+                        ),
+                        Text(
+                          'Update repository, stack, status, and theme',
                           style: TextStyle(
-                              fontSize: 18, fontWeight: FontWeight.w800))),
+                            fontSize: 12,
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                   IconButton(
-                      icon: const Icon(Icons.close_rounded),
-                      onPressed: () => Navigator.pop(context)),
+                    icon: const Icon(Icons.close_rounded),
+                    onPressed: () => Navigator.pop(context),
+                  ),
                 ],
               ),
               const Divider(height: 24),
+
+              // Project Details Section
+              const FormSectionHeader(
+                title: 'PROJECT DETAILS',
+                icon: Icons.workspaces_rounded,
+              ),
+              const SizedBox(height: 10),
               TextFormField(
                 controller: _titleCtrl,
-                decoration: InputDecoration(
+                textInputAction: TextInputAction.next,
+                decoration: const InputDecoration(
                   labelText: 'Project Name *',
-                  filled: true,
-                  fillColor: colorScheme.surfaceContainerHighest.withAlpha(40),
-                  border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14),
-                      borderSide: BorderSide.none),
+                  hintText: 'e.g. HABos Core',
+                  prefixIcon: Icon(Icons.folder_outlined),
                 ),
                 validator: (v) =>
                     v == null || v.trim().isEmpty ? 'Title is required' : null,
@@ -214,37 +251,53 @@ class _EditProjectDialogState extends State<EditProjectDialog> {
               TextFormField(
                 controller: _descCtrl,
                 maxLines: 2,
-                decoration: InputDecoration(
-                  labelText: 'Description',
-                  filled: true,
-                  fillColor: colorScheme.surfaceContainerHighest.withAlpha(40),
-                  border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14),
-                      borderSide: BorderSide.none),
+                decoration: const InputDecoration(
+                  labelText: 'Description (optional)',
+                  hintText: 'Project scope and goals...',
+                  prefixIcon: Icon(Icons.description_outlined),
+                  alignLabelWithHint: true,
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // Tech & Repo Section
+              const FormSectionHeader(
+                title: 'TECH STACK & REPOSITORY',
+                icon: Icons.code_rounded,
+              ),
+              const SizedBox(height: 10),
+              TextFormField(
+                controller: _techCtrl,
+                textInputAction: TextInputAction.next,
+                decoration: const InputDecoration(
+                  labelText: 'Tech Stack (comma-separated)',
+                  hintText: 'TypeScript, Flutter, Node.js',
+                  prefixIcon: Icon(Icons.layers_outlined),
                 ),
               ),
               const SizedBox(height: 12),
               TextFormField(
-                controller: _techCtrl,
-                decoration: InputDecoration(
-                  labelText: 'Tech Stack (comma-separated)',
-                  filled: true,
-                  fillColor: colorScheme.surfaceContainerHighest.withAlpha(40),
-                  border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14),
-                      borderSide: BorderSide.none),
+                controller: _repoCtrl,
+                textInputAction: TextInputAction.next,
+                decoration: const InputDecoration(
+                  labelText: 'GitHub Repository URL',
+                  hintText: 'https://github.com/owner/repo',
+                  prefixIcon: Icon(Icons.link_rounded),
                 ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 20),
+
+              // Status & Theme Section
+              const FormSectionHeader(
+                title: 'STATUS & THEME',
+                icon: Icons.palette_outlined,
+              ),
+              const SizedBox(height: 10),
               DropdownButtonFormField<String>(
-                initialValue: _status,
-                decoration: InputDecoration(
-                  labelText: 'Status',
-                  filled: true,
-                  fillColor: colorScheme.surfaceContainerHighest.withAlpha(40),
-                  border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14),
-                      borderSide: BorderSide.none),
+                value: _status,
+                decoration: const InputDecoration(
+                  labelText: 'Project Status',
+                  prefixIcon: Icon(Icons.pending_actions_rounded),
                 ),
                 items: _statuses
                     .map((s) => DropdownMenuItem(
@@ -254,50 +307,53 @@ class _EditProjectDialogState extends State<EditProjectDialog> {
                   if (v != null) setState(() => _status = v);
                 },
               ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _repoCtrl,
-                decoration: InputDecoration(
-                  labelText: 'GitHub Repository URL',
-                  hintText: 'https://github.com/owner/repo',
-                  prefixIcon: const Icon(Icons.code_rounded, size: 20),
-                  filled: true,
-                  fillColor: colorScheme.surfaceContainerHighest.withAlpha(40),
-                  border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14),
-                      borderSide: BorderSide.none),
-                ),
-              ),
               const SizedBox(height: 14),
-              // ── Color Picker ──────────────────────────────────────────
-              const Text('Project Color',
-                  style: TextStyle(
+              Row(
+                children: [
+                  Icon(
+                    Icons.color_lens_outlined,
+                    size: 16,
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Project Color',
+                    style: TextStyle(
                       fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.4)),
+                      fontWeight: FontWeight.w600,
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
               const SizedBox(height: 8),
               _ColorSwatchRow(
                 selected: _selectedColor,
                 onChanged: (c) => setState(() => _selectedColor = c),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,
                 height: 48,
-                child: FilledButton(
+                child: FilledButton.icon(
                   onPressed: _isSaving ? null : _submit,
-                  style: FilledButton.styleFrom(
-                      backgroundColor: primaryRed,
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14))),
-                  child: _isSaving
+                  icon: _isSaving
                       ? const SizedBox(
-                          width: 20,
-                          height: 20,
+                          width: 18,
+                          height: 18,
                           child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white))
-                      : const Text('Save Changes',
-                          style: TextStyle(fontWeight: FontWeight.w700)),
+                              strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Icon(Icons.check_rounded, size: 20),
+                  label: Text(
+                    _isSaving ? 'Saving Changes...' : 'Save Changes',
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  style: FilledButton.styleFrom(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
                 ),
               ),
             ],

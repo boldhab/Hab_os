@@ -16,6 +16,7 @@ model User {
   email                String                 @unique
   password             String
   name                 String?
+  bio                  String?
   avatarUrl            String?
   googleId             String?                @unique
   authProvider         String                 @default("local")
@@ -46,6 +47,7 @@ model User {
   bodyMetrics          BodyMetric[]
   transactions         Transaction[]
   budgets              Budget[]
+  idempotencyKeys      IdempotencyKey[]
   goals                Goal[]
   goalCheckIns         GoalCheckIn[]
   vaultNotes           VaultNote[]
@@ -244,7 +246,9 @@ model FocusSession {
   startTime       DateTime  @default(now())
   endTime         DateTime?
   durationMinutes Int       @default(0)
-  category        String    @default("CODING") // CODING, STUDY, PROJECT, READING, OTHER
+  category        String    @default("CODING") // CODING, STUDY, PROJECT, READING, WELLNESS, OTHER
+  status          String    @default("RUNNING") // RUNNING, PAUSED, COMPLETED, CANCELLED
+  cancelledAt     DateTime?
   notes           String?
   
   taskId          String?
@@ -252,6 +256,9 @@ model FocusSession {
   
   courseId        String?
   course          Course?   @relation(fields: [courseId], references: [id], onDelete: SetNull)
+
+  timeEntryId     String?   @unique
+  timeEntry       TimeEntry? @relation(fields: [timeEntryId], references: [id], onDelete: SetNull)
   
   userId          String
   user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -260,20 +267,22 @@ model FocusSession {
   updatedAt       DateTime  @updatedAt
 
   @@index([userId, category])
+  @@index([userId, status])
   @@map("focus_sessions")
 }
 
 model TimeEntry {
-  id        String    @id @default(uuid())
-  startTime DateTime  @default(now())
-  endTime   DateTime?
-  duration  Int?      // In seconds
-  taskId    String?
-  task      Task?     @relation(fields: [taskId], references: [id], onDelete: SetNull)
-  userId    String
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  id           String        @id @default(uuid())
+  startTime    DateTime      @default(now())
+  endTime      DateTime?
+  duration     Int?          // In seconds
+  taskId       String?
+  task         Task?         @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  focusSession FocusSession?
+  userId       String
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
 
   @@index([userId])
   @@map("time_entries")
@@ -672,6 +681,7 @@ model Workout {
   user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   
   exercises       WorkoutExercise[]
+  personalRecords PersonalRecord[]
   
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
@@ -727,12 +737,17 @@ model SetEntry {
   repetitions        Int             @default(0)
   rpe                Float?          // Rate of Perceived Exertion (1-10)
   rir                Int?            // Reps in Reserve (0-5)
+  tag                String?         @default("N") // W (Warmup), N (Normal), D (Drop Set), F (Failure)
+  durationSeconds    Int?            // For cardio / endurance sets
+  distanceMeters     Float?          // For cardio sets
+  caloriesBurned     Int?            // For cardio sets
   estimatedOneRepMax Float?
   isPR               Boolean         @default(false)
   notes              String?
   
   workoutExerciseId  String
   workoutExercise    WorkoutExercise @relation(fields: [workoutExerciseId], references: [id], onDelete: Cascade)
+  personalRecords    PersonalRecord[]
   
   createdAt          DateTime        @default(now())
 
@@ -752,10 +767,18 @@ model PersonalRecord {
   
   userId              String
   user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  workoutId           String?
+  workout             Workout? @relation(fields: [workoutId], references: [id], onDelete: Cascade)
+
+  setEntryId          String?
+  setEntry            SetEntry? @relation(fields: [setEntryId], references: [id], onDelete: Cascade)
   
   createdAt           DateTime @default(now())
 
   @@index([userId, exerciseId])
+  @@index([workoutId])
+  @@index([setEntryId])
   @@map("personal_records")
 }
 
@@ -818,7 +841,7 @@ model BodyMetric {
 
 model Transaction {
   id          String    @id @default(uuid())
-  amount      Float
+  amount      Decimal   @db.Decimal(12, 2)
   type        String    // "INCOME" or "EXPENSE"
   date        DateTime  @default(now())
   description String?
@@ -840,7 +863,7 @@ model Transaction {
 
 model Budget {
   id           String    @id @default(uuid())
-  monthlyLimit Float
+  monthlyLimit Decimal   @db.Decimal(12, 2)
   month        Int       // 1-12
   year         Int       // e.g. 2026
   
@@ -855,6 +878,20 @@ model Budget {
 
   @@unique([userId, categoryId, month, year])
   @@map("budgets")
+}
+
+model IdempotencyKey {
+  id        String   @id @default(uuid())
+  key       String
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  response  Json
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+
+  @@unique([userId, key])
+  @@index([expiresAt])
+  @@map("idempotency_keys")
 }
 
 // ==========================================

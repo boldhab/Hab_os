@@ -40,6 +40,7 @@ export const refreshTokenSchema = Joi.object({
 
 export const updateProfileSchema = Joi.object({
   name: Joi.string().trim().max(100),
+  bio: Joi.string().trim().max(300).allow('', null),
   avatarUrl: Joi.string().uri().allow('', null),
   timezone: Joi.string().trim(),
   dateFormat: Joi.string().trim(),

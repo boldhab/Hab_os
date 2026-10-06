@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../app/theme/app_theme.dart';
+import '../../../widgets/common/form_section_header.dart';
 
 class FeatureFormDialog extends StatefulWidget {
   final String? initialName;
@@ -37,9 +38,9 @@ class FeatureFormDialog extends StatefulWidget {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => DraggableScrollableSheet(
-        initialChildSize: 0.65,
-        maxChildSize: 0.9,
-        minChildSize: 0.4,
+        initialChildSize: 0.72,
+        maxChildSize: 0.92,
+        minChildSize: 0.45,
         builder: (_, ctrl) => FeatureFormDialog(
           initialName: initialName,
           initialDescription: initialDescription,
@@ -127,138 +128,184 @@ class _FeatureFormDialogState extends State<FeatureFormDialog> {
       padding: EdgeInsets.only(
         left: 20,
         right: 20,
-        top: 16,
+        top: 14,
         bottom: MediaQuery.of(context).viewInsets.bottom + 20,
       ),
       child: Form(
         key: _formKey,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Center(
-              child: Container(
-                width: 36,
-                height: 4,
-                decoration: BoxDecoration(
-                    color: cs.outlineVariant.withAlpha(100),
-                    borderRadius: BorderRadius.circular(2)),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text(isEdit ? 'Edit Feature' : 'Add Feature',
-                style: const TextStyle(
-                    fontSize: 18, fontWeight: FontWeight.w800)),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _nameCtrl,
-              decoration: InputDecoration(
-                labelText: 'Feature Name *',
-                filled: true,
-                fillColor: cs.surfaceContainerHighest.withAlpha(40),
-                border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(14),
-                    borderSide: BorderSide.none),
-              ),
-              validator: (v) =>
-                  v == null || v.trim().isEmpty ? 'Name required' : null,
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _descCtrl,
-              maxLines: 2,
-              decoration: InputDecoration(
-                labelText: 'Description (optional)',
-                filled: true,
-                fillColor: cs.surfaceContainerHighest.withAlpha(40),
-                border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(14),
-                    borderSide: BorderSide.none),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _milestoneCtrl,
-              decoration: InputDecoration(
-                labelText: 'Milestone / Sprint (optional)',
-                hintText: 'e.g. v1.0.0 or Sprint 1',
-                prefixIcon: const Icon(Icons.flag_outlined, size: 18),
-                filled: true,
-                fillColor: cs.surfaceContainerHighest.withAlpha(40),
-                border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(14),
-                    borderSide: BorderSide.none),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: DropdownButtonFormField<String>(
-                    initialValue: _priority,
-                    decoration: InputDecoration(
-                      labelText: 'Priority',
-                      filled: true,
-                      fillColor: cs.surfaceContainerHighest.withAlpha(40),
-                      border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(14),
-                          borderSide: BorderSide.none),
-                    ),
-                    items: _priorities
-                        .map((p) =>
-                            DropdownMenuItem(value: p, child: Text(p)))
-                        .toList(),
-                    onChanged: (v) {
-                      if (v != null) setState(() => _priority = v);
-                    },
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: cs.outlineVariant.withAlpha(120),
+                    borderRadius: BorderRadius.circular(2),
                   ),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: DropdownButtonFormField<String>(
-                    initialValue: _status,
-                    decoration: InputDecoration(
-                      labelText: 'Status',
-                      filled: true,
-                      fillColor: cs.surfaceContainerHighest.withAlpha(40),
-                      border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(14),
-                          borderSide: BorderSide.none),
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: primary.withAlpha(25),
+                      borderRadius: BorderRadius.circular(10),
                     ),
-                    items: _statuses
-                        .map((s) => DropdownMenuItem(
-                            value: s,
-                            child: Text(s.replaceAll('_', ' '))))
-                        .toList(),
-                    onChanged: (v) {
-                      if (v != null) setState(() => _status = v);
-                    },
+                    child: Icon(
+                      Icons.auto_awesome_rounded,
+                      color: primary,
+                      size: 22,
+                    ),
                   ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          isEdit ? 'Edit Feature' : 'New Feature',
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        Text(
+                          'Specify deliverables, milestones & priority',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: cs.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+              const Divider(height: 24),
+
+              // Feature Details Section
+              const FormSectionHeader(
+                title: 'FEATURE DETAILS',
+                icon: Icons.layers_rounded,
+              ),
+              const SizedBox(height: 10),
+              TextFormField(
+                controller: _nameCtrl,
+                textInputAction: TextInputAction.next,
+                decoration: const InputDecoration(
+                  labelText: 'Feature Name *',
+                  hintText: 'e.g. Realtime Notifications',
+                  prefixIcon: Icon(Icons.star_outline_rounded),
                 ),
-              ],
-            ),
-            const SizedBox(height: 20),
-            SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: FilledButton(
-                onPressed: _saving ? null : _submit,
-                style: FilledButton.styleFrom(
-                    backgroundColor: primary,
+                validator: (v) =>
+                    v == null || v.trim().isEmpty ? 'Name required' : null,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _descCtrl,
+                maxLines: 2,
+                decoration: const InputDecoration(
+                  labelText: 'Description (optional)',
+                  hintText: 'Acceptance criteria and technical details...',
+                  prefixIcon: Icon(Icons.description_outlined),
+                  alignLabelWithHint: true,
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _milestoneCtrl,
+                textInputAction: TextInputAction.done,
+                decoration: const InputDecoration(
+                  labelText: 'Milestone / Sprint (optional)',
+                  hintText: 'e.g. v1.0.0 or Sprint 3',
+                  prefixIcon: Icon(Icons.flag_outlined),
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // Status & Priority Section
+              const FormSectionHeader(
+                title: 'STATUS & PRIORITY',
+                icon: Icons.tune_rounded,
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      value: _priority,
+                      decoration: const InputDecoration(
+                        labelText: 'Priority',
+                        prefixIcon: Icon(Icons.priority_high_rounded),
+                      ),
+                      items: _priorities
+                          .map((p) =>
+                              DropdownMenuItem(value: p, child: Text(p)))
+                          .toList(),
+                      onChanged: (v) {
+                        if (v != null) setState(() => _priority = v);
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      value: _status,
+                      decoration: const InputDecoration(
+                        labelText: 'Status',
+                        prefixIcon: Icon(Icons.pending_actions_rounded),
+                      ),
+                      items: _statuses
+                          .map((s) => DropdownMenuItem(
+                              value: s,
+                              child: Text(s.replaceAll('_', ' '))))
+                          .toList(),
+                      onChanged: (v) {
+                        if (v != null) setState(() => _status = v);
+                      },
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: FilledButton.icon(
+                  onPressed: _saving ? null : _submit,
+                  icon: _saving
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white),
+                        )
+                      : Icon(isEdit ? Icons.check_rounded : Icons.add_rounded, size: 20),
+                  label: Text(
+                    _saving
+                        ? 'Saving...'
+                        : (isEdit ? 'Save Changes' : 'Add Feature'),
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  style: FilledButton.styleFrom(
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14))),
-                child: _saving
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Colors.white))
-                    : Text(isEdit ? 'Save Changes' : 'Add Feature',
-                        style:
-                            const TextStyle(fontWeight: FontWeight.w700)),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

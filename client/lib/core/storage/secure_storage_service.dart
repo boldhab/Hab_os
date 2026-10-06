@@ -43,6 +43,38 @@ class SecureStorageService {
     return await _storage.read(key: _themeModeKey);
   }
 
+  static const String _activeTimerKey = 'active_focus_timer';
+
+  Future<void> saveActiveTimer(String json) async {
+    await _storage.write(key: _activeTimerKey, value: json);
+  }
+
+  Future<String?> getActiveTimer() async {
+    return await _storage.read(key: _activeTimerKey);
+  }
+
+  Future<void> clearActiveTimer() async {
+    await _storage.delete(key: _activeTimerKey);
+  }
+
+  Future<void> saveBoolSetting(String key, bool value) async {
+    await _storage.write(key: 'setting_$key', value: value.toString());
+  }
+
+  Future<bool?> getBoolSetting(String key) async {
+    final val = await _storage.read(key: 'setting_$key');
+    if (val == null) return null;
+    return val == 'true';
+  }
+
+  Future<void> saveStringSetting(String key, String value) async {
+    await _storage.write(key: 'setting_$key', value: value);
+  }
+
+  Future<String?> getStringSetting(String key) async {
+    return await _storage.read(key: 'setting_$key');
+  }
+
   Future<void> clearAll() async {
     await _storage.deleteAll();
   }

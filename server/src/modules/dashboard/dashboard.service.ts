@@ -35,18 +35,21 @@ export const getDashboardFeed = async (userId: string, bypassCache = false) => {
   }
 
   const now = new Date();
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
-  const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+  const utcYear = now.getUTCFullYear();
+  const utcMonth = now.getUTCMonth();
+  const utcDate = now.getUTCDate();
+  const startOfToday = new Date(Date.UTC(utcYear, utcMonth, utcDate, 0, 0, 0, 0));
+  const endOfToday = new Date(Date.UTC(utcYear, utcMonth, utcDate, 23, 59, 59, 999));
 
-  const dayOfWeek = now.getDay();
-  const diffToMonday = now.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
-  const startOfWeek = new Date(now.setDate(diffToMonday));
-  startOfWeek.setHours(0, 0, 0, 0);
+  const dayOfWeek = now.getUTCDay();
+  const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+  const startOfWeek = new Date(startOfToday);
+  startOfWeek.setUTCDate(startOfWeek.getUTCDate() - daysFromMonday);
 
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0);
-  const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+  const startOfMonth = new Date(Date.UTC(utcYear, utcMonth, 1, 0, 0, 0, 0));
+  const startOfNextMonth = new Date(Date.UTC(utcYear, utcMonth + 1, 1, 0, 0, 0, 0));
 
-  // Concurrently fetch all dashboard cards
+  // Concurrently fetch all dashboard cards and domain activities
   const [
     user,
     lifeScore,
@@ -60,6 +63,12 @@ export const getDashboardFeed = async (userId: string, bypassCache = false) => {
     monthExpenses,
     budgets,
     aiRecommendation,
+    recentTransactions,
+    recentFocusSessions,
+    recentCompletedTasks,
+    recentHabitLogs,
+    recentWorkouts,
+    recentStudySessions,
   ] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
@@ -109,8 +118,8 @@ export const getDashboardFeed = async (userId: string, bypassCache = false) => {
         status: { notIn: ['SUBMITTED', 'GRADED'] },
       },
       orderBy: { dueDate: 'asc' },
-      take: 3,
-      include: { course: { select: { name: true, color: true } } },
+      take: 4,
+      include: { course: { select: { id: true, name: true, code: true, color: true } } },
     }),
     prisma.exam.findMany({
       where: {
@@ -118,21 +127,56 @@ export const getDashboardFeed = async (userId: string, bypassCache = false) => {
         examDate: { gte: now },
       },
       orderBy: { examDate: 'asc' },
-      take: 2,
-      include: { course: { select: { name: true, color: true } } },
+      take: 4,
+      include: { course: { select: { id: true, name: true, code: true, color: true } } },
     }),
     prisma.workout.findMany({
-      where: { userId, date: { gte: startOfWeek } },
+      where: { userId, date: { gte: startOfWeek, lte: now } },
       orderBy: { date: 'desc' },
     }),
     prisma.transaction.aggregate({
-      where: { userId, type: 'EXPENSE', date: { gte: startOfMonth, lte: endOfMonth } },
+      where: { userId, type: 'EXPENSE', date: { gte: startOfMonth, lt: startOfNextMonth } },
       _sum: { amount: true },
     }),
     prisma.budget.findMany({
-      where: { userId },
+      where: { userId, month: utcMonth + 1, year: utcYear },
     }),
     aiService.recommendNextAction(userId),
+    // Recent domain events for unified activity stream
+    prisma.transaction.findMany({
+      where: { userId },
+      orderBy: { date: 'desc' },
+      take: 5,
+      include: { category: { select: { name: true, icon: true, color: true } } },
+    }),
+    prisma.focusSession.findMany({
+      where: { userId, status: 'COMPLETED' },
+      orderBy: { startTime: 'desc' },
+      take: 5,
+    }),
+    prisma.task.findMany({
+      where: { userId, isCompleted: true },
+      orderBy: { updatedAt: 'desc' },
+      take: 5,
+      select: { id: true, title: true, updatedAt: true, project: { select: { title: true } } },
+    }),
+    prisma.habitLog.findMany({
+      where: { habit: { userId }, isCompleted: true },
+      orderBy: { date: 'desc' },
+      take: 5,
+      include: { habit: { select: { name: true } } },
+    }),
+    prisma.workout.findMany({
+      where: { userId },
+      orderBy: { date: 'desc' },
+      take: 4,
+    }),
+    prisma.studySession.findMany({
+      where: { userId },
+      orderBy: { startTime: 'desc' },
+      take: 4,
+      include: { course: { select: { name: true } } },
+    }),
   ]);
 
   // Format Habits Checklist
@@ -140,7 +184,10 @@ export const getDashboardFeed = async (userId: string, bypassCache = false) => {
     id: h.id,
     name: h.name,
     frequency: h.frequency,
+    targetType: h.targetType,
+    targetValue: h.targetValue,
     currentStreak: h.currentStreak,
+    currentValue: h.logs[0]?.value ?? 0,
     isCompletedToday: h.logs.length > 0 && h.logs[0].isCompleted,
   }));
 
@@ -152,16 +199,118 @@ export const getDashboardFeed = async (userId: string, bypassCache = false) => {
   });
 
   // Finance summary
-  const spentThisMonth = monthExpenses._sum.amount || 0;
-  const totalBudgetCap = budgets.reduce((sum, b) => sum + b.monthlyLimit, 0);
+  const spentThisMonth = monthExpenses._sum.amount ? Number(monthExpenses._sum.amount) : 0;
+  const totalBudgetCap = budgets.reduce((sum, b) => sum + Number(b.monthlyLimit), 0);
   const budgetRemaining = Math.max(0, totalBudgetCap - spentThisMonth);
+
+  // Unified Chronological Activity Stream
+  const rawActivities: Array<{
+    id: string;
+    type: 'TRANSACTION' | 'FOCUS' | 'TASK' | 'HABIT' | 'WORKOUT' | 'STUDY';
+    title: string;
+    subtitle?: string;
+    timestamp: Date;
+    amount?: number;
+    color?: string;
+  }> = [];
+
+  recentTransactions.forEach((t) => {
+    const numAmount = Number(t.amount);
+    rawActivities.push({
+      id: `tx-${t.id}`,
+      type: 'TRANSACTION',
+      title: `${t.type === 'EXPENSE' ? 'Spent' : 'Received'} $${numAmount.toFixed(2)}`,
+      subtitle: t.description || t.category?.name || t.source || 'Transaction',
+      timestamp: t.date,
+      amount: t.type === 'EXPENSE' ? -numAmount : numAmount,
+      color: t.type === 'EXPENSE' ? '#EF4444' : '#10B981',
+    });
+  });
+
+  recentFocusSessions.forEach((f) => {
+    rawActivities.push({
+      id: `focus-${f.id}`,
+      type: 'FOCUS',
+      title: `Completed ${f.durationMinutes}m Focus Block`,
+      subtitle: f.category || 'Focus Session',
+      timestamp: f.startTime,
+      color: '#6366F1',
+    });
+  });
+
+  recentCompletedTasks.forEach((t) => {
+    rawActivities.push({
+      id: `task-${t.id}`,
+      type: 'TASK',
+      title: `Completed "${t.title}"`,
+      subtitle: t.project?.title ? `Project: ${t.project.title}` : 'Task',
+      timestamp: t.updatedAt,
+      color: '#10B981',
+    });
+  });
+
+  recentHabitLogs.forEach((hl) => {
+    rawActivities.push({
+      id: `habit-${hl.id}`,
+      type: 'HABIT',
+      title: `Checked habit: ${hl.habit.name}`,
+      subtitle: 'Daily streak updated',
+      timestamp: hl.date,
+      color: '#F59E0B',
+    });
+  });
+
+  recentWorkouts.forEach((w) => {
+    rawActivities.push({
+      id: `workout-${w.id}`,
+      type: 'WORKOUT',
+      title: `Logged Workout: ${w.name}`,
+      subtitle: `${w.durationMinutes || 60} mins session`,
+      timestamp: w.date,
+      color: '#EC4899',
+    });
+  });
+
+  recentStudySessions.forEach((s) => {
+    rawActivities.push({
+      id: `study-${s.id}`,
+      type: 'STUDY',
+      title: `Studied for ${s.course?.name || 'Course'}`,
+      subtitle: `${s.durationMinutes} mins logged`,
+      timestamp: s.startTime,
+      color: '#8B5CF6',
+    });
+  });
+
+  rawActivities.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+  const recentActivities = rawActivities.slice(0, 10);
+
+  // Dashboard module visibility preferences
+  const defaultDashboardModules = [
+    'LIFE_SCORE',
+    'HABITS',
+    'TASKS',
+    'SCHEDULE',
+    'ACADEMIC',
+    'PROJECTS',
+    'FITNESS',
+    'FINANCE',
+    'RECENT_ACTIVITY',
+  ];
+  const userModules = user?.preferences?.dashboardModules;
+  const dashboardModules: string[] =
+    Array.isArray(userModules) && userModules.length > 0
+      ? (userModules as string[])
+      : defaultDashboardModules;
 
   const feed = {
     user: {
       name: user?.name || 'User',
       email: user?.email,
       avatarUrl: user?.avatarUrl,
+      dashboardModules,
     },
+    dashboardModules,
     lifeScore: {
       overallScore: lifeScore.overallScore,
       level: lifeScore.level,
@@ -193,6 +342,7 @@ export const getDashboardFeed = async (userId: string, bypassCache = false) => {
       budgetRemaining,
       isWarning: totalBudgetCap > 0 && (spentThisMonth / totalBudgetCap) >= 0.8,
     },
+    recentActivities,
     aiRecommendation,
     generatedAt: new Date(),
   };

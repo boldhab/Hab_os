@@ -14,6 +14,12 @@ import 'widgets/recent_activity_card.dart';
 import 'widgets/fitness_card.dart';
 import 'widgets/finance_card.dart';
 import 'widgets/ai_tip_card.dart';
+import 'widgets/schedule_timeline_card.dart';
+import 'widgets/academic_deadlines_card.dart';
+import '../../widgets/app_bar_search_button.dart';
+import '../../widgets/app_bar_ai_button.dart';
+import '../../widgets/app_bar_notifications_button.dart';
+
 
 class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
@@ -25,6 +31,18 @@ class DashboardScreen extends ConsumerStatefulWidget {
 class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   @override
   Widget build(BuildContext context) {
+    ref.listen<DashboardState>(dashboardProvider, (prev, next) {
+      if (next.errorMessage != null && next.status == DashboardStatus.loaded) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(next.errorMessage!),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+        ref.read(dashboardProvider.notifier).clearError();
+      }
+    });
+
     final dashState = ref.watch(dashboardProvider);
     final colorScheme = Theme.of(context).colorScheme;
 
@@ -111,48 +129,98 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   Widget _buildMobileColumn(DashboardFeedModel feed) {
     return Column(
       children: [
-        LifeScoreCard(lifeScore: feed.lifeScore),
-        AppSpacing.verticalGapMd,
+        if (feed.isModuleEnabled('LIFE_SCORE')) ...[
+          LifeScoreCard(lifeScore: feed.lifeScore),
+          AppSpacing.verticalGapMd,
+        ],
         if (feed.aiRecommendation != null &&
             feed.aiRecommendation!.isNotEmpty) ...[
           AiTipCard(tip: feed.aiRecommendation!),
           AppSpacing.verticalGapMd,
         ],
-        HabitsChecklistCard(
-          habits: feed.habits,
-          onHabitTap: (habitId) =>
-              ref.read(dashboardProvider.notifier).logHabit(habitId),
-        ),
-        AppSpacing.verticalGapMd,
-        TasksTodayCard(
-          tasks: feed.tasksDueToday,
-          onToggle: (id, current) =>
-              ref.read(dashboardProvider.notifier).toggleTask(id, current),
-        ),
-        AppSpacing.verticalGapMd,
-        ActiveProjectsCard(projects: feed.activeProjects),
-        AppSpacing.verticalGapMd,
-        Row(
-          children: [
-            Expanded(child: FitnessCard(fitness: feed.fitness)),
-            AppSpacing.horizontalGapMd,
-            Expanded(child: FinanceCard(finance: feed.finance)),
-          ],
-        ),
-        AppSpacing.verticalGapMd,
-        RecentActivityCard(activities: feed.recentActivities),
+        if (feed.isModuleEnabled('SCHEDULE') &&
+            feed.scheduleEvents.isNotEmpty) ...[
+          ScheduleTimelineCard(events: feed.scheduleEvents),
+          AppSpacing.verticalGapMd,
+        ],
+        if (feed.isModuleEnabled('ACADEMIC') &&
+            feed.academicDeliverables.isNotEmpty) ...[
+          AcademicDeadlinesCard(deliverables: feed.academicDeliverables),
+          AppSpacing.verticalGapMd,
+        ],
+        if (feed.isModuleEnabled('HABITS')) ...[
+          HabitsChecklistCard(
+            habits: feed.habits,
+            onHabitTap: (habitId) =>
+                ref.read(dashboardProvider.notifier).logHabit(habitId),
+          ),
+          AppSpacing.verticalGapMd,
+        ],
+        if (feed.isModuleEnabled('TASKS')) ...[
+          TasksTodayCard(
+            tasks: feed.tasksDueToday,
+            onToggle: (id, current) =>
+                ref.read(dashboardProvider.notifier).toggleTask(id, current),
+          ),
+          AppSpacing.verticalGapMd,
+        ],
+        if (feed.isModuleEnabled('PROJECTS')) ...[
+          ActiveProjectsCard(projects: feed.activeProjects),
+          AppSpacing.verticalGapMd,
+        ],
+        if (feed.isModuleEnabled('FITNESS') ||
+            feed.isModuleEnabled('FINANCE')) ...[
+          Row(
+            children: [
+              if (feed.isModuleEnabled('FITNESS'))
+                Expanded(child: FitnessCard(fitness: feed.fitness)),
+              if (feed.isModuleEnabled('FITNESS') &&
+                  feed.isModuleEnabled('FINANCE'))
+                AppSpacing.horizontalGapMd,
+              if (feed.isModuleEnabled('FINANCE'))
+                Expanded(child: FinanceCard(finance: feed.finance)),
+            ],
+          ),
+          AppSpacing.verticalGapMd,
+        ],
+        if (feed.isModuleEnabled('RECENT_ACTIVITY'))
+          RecentActivityCard(activities: feed.recentActivities),
       ],
     );
   }
 
   Widget _buildWideGrid(DashboardFeedModel feed) {
+    final showSchedule =
+        feed.isModuleEnabled('SCHEDULE') && feed.scheduleEvents.isNotEmpty;
+    final showAcademic =
+        feed.isModuleEnabled('ACADEMIC') && feed.academicDeliverables.isNotEmpty;
+
     return Column(
       children: [
-        LifeScoreCard(lifeScore: feed.lifeScore),
-        AppSpacing.verticalGapMd,
+        if (feed.isModuleEnabled('LIFE_SCORE')) ...[
+          LifeScoreCard(lifeScore: feed.lifeScore),
+          AppSpacing.verticalGapMd,
+        ],
         if (feed.aiRecommendation != null &&
             feed.aiRecommendation!.isNotEmpty) ...[
           AiTipCard(tip: feed.aiRecommendation!),
+          AppSpacing.verticalGapMd,
+        ],
+        if (showSchedule || showAcademic) ...[
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (showSchedule)
+                Expanded(
+                    child: ScheduleTimelineCard(events: feed.scheduleEvents)),
+              if (showSchedule && showAcademic) AppSpacing.horizontalGapMd,
+              if (showAcademic)
+                Expanded(
+                  child: AcademicDeadlinesCard(
+                      deliverables: feed.academicDeliverables),
+                ),
+            ],
+          ),
           AppSpacing.verticalGapMd,
         ],
         Row(
@@ -162,15 +230,20 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             Expanded(
               child: Column(
                 children: [
-                  HabitsChecklistCard(
-                    habits: feed.habits,
-                    onHabitTap: (habitId) =>
-                        ref.read(dashboardProvider.notifier).logHabit(habitId),
-                  ),
-                  AppSpacing.verticalGapMd,
-                  ActiveProjectsCard(projects: feed.activeProjects),
-                  AppSpacing.verticalGapMd,
-                  FitnessCard(fitness: feed.fitness),
+                  if (feed.isModuleEnabled('HABITS')) ...[
+                    HabitsChecklistCard(
+                      habits: feed.habits,
+                      onHabitTap: (habitId) =>
+                          ref.read(dashboardProvider.notifier).logHabit(habitId),
+                    ),
+                    AppSpacing.verticalGapMd,
+                  ],
+                  if (feed.isModuleEnabled('PROJECTS')) ...[
+                    ActiveProjectsCard(projects: feed.activeProjects),
+                    AppSpacing.verticalGapMd,
+                  ],
+                  if (feed.isModuleEnabled('FITNESS'))
+                    FitnessCard(fitness: feed.fitness),
                 ],
               ),
             ),
@@ -179,16 +252,21 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             Expanded(
               child: Column(
                 children: [
-                  TasksTodayCard(
-                    tasks: feed.tasksDueToday,
-                    onToggle: (id, current) => ref
-                        .read(dashboardProvider.notifier)
-                        .toggleTask(id, current),
-                  ),
-                  AppSpacing.verticalGapMd,
-                  FinanceCard(finance: feed.finance),
-                  AppSpacing.verticalGapMd,
-                  RecentActivityCard(activities: feed.recentActivities),
+                  if (feed.isModuleEnabled('TASKS')) ...[
+                    TasksTodayCard(
+                      tasks: feed.tasksDueToday,
+                      onToggle: (id, current) => ref
+                          .read(dashboardProvider.notifier)
+                          .toggleTask(id, current),
+                    ),
+                    AppSpacing.verticalGapMd,
+                  ],
+                  if (feed.isModuleEnabled('FINANCE')) ...[
+                    FinanceCard(finance: feed.finance),
+                    AppSpacing.verticalGapMd,
+                  ],
+                  if (feed.isModuleEnabled('RECENT_ACTIVITY'))
+                    RecentActivityCard(activities: feed.recentActivities),
                 ],
               ),
             ),
@@ -231,6 +309,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         ),
       ),
       actions: [
+        const AppBarSearchButton(),
+        const AppBarAiButton(),
+        const AppBarNotificationsButton(),
         Padding(
           padding: const EdgeInsets.only(right: 16.0),
           child: PopupMenuButton<String>(

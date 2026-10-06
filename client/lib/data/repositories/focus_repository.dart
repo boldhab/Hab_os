@@ -12,6 +12,7 @@ class FocusRepository {
   Future<FocusSessionModel> startSession({
     String category = 'CODING',
     String? taskId,
+    String? courseId,
     String? notes,
   }) async {
     final response = await _dio.post(
@@ -19,6 +20,7 @@ class FocusRepository {
       data: {
         'category': category,
         if (taskId != null) 'taskId': taskId,
+        if (courseId != null) 'courseId': courseId,
         if (notes != null) 'notes': notes,
       },
     );
@@ -44,12 +46,27 @@ class FocusRepository {
     return FocusSessionModel.fromJson(Map<String, dynamic>.from(data));
   }
 
+  Future<FocusSessionModel> cancelSession(
+    String id, {
+    String? notes,
+  }) async {
+    final response = await _dio.post(
+      ApiEndpoints.focusCancel(id),
+      data: {
+        if (notes != null) 'notes': notes,
+      },
+    );
+    final data = response.data['data'] ?? response.data;
+    return FocusSessionModel.fromJson(Map<String, dynamic>.from(data));
+  }
+
   Future<FocusSessionModel> logCompletedSession({
     required String startTime,
     required String endTime,
     required int durationMinutes,
     String category = 'CODING',
     String? taskId,
+    String? courseId,
     String? notes,
   }) async {
     final response = await _dio.post(
@@ -60,6 +77,7 @@ class FocusRepository {
         'durationMinutes': durationMinutes,
         'category': category,
         if (taskId != null) 'taskId': taskId,
+        if (courseId != null) 'courseId': courseId,
         if (notes != null) 'notes': notes,
       },
     );
@@ -69,18 +87,22 @@ class FocusRepository {
 
   Future<List<FocusSessionModel>> getFocusSessions({
     String? category,
+    String? status,
     String? startDate,
     String? endDate,
   }) async {
     final query = <String, dynamic>{
       if (category != null && category.isNotEmpty) 'category': category,
+      if (status != null && status.isNotEmpty) 'status': status,
       if (startDate != null) 'startDate': startDate,
       if (endDate != null) 'endDate': endDate,
     };
     final response = await _dio.get(ApiEndpoints.focus, queryParameters: query);
-    final data = response.data['data'];
+    final data = response.data['data'] ?? response.data;
     List items = [];
-    if (data is Map && data.containsKey('data')) {
+    if (data is Map && data.containsKey('sessions')) {
+      items = data['sessions'] as List;
+    } else if (data is Map && data.containsKey('data')) {
       items = data['data'] as List;
     } else if (data is List) {
       items = data;

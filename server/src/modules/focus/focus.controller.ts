@@ -27,6 +27,17 @@ export const endSession = asyncHandler(async (req: Request, res: Response) => {
 });
 
 /**
+ * @desc    Cancel an active or paused focus session
+ * @route   POST /api/v1/focus/:id/cancel
+ * @access  Private
+ */
+export const cancelSession = asyncHandler(async (req: Request, res: Response) => {
+  const authReq = req as AuthRequest;
+  const session = await focusService.cancelSession(authReq.user!.id, req.params.id, req.body);
+  return ApiResponse.success(res, session, 'Focus session cancelled');
+});
+
+/**
  * @desc    Log completed focus session (e.g. from completed Pomodoro timer)
  * @route   POST /api/v1/focus/log
  * @access  Private
@@ -73,6 +84,7 @@ export const deleteSession = asyncHandler(async (req: Request, res: Response) =>
 export default {
   startSession,
   endSession,
+  cancelSession,
   logCompletedSession,
   getFocusSessions,
   getFocusStats,

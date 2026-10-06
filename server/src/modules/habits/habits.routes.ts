@@ -10,6 +10,7 @@ import {
   createRoutineSchema,
   updateRoutineSchema,
   routineIdParamSchema,
+  refillFreezeSchema,
 } from './habits.validation';
 
 const router = Router();
@@ -22,6 +23,7 @@ router.post('/', validate(createHabitSchema), habitsController.createHabit);
 router.get('/', habitsController.getHabits);
 router.get('/summary', habitsController.getHabitsSummary);
 router.get('/correlations', habitsController.getHabitCorrelations);
+router.get('/categories', habitsController.getHabitCategories);
 
 // --- Routines (Defined before :id) ---
 router.get('/routines', habitsController.getRoutines);
@@ -58,6 +60,7 @@ router.get(
 router.post(
   '/:id/freeze',
   validate(habitIdParamSchema, 'params'),
+  validate(refillFreezeSchema),
   habitsController.refillStreakFreeze
 );
 router.delete(

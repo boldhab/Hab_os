@@ -22,7 +22,10 @@ class HabitContributionHeatmap extends StatelessWidget {
     // Build a map of YYYY-MM-DD -> HabitLogModel
     final logMap = <String, HabitLogModel>{};
     for (final log in logs) {
-      final dateKey = log.date.split('T')[0];
+      final parsed = DateTime.tryParse(log.date)?.toLocal();
+      final dateKey = parsed != null
+          ? '${parsed.year}-${parsed.month.toString().padLeft(2, '0')}-${parsed.day.toString().padLeft(2, '0')}'
+          : log.date.split('T')[0];
       logMap[dateKey] = log;
     }
 

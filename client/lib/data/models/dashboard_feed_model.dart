@@ -80,6 +80,9 @@ class DashboardHabitItem extends Equatable {
   final String id;
   final String name;
   final String frequency;
+  final String targetType;
+  final int targetValue;
+  final int currentValue;
   final int currentStreak;
   final bool isCompletedToday;
 
@@ -87,6 +90,9 @@ class DashboardHabitItem extends Equatable {
     required this.id,
     required this.name,
     required this.frequency,
+    this.targetType = 'CHECKBOX',
+    this.targetValue = 1,
+    this.currentValue = 0,
     required this.currentStreak,
     required this.isCompletedToday,
   });
@@ -96,6 +102,9 @@ class DashboardHabitItem extends Equatable {
       id: json['id'] ?? '',
       name: json['name'] ?? '',
       frequency: json['frequency'] ?? 'DAILY',
+      targetType: json['targetType'] ?? 'CHECKBOX',
+      targetValue: (json['targetValue'] as num?)?.toInt() ?? 1,
+      currentValue: (json['currentValue'] as num?)?.toInt() ?? 0,
       currentStreak: json['currentStreak'] ?? 0,
       isCompletedToday: json['isCompletedToday'] ?? false,
     );
@@ -106,6 +115,9 @@ class DashboardHabitItem extends Equatable {
       id: id,
       name: name,
       frequency: frequency,
+      targetType: targetType,
+      targetValue: targetValue,
+      currentValue: currentValue,
       currentStreak: currentStreak,
       isCompletedToday: isCompletedToday ?? this.isCompletedToday,
     );
@@ -113,7 +125,8 @@ class DashboardHabitItem extends Equatable {
 
   @override
   List<Object?> get props =>
-      [id, name, frequency, currentStreak, isCompletedToday];
+      [id, name, frequency, targetType, targetValue, currentValue,
+        currentStreak, isCompletedToday];
 }
 
 class DashboardHabitsSection extends Equatable {
@@ -338,8 +351,10 @@ class GlobalActivityItem extends Equatable {
   final String id;
   final String title;
   final String subtitle;
-  final String category; // 'TASK', 'HABIT', 'FITNESS', 'FINANCE', 'FOCUS'
+  final String category; // 'TRANSACTION', 'FOCUS', 'TASK', 'HABIT', 'WORKOUT', 'STUDY'
   final DateTime timestamp;
+  final double? amount;
+  final String? color;
 
   const GlobalActivityItem({
     required this.id,
@@ -347,10 +362,115 @@ class GlobalActivityItem extends Equatable {
     required this.subtitle,
     required this.category,
     required this.timestamp,
+    this.amount,
+    this.color,
   });
 
+  factory GlobalActivityItem.fromJson(Map<String, dynamic> json) {
+    return GlobalActivityItem(
+      id: json['id']?.toString() ?? '',
+      title: json['title']?.toString() ?? '',
+      subtitle: json['subtitle']?.toString() ?? '',
+      category: json['type']?.toString() ?? json['category']?.toString() ?? 'TASK',
+      timestamp: DateTime.tryParse(json['timestamp']?.toString() ?? '') ?? DateTime.now(),
+      amount: (json['amount'] as num?)?.toDouble(),
+      color: json['color']?.toString(),
+    );
+  }
+
   @override
-  List<Object?> get props => [id, title, subtitle, category, timestamp];
+  List<Object?> get props => [id, title, subtitle, category, timestamp, amount, color];
+}
+
+class DashboardScheduleEvent extends Equatable {
+  final String id;
+  final String title;
+  final String? description;
+  final String? location;
+  final String color;
+  final DateTime startTime;
+  final DateTime endTime;
+  final bool isRecurring;
+
+  const DashboardScheduleEvent({
+    required this.id,
+    required this.title,
+    this.description,
+    this.location,
+    this.color = '#6366F1',
+    required this.startTime,
+    required this.endTime,
+    this.isRecurring = false,
+  });
+
+  factory DashboardScheduleEvent.fromJson(Map<String, dynamic> json) {
+    return DashboardScheduleEvent(
+      id: json['id']?.toString() ?? '',
+      title: json['title']?.toString() ?? 'Event',
+      description: json['description']?.toString(),
+      location: json['location']?.toString(),
+      color: json['color']?.toString() ?? '#6366F1',
+      startTime: DateTime.tryParse(json['startTime']?.toString() ?? '') ?? DateTime.now(),
+      endTime: DateTime.tryParse(json['endTime']?.toString() ?? '') ?? DateTime.now(),
+      isRecurring: json['isRecurring'] == true,
+    );
+  }
+
+  @override
+  List<Object?> get props => [id, title, description, location, color, startTime, endTime, isRecurring];
+}
+
+class DashboardAcademicDeliverable extends Equatable {
+  final String id;
+  final String title;
+  final DateTime date;
+  final bool isExam;
+  final String courseName;
+  final String? courseCode;
+  final String courseColor;
+  final double? weight;
+
+  const DashboardAcademicDeliverable({
+    required this.id,
+    required this.title,
+    required this.date,
+    required this.isExam,
+    required this.courseName,
+    this.courseCode,
+    required this.courseColor,
+    this.weight,
+  });
+
+  factory DashboardAcademicDeliverable.fromAssignment(Map<String, dynamic> json) {
+    final course = json['course'] is Map ? Map<String, dynamic>.from(json['course']) : <String, dynamic>{};
+    return DashboardAcademicDeliverable(
+      id: json['id']?.toString() ?? '',
+      title: json['title']?.toString() ?? 'Assignment',
+      date: DateTime.tryParse(json['dueDate']?.toString() ?? '') ?? DateTime.now(),
+      isExam: false,
+      courseName: course['name']?.toString() ?? 'Course',
+      courseCode: course['code']?.toString(),
+      courseColor: course['color']?.toString() ?? '#8B5CF6',
+      weight: (json['weight'] as num?)?.toDouble(),
+    );
+  }
+
+  factory DashboardAcademicDeliverable.fromExam(Map<String, dynamic> json) {
+    final course = json['course'] is Map ? Map<String, dynamic>.from(json['course']) : <String, dynamic>{};
+    return DashboardAcademicDeliverable(
+      id: json['id']?.toString() ?? '',
+      title: json['title']?.toString() ?? 'Exam',
+      date: DateTime.tryParse(json['examDate']?.toString() ?? '') ?? DateTime.now(),
+      isExam: true,
+      courseName: course['name']?.toString() ?? 'Course',
+      courseCode: course['code']?.toString(),
+      courseColor: course['color']?.toString() ?? '#8B5CF6',
+      weight: (json['weight'] as num?)?.toDouble(),
+    );
+  }
+
+  @override
+  List<Object?> get props => [id, title, date, isExam, courseName, courseCode, courseColor, weight];
 }
 
 // ==========================================
@@ -360,29 +480,47 @@ class GlobalActivityItem extends Equatable {
 class DashboardFeedModel extends Equatable {
   final String userName;
   final String? userAvatarUrl;
+  final List<String> dashboardModules;
   final LifeScoreModel lifeScore;
   final DashboardHabitsSection habits;
   final List<DashboardTaskItem> tasksDueToday;
+  final List<DashboardScheduleEvent> scheduleEvents;
   final List<DashboardProjectItem> activeProjects;
+  final List<DashboardAcademicDeliverable> academicDeliverables;
   final DashboardFitnessSection fitness;
   final DashboardFinanceSection finance;
+  final List<GlobalActivityItem> recentActivitiesList;
   final String? aiRecommendation;
   final DateTime? generatedAt;
 
   const DashboardFeedModel({
     required this.userName,
     this.userAvatarUrl,
+    this.dashboardModules = const [],
     required this.lifeScore,
     required this.habits,
     required this.tasksDueToday,
+    this.scheduleEvents = const [],
     this.activeProjects = const [],
+    this.academicDeliverables = const [],
     required this.fitness,
     required this.finance,
+    this.recentActivitiesList = const [],
     this.aiRecommendation,
     this.generatedAt,
   });
 
+  bool isModuleEnabled(String moduleName) {
+    if (dashboardModules.isEmpty) return true;
+    final upper = moduleName.toUpperCase();
+    return dashboardModules.map((m) => m.toUpperCase()).contains(upper);
+  }
+
   List<GlobalActivityItem> get recentActivities {
+    if (recentActivitiesList.isNotEmpty) {
+      return recentActivitiesList;
+    }
+
     final list = <GlobalActivityItem>[];
     final now = generatedAt ?? DateTime.now();
 
@@ -429,24 +567,32 @@ class DashboardFeedModel extends Equatable {
   DashboardFeedModel copyWith({
     String? userName,
     String? userAvatarUrl,
+    List<String>? dashboardModules,
     LifeScoreModel? lifeScore,
     DashboardHabitsSection? habits,
     List<DashboardTaskItem>? tasksDueToday,
+    List<DashboardScheduleEvent>? scheduleEvents,
     List<DashboardProjectItem>? activeProjects,
+    List<DashboardAcademicDeliverable>? academicDeliverables,
     DashboardFitnessSection? fitness,
     DashboardFinanceSection? finance,
+    List<GlobalActivityItem>? recentActivitiesList,
     String? aiRecommendation,
     DateTime? generatedAt,
   }) {
     return DashboardFeedModel(
       userName: userName ?? this.userName,
       userAvatarUrl: userAvatarUrl ?? this.userAvatarUrl,
+      dashboardModules: dashboardModules ?? this.dashboardModules,
       lifeScore: lifeScore ?? this.lifeScore,
       habits: habits ?? this.habits,
       tasksDueToday: tasksDueToday ?? this.tasksDueToday,
+      scheduleEvents: scheduleEvents ?? this.scheduleEvents,
       activeProjects: activeProjects ?? this.activeProjects,
+      academicDeliverables: academicDeliverables ?? this.academicDeliverables,
       fitness: fitness ?? this.fitness,
       finance: finance ?? this.finance,
+      recentActivitiesList: recentActivitiesList ?? this.recentActivitiesList,
       aiRecommendation: aiRecommendation ?? this.aiRecommendation,
       generatedAt: generatedAt ?? this.generatedAt,
     );
@@ -459,13 +605,51 @@ class DashboardFeedModel extends Equatable {
     final timeline = json['timeline'] is Map
         ? Map<String, dynamic>.from(json['timeline'])
         : <String, dynamic>{};
+
     final rawTasks = timeline['tasksDueToday'] ?? json['tasksDueToday'];
     final tasksList = (rawTasks is List ? rawTasks : [])
         .map((t) => DashboardTaskItem.fromJson(Map<String, dynamic>.from(t)))
         .toList();
+
+    final rawSchedules = timeline['scheduleEvents'] ?? json['scheduleEvents'];
+    final scheduleList = (rawSchedules is List ? rawSchedules : [])
+        .map((s) => DashboardScheduleEvent.fromJson(Map<String, dynamic>.from(s)))
+        .toList();
+
     final rawProjects = json['projects'] ?? json['activeProjects'];
     final projectsList = (rawProjects is List ? rawProjects : [])
         .map((p) => DashboardProjectItem.fromJson(Map<String, dynamic>.from(p)))
+        .toList();
+
+    // Academics: upcoming assignments & exams
+    final rawAcademics = json['academics'] is Map
+        ? Map<String, dynamic>.from(json['academics'])
+        : <String, dynamic>{};
+    final rawAssignments = rawAcademics['upcomingAssignments'] ?? json['upcomingAssignments'];
+    final rawExams = rawAcademics['upcomingExams'] ?? json['upcomingExams'];
+    final deliverables = <DashboardAcademicDeliverable>[];
+    if (rawAssignments is List) {
+      for (final a in rawAssignments) {
+        if (a is Map) deliverables.add(DashboardAcademicDeliverable.fromAssignment(Map<String, dynamic>.from(a)));
+      }
+    }
+    if (rawExams is List) {
+      for (final e in rawExams) {
+        if (e is Map) deliverables.add(DashboardAcademicDeliverable.fromExam(Map<String, dynamic>.from(e)));
+      }
+    }
+    deliverables.sort((a, b) => a.date.compareTo(b.date));
+
+    // Recent activity stream
+    final rawActivities = json['recentActivities'];
+    final activityList = (rawActivities is List ? rawActivities : [])
+        .map((a) => GlobalActivityItem.fromJson(Map<String, dynamic>.from(a)))
+        .toList();
+
+    // Module visibility preferences
+    final rawModules = json['dashboardModules'] ?? user['dashboardModules'];
+    final moduleList = (rawModules is List ? rawModules : [])
+        .map((m) => m.toString())
         .toList();
 
     String? recommendationText;
@@ -487,6 +671,7 @@ class DashboardFeedModel extends Equatable {
     return DashboardFeedModel(
       userName: user['name']?.toString() ?? 'User',
       userAvatarUrl: user['avatarUrl']?.toString(),
+      dashboardModules: moduleList,
       lifeScore: LifeScoreModel.fromJson(
         json['lifeScore'] is Map
             ? Map<String, dynamic>.from(json['lifeScore'])
@@ -496,7 +681,9 @@ class DashboardFeedModel extends Equatable {
         json['habits'] is Map ? Map<String, dynamic>.from(json['habits']) : {},
       ),
       tasksDueToday: tasksList,
+      scheduleEvents: scheduleList,
       activeProjects: projectsList,
+      academicDeliverables: deliverables,
       fitness: DashboardFitnessSection.fromJson(
         json['fitness'] is Map
             ? Map<String, dynamic>.from(json['fitness'])
@@ -507,6 +694,7 @@ class DashboardFeedModel extends Equatable {
             ? Map<String, dynamic>.from(json['finance'])
             : {},
       ),
+      recentActivitiesList: activityList,
       aiRecommendation: recommendationText,
       generatedAt: json['generatedAt'] != null
           ? DateTime.tryParse(json['generatedAt'].toString())
@@ -518,12 +706,16 @@ class DashboardFeedModel extends Equatable {
   List<Object?> get props => [
         userName,
         userAvatarUrl,
+        dashboardModules,
         lifeScore,
         habits,
         tasksDueToday,
+        scheduleEvents,
         activeProjects,
+        academicDeliverables,
         fitness,
         finance,
+        recentActivitiesList,
         aiRecommendation,
       ];
 }

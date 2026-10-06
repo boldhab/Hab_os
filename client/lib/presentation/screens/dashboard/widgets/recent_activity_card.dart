@@ -13,9 +13,10 @@ class RecentActivityCard extends StatelessWidget {
     return switch (category) {
       'TASK' => Icons.task_alt_rounded,
       'HABIT' => Icons.repeat_rounded,
-      'FITNESS' => Icons.fitness_center_rounded,
-      'FINANCE' => Icons.account_balance_wallet_rounded,
+      'FITNESS' || 'WORKOUT' => Icons.fitness_center_rounded,
+      'FINANCE' || 'TRANSACTION' => Icons.account_balance_wallet_rounded,
       'FOCUS' => Icons.timer_rounded,
+      'STUDY' || 'ACADEMIC' => Icons.menu_book_rounded,
       _ => Icons.notifications_rounded,
     };
   }
@@ -24,9 +25,10 @@ class RecentActivityCard extends StatelessWidget {
     return switch (category) {
       'TASK' => cs.primary,
       'HABIT' => const Color(0xFF4285F4),
-      'FITNESS' => const Color(0xFF34A853),
-      'FINANCE' => const Color(0xFFFBBC05),
+      'FITNESS' || 'WORKOUT' => const Color(0xFF34A853),
+      'FINANCE' || 'TRANSACTION' => const Color(0xFFFBBC05),
       'FOCUS' => const Color(0xFFEA4335),
+      'STUDY' || 'ACADEMIC' => const Color(0xFF8B5CF6),
       _ => cs.outline,
     };
   }

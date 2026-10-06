@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../data/models/task_model.dart';
 import '../../providers/tasks_provider.dart';
+import '../../providers/focus_provider.dart';
 import '../../../app/theme/app_theme.dart';
 import '../../widgets/app_animated_check.dart';
 import 'widgets/task_form_dialog.dart';
@@ -22,6 +23,7 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
   bool _isSearching = false;
   bool _isMatrixView = false;
   String? _selectedTaskId;
+  late final ScrollController _scrollController;
 
   static const _tabs = [
     {'id': 'today', 'label': 'Today'},
@@ -30,6 +32,26 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
     {'id': 'all', 'label': 'All'},
     {'id': 'completed', 'label': 'Completed'},
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController = ScrollController()..addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (_scrollController.hasClients &&
+        _scrollController.position.pixels >=
+            _scrollController.position.maxScrollExtent - 250) {
+      ref.read(tasksProvider.notifier).loadMore();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -141,6 +163,33 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
                   setState(() {
                     _isMatrixView = !_isMatrixView;
                   });
+                },
+              ),
+              IconButton(
+                icon: const Icon(Icons.sync_rounded),
+                tooltip: 'Sync Google Calendar',
+                onPressed: () async {
+                  AppHaptics.light();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Syncing with Google Calendar...'),
+                      duration: Duration(seconds: 1),
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                  final success = await notifier.syncCalendar();
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          success
+                              ? 'Google Calendar synced successfully'
+                              : (state.errorMessage ?? 'Calendar sync failed'),
+                        ),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  }
                 },
               ),
             ],
@@ -399,7 +448,7 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
 
       case TasksStatus.loaded:
         if (_isMatrixView) {
-          return _buildEisenhowerMatrix(context, ref, state.tasks);
+          return _buildEisenhowerMatrix(context, ref);
         }
 
         if (state.tasks.isEmpty) {
@@ -415,18 +464,35 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
         return RefreshIndicator(
           color: Theme.of(context).colorScheme.primary,
           onRefresh: () => ref.read(tasksProvider.notifier).loadTasks(),
-          child: ListView.separated(
+          child: ReorderableListView.builder(
+            scrollController: _scrollController,
+            buildDefaultDragHandles: false,
             padding: const EdgeInsets.fromLTRB(0, 8, 0, 100),
             itemCount: state.tasks.length,
-            separatorBuilder: (_, __) => Divider(
-              height: 1,
-              thickness: 1,
-              color: Theme.of(context).colorScheme.outlineVariant.withAlpha(25),
-            ),
+            onReorder: (oldIndex, newIndex) {
+              ref.read(tasksProvider.notifier).reorderTask(oldIndex, newIndex);
+            },
+            footer: state.isLoadingMore
+                ? Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 24),
+                    child: Center(
+                      child: SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.5,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                      ),
+                    ),
+                  )
+                : null,
             itemBuilder: (context, index) {
               final task = state.tasks[index];
               return _TaskRowItem(
+                key: ValueKey(task.id),
                 task: task,
+                reorderIndex: index,
                 isSelected: _selectedTaskId == task.id,
                 onSelect: () {
                   if (isWide) {
@@ -438,6 +504,7 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
                 onToggle: () => _handleToggleComplete(context, ref, task),
                 onEdit: () => _openEditDialog(context, ref, task),
                 onDelete: () => _handleDeleteTask(context, ref, task),
+                onStartFocus: () => _handleStartFocus(context, ref, task),
               );
             },
           ),
@@ -445,35 +512,69 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
     }
   }
 
-  Widget _buildEisenhowerMatrix(
-      BuildContext context, WidgetRef ref, List<TaskModel> tasks) {
+  Widget _buildEisenhowerMatrix(BuildContext context, WidgetRef ref) {
+    final matrixAsync = ref.watch(tasksMatrixProvider);
+
+    return matrixAsync.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (_, __) {
+        final quadrants = ref.watch(eisenhowerMatrixProvider);
+        return _buildMatrixLayout(
+          context,
+          ref,
+          quadrants.q1,
+          quadrants.q2,
+          quadrants.q3,
+          quadrants.q4,
+        );
+      },
+      data: (data) {
+        final quads = data['quadrants'] as Map<String, dynamic>?;
+        if (quads == null) {
+          final quadrants = ref.watch(eisenhowerMatrixProvider);
+          return _buildMatrixLayout(
+            context,
+            ref,
+            quadrants.q1,
+            quadrants.q2,
+            quadrants.q3,
+            quadrants.q4,
+          );
+        }
+        final q1 = ((quads['q1_urgent_important']?['items'] as List?) ?? [])
+            .map((i) => TaskModel.fromJson(Map<String, dynamic>.from(i)))
+            .toList();
+        final q2 = ((quads['q2_not_urgent_important']?['items'] as List?) ?? [])
+            .map((i) => TaskModel.fromJson(Map<String, dynamic>.from(i)))
+            .toList();
+        final q3 = ((quads['q3_urgent_not_important']?['items'] as List?) ?? [])
+            .map((i) => TaskModel.fromJson(Map<String, dynamic>.from(i)))
+            .toList();
+        final q4 = ((quads['q4_not_urgent_not_important']?['items'] as List?) ?? [])
+            .map((i) => TaskModel.fromJson(Map<String, dynamic>.from(i)))
+            .toList();
+
+        return _buildMatrixLayout(context, ref, q1, q2, q3, q4);
+      },
+    );
+  }
+
+  Widget _buildMatrixLayout(
+    BuildContext context,
+    WidgetRef ref,
+    List<TaskModel> q1,
+    List<TaskModel> q2,
+    List<TaskModel> q3,
+    List<TaskModel> q4,
+  ) {
     final colorScheme = Theme.of(context).colorScheme;
-    final now = DateTime.now();
-    final urgentCutoff = now.add(const Duration(hours: 48));
-
-    bool isUrgent(TaskModel t) {
-      if (t.dueDate == null) return false;
-      final d = DateTime.tryParse(t.dueDate!);
-      return d != null && d.isBefore(urgentCutoff);
-    }
-
-    bool isImportant(TaskModel t) {
-      final p = t.priority.toUpperCase();
-      return p == 'HIGH' || p == 'CRITICAL';
-    }
-
-    final activeTasks = tasks.where((t) => !t.isCompleted).toList();
-    final q1 = activeTasks.where((t) => isImportant(t) && isUrgent(t)).toList();
-    final q2 =
-        activeTasks.where((t) => isImportant(t) && !isUrgent(t)).toList();
-    final q3 =
-        activeTasks.where((t) => !isImportant(t) && isUrgent(t)).toList();
-    final q4 =
-        activeTasks.where((t) => !isImportant(t) && !isUrgent(t)).toList();
 
     return RefreshIndicator(
       color: colorScheme.primary,
-      onRefresh: () => ref.read(tasksProvider.notifier).loadTasks(),
+      onRefresh: () async {
+        ref.invalidate(tasksMatrixProvider);
+        await ref.read(tasksProvider.notifier).loadTasks();
+      },
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
@@ -745,7 +846,17 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
       builder: (_) => const TaskFormDialog(),
     );
     if (result != null) {
-      await ref.read(tasksProvider.notifier).createTask(result);
+      final success = await ref.read(tasksProvider.notifier).createTask(result);
+      if (!success && context.mounted) {
+        final errorMsg = ref.read(tasksProvider).errorMessage ?? 'Failed to create task';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMsg),
+            backgroundColor: AppSemanticColors.of(context).danger,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
     }
   }
 
@@ -758,26 +869,47 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
       builder: (_) => TaskFormDialog(task: task),
     );
     if (result != null) {
-      await ref.read(tasksProvider.notifier).updateTask(task.id, result);
+      final success = await ref.read(tasksProvider.notifier).updateTask(task.id, result);
+      if (!success && context.mounted) {
+        final errorMsg = ref.read(tasksProvider).errorMessage ?? 'Failed to update task';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMsg),
+            backgroundColor: AppSemanticColors.of(context).danger,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
     }
+  }
+
+  void _handleStartFocus(BuildContext context, WidgetRef ref, TaskModel task) {
+    AppHaptics.medium();
+    ref.read(focusProvider.notifier).startTimerForTask(task);
+    context.go('/focus');
   }
 }
 
 class _TaskRowItem extends StatelessWidget {
   final TaskModel task;
   final bool isSelected;
+  final int? reorderIndex;
   final VoidCallback onSelect;
   final VoidCallback onToggle;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
+  final VoidCallback? onStartFocus;
 
   const _TaskRowItem({
+    super.key,
     required this.task,
     required this.isSelected,
+    this.reorderIndex,
     required this.onSelect,
     required this.onToggle,
     required this.onEdit,
     required this.onDelete,
+    this.onStartFocus,
   });
 
   Color _priorityColor(String priority) {
@@ -972,7 +1104,22 @@ class _TaskRowItem extends StatelessWidget {
                     ],
                   ),
                 ),
-                const SizedBox(width: 8),
+                if (onStartFocus != null && !task.isCompleted) ...[
+                  IconButton(
+                    icon: Icon(
+                      Icons.play_circle_outline_rounded,
+                      size: 20,
+                      color: colorScheme.primary,
+                    ),
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints:
+                        const BoxConstraints(minWidth: 28, minHeight: 28),
+                    tooltip: 'Start Focus session',
+                    onPressed: onStartFocus,
+                  ),
+                  const SizedBox(width: 4),
+                ],
                 Container(
                   width: 10,
                   height: 10,
@@ -988,6 +1135,20 @@ class _TaskRowItem extends StatelessWidget {
                     ],
                   ),
                 ),
+                if (reorderIndex != null) ...[
+                  const SizedBox(width: 8),
+                  ReorderableDragStartListener(
+                    index: reorderIndex!,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: Icon(
+                        Icons.drag_indicator_rounded,
+                        size: 20,
+                        color: colorScheme.outlineVariant.withAlpha(140),
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),

@@ -2,6 +2,7 @@ import logger from '../utils/logger';
 import { runHabitStreakDecay } from './scheduled/habitStreakDecay.job';
 import { runNotificationProcessor } from './scheduled/notificationProcessor.job';
 import { runDailyLifeScoreSnapshot } from './scheduled/dailyLifeScore.job';
+import { runIdempotencyCleanup } from './scheduled/idempotencyCleanup.job';
 
 interface ScheduledTask {
   name: string;
@@ -89,6 +90,9 @@ scheduler.register('habitStreakDecay', 60 * 60 * 1000, runHabitStreakDecay);
 
 // 3. Daily Life Score snapshot: runs every 6 hours
 scheduler.register('dailyLifeScore', 6 * 60 * 60 * 1000, runDailyLifeScoreSnapshot);
+
+// 4. Idempotency key cleanup: runs every 12 hours
+scheduler.register('idempotencyCleanup', 12 * 60 * 60 * 1000, runIdempotencyCleanup);
 
 export const initScheduler = (): void => {
   scheduler.start();

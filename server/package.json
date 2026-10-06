@@ -15,7 +15,12 @@
     "test:security": "node scripts/verify_security.js",
     "test:arch": "node scripts/verify_architecture.js",
     "test:tasks": "node scripts/verify_tasks_advanced.js",
-    "test": "jest"
+    "test:courses": "tsx tests/projects_courses.test.ts",
+    "test:unit": "tsx tests/courses_calculations.test.ts && tsx tests/dashboard_lifescore_calculations.test.ts",
+    "test:habits": "tsx tests/unit/habits_validation.test.ts && tsx tests/unit/habits_domain_logic.test.ts",
+    "test:focus": "tsx tests/unit/focus_validation.test.ts && tsx tests/unit/focus_domain_logic.test.ts",
+    "test:gym": "tsx tests/unit/sports_science_engine.test.ts",
+    "test": "tsx scripts/test_runner.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.14.0",

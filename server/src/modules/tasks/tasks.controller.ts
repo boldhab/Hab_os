@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import tasksService from './tasks.service';
+import calendarSyncService from './calendarSync.service';
 import ApiResponse from '../../common/apiResponse';
 import asyncHandler from '../../common/asyncHandler';
 import { AuthRequest } from '../../middleware/auth';
@@ -92,6 +93,84 @@ export const getDailyWorkload = asyncHandler(async (req: Request, res: Response)
   return ApiResponse.success(res, workload, 'Daily workload retrieved successfully');
 });
 
+/**
+ * @desc    Get Eisenhower matrix categorization
+ * @route   GET /api/v1/tasks/matrix
+ * @access  Private
+ */
+export const getEisenhowerMatrix = asyncHandler(async (req: Request, res: Response) => {
+  const authReq = req as AuthRequest;
+  const matrix = await tasksService.getEisenhowerMatrix(authReq.user!.id);
+  return ApiResponse.success(res, matrix, 'Eisenhower matrix retrieved');
+});
+
+/**
+ * @desc    Create a subtask under a parent task
+ * @route   POST /api/v1/tasks/:id/subtasks
+ * @access  Private
+ */
+export const createSubtask = asyncHandler(async (req: Request, res: Response) => {
+  const authReq = req as AuthRequest;
+  const subtask = await tasksService.createSubtask(authReq.user!.id, req.params.id, req.body);
+  return ApiResponse.success(res, subtask, 'Subtask created', 201);
+});
+
+/**
+ * @desc    Add a blocking dependency to a task
+ * @route   POST /api/v1/tasks/:id/dependencies
+ * @access  Private
+ */
+export const addDependency = asyncHandler(async (req: Request, res: Response) => {
+  const authReq = req as AuthRequest;
+  const { blockingTaskId } = req.body;
+  const dependency = await tasksService.addDependency(authReq.user!.id, req.params.id, blockingTaskId);
+  return ApiResponse.success(res, dependency, 'Task dependency added', 201);
+});
+
+/**
+ * @desc    Remove a task dependency
+ * @route   DELETE /api/v1/tasks/:id/dependencies/:blockingId
+ * @access  Private
+ */
+export const removeDependency = asyncHandler(async (req: Request, res: Response) => {
+  const authReq = req as AuthRequest;
+  await tasksService.removeDependency(authReq.user!.id, req.params.id, req.params.blockingId);
+  return ApiResponse.success(res, null, 'Task dependency removed');
+});
+
+/**
+ * @desc    Reorder task with fractional positioning
+ * @route   POST /api/v1/tasks/reorder
+ * @access  Private
+ */
+export const reorderTask = asyncHandler(async (req: Request, res: Response) => {
+  const authReq = req as AuthRequest;
+  const result = await tasksService.reorderTask(authReq.user!.id, req.body);
+  return ApiResponse.success(res, result, 'Task reordered successfully');
+});
+
+/**
+ * @desc    Sync single task to Google Calendar
+ * @route   POST /api/v1/tasks/:id/sync-calendar
+ * @access  Private
+ */
+export const syncTaskToCalendar = asyncHandler(async (req: Request, res: Response) => {
+  const authReq = req as AuthRequest;
+  const result = await calendarSyncService.syncTaskToCalendar(authReq.user!.id, req.params.id);
+  return ApiResponse.success(res, result, 'Task synchronized to Google Calendar');
+});
+
+/**
+ * @desc    Trigger full two-way Google Calendar synchronization
+ * @route   POST /api/v1/tasks/sync-calendar
+ * @access  Private
+ */
+export const syncAllTasksCalendar = asyncHandler(async (req: Request, res: Response) => {
+  const authReq = req as AuthRequest;
+  const result = await calendarSyncService.syncAllTasks(authReq.user!.id);
+  return ApiResponse.success(res, result, 'Google Calendar synchronization complete');
+});
+
 export default {
   createTask,
   getTasks,
@@ -101,5 +180,12 @@ export default {
   toggleTaskComplete,
   deleteTask,
   getDailyWorkload,
+  getEisenhowerMatrix,
+  createSubtask,
+  addDependency,
+  removeDependency,
+  reorderTask,
+  syncTaskToCalendar,
+  syncAllTasksCalendar,
 };
 

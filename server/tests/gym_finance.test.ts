@@ -78,16 +78,21 @@ async function testGymAndFinanceFlow() {
 
     console.log('6. Gym Analytics Dashboard (UC-101):', gymAnalyticsRes.status === 200 && gymAnalyticsRes.body.data.totalWorkouts > 0 ? '✅ PASS' : '❌ FAIL');
 
-    // 7. Get or Create Category for Finance
-    let category = await prisma.category.findFirst({ where: { name: 'Food & Dining' } });
+    // 7. Get or Create Category for Finance (properly scoped to demo user and FINANCE type)
+    const demoUser = await prisma.user.findUnique({ where: { email: 'demo@habos.dev' } });
+    if (!demoUser) throw new Error('Demo user not found');
+
+    let category = await prisma.category.findFirst({
+      where: { name: 'Food & Dining', userId: demoUser.id, type: 'FINANCE' },
+    });
     if (!category) {
-      const user = await prisma.user.findUnique({ where: { email: 'demo@habos.dev' } });
       category = await prisma.category.create({
         data: {
           name: 'Food & Dining',
           color: '#F59E0B',
           icon: 'restaurant',
-          userId: user!.id,
+          type: 'FINANCE',
+          userId: demoUser.id,
         },
       });
     }

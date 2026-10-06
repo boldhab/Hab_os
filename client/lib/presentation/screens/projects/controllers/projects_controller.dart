@@ -80,6 +80,18 @@ final projectTasksProvider = FutureProvider.autoDispose
       .toList();
 });
 
+final projectTasksGroupedProvider = Provider.autoDispose
+    .family<Map<String, List<TaskModel>>, String>((ref, projectId) {
+  final tasksAsync = ref.watch(projectTasksProvider(projectId));
+  final tasks = tasksAsync.asData?.value ?? const <TaskModel>[];
+  return {
+    'TODO': tasks.where((t) => !t.isCompleted && t.status == 'TODO').toList(),
+    'IN_PROGRESS': tasks.where((t) => !t.isCompleted && t.status == 'IN_PROGRESS').toList(),
+    'BLOCKED': tasks.where((t) => !t.isCompleted && t.status == 'BLOCKED').toList(),
+    'COMPLETED': tasks.where((t) => t.isCompleted).toList(),
+  };
+});
+
 // ==========================================
 // CONTROLLER (MUTATIONS & FACADE)
 // ==========================================

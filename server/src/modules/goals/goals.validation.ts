@@ -77,6 +77,10 @@ export const uuidParamSchema = Joi.object({
   id: Joi.string().uuid().required(),
 });
 
+export const goalIdParamSchema = Joi.object({
+  goalId: Joi.string().uuid().required(),
+});
+
 export const goalMilestoneParamSchema = Joi.object({
   goalId: Joi.string().uuid().required(),
   milestoneId: Joi.string().uuid().required(),

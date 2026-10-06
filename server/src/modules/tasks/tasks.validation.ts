@@ -8,6 +8,7 @@ export const createTaskSchema = Joi.object({
   description: Joi.string().trim().allow('', null),
   priority: Joi.string().valid('LOW', 'MEDIUM', 'HIGH', 'CRITICAL').default('MEDIUM'),
   status: Joi.string().valid('TODO', 'IN_PROGRESS', 'COMPLETED', 'BLOCKED').default('TODO'),
+  isCompleted: Joi.boolean(),
   dueDate: Joi.date().iso().allow(null),
   estimatedMinutes: Joi.number().integer().min(1).max(1440).allow(null),
   projectId: Joi.string().uuid().allow(null),
@@ -49,8 +50,12 @@ export const getTasksQuerySchema = Joi.object({
   search: Joi.string().trim().allow(''),
   page: Joi.number().integer().min(1).default(1),
   limit: Joi.number().integer().min(1).max(100).default(20),
+  cursor: Joi.string().uuid(),
+  parentTaskId: Joi.alternatives().try(
+    Joi.string().uuid(),
+    Joi.string().valid('all', 'null', ''),
+  ),
 });
-
 
 export const taskIdParamSchema = Joi.object({
   id: Joi.string().uuid().required().messages({
@@ -58,3 +63,41 @@ export const taskIdParamSchema = Joi.object({
     'any.required': 'Task ID is required',
   }),
 });
+
+export const reorderTaskSchema = Joi.object({
+  targetTaskId: Joi.string().uuid().required().messages({
+    'string.guid': 'Invalid target task ID format',
+    'any.required': 'Target task ID is required',
+  }),
+  prevOrder: Joi.number().allow(null),
+  nextOrder: Joi.number().allow(null),
+});
+
+export const createSubtaskSchema = Joi.object({
+  title: Joi.string().trim().min(1).max(255).required().messages({
+    'string.empty': 'Subtask title is required',
+    'any.required': 'Subtask title is required',
+  }),
+  description: Joi.string().trim().allow('', null),
+  priority: Joi.string().valid('LOW', 'MEDIUM', 'HIGH', 'CRITICAL'),
+});
+
+export const addDependencySchema = Joi.object({
+  blockingTaskId: Joi.string().uuid().required().messages({
+    'string.guid': 'Invalid blocking task ID format',
+    'any.required': 'Blocking task ID is required',
+  }),
+});
+
+export const dependencyParamsSchema = Joi.object({
+  id: Joi.string().uuid().required().messages({
+    'string.guid': 'Invalid task ID format',
+    'any.required': 'Task ID is required',
+  }),
+  blockingId: Joi.string().uuid().required().messages({
+    'string.guid': 'Invalid blocking task ID format',
+    'any.required': 'Blocking task ID is required',
+  }),
+});
+
+

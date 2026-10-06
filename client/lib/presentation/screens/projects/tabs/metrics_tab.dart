@@ -4,6 +4,7 @@ import 'package:fl_chart/fl_chart.dart';
 import '../../../../app/theme/app_theme.dart';
 import '../../../widgets/app_error_state.dart';
 import '../controllers/projects_controller.dart';
+import '../widgets/leetcode_stats_card.dart';
 
 class MetricsTab extends ConsumerWidget {
   final String projectId;
@@ -101,6 +102,10 @@ class MetricsTab extends ConsumerWidget {
                 ],
               ),
             ),
+            const SizedBox(height: 16),
+
+            // LeetCode Stats Breakdown (UC-60 to UC-64)
+            const LeetCodeStatsCard(),
             const SizedBox(height: 16),
 
             // Technologies
