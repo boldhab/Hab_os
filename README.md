@@ -649,8 +649,8 @@ flutter build ipa --release
 
 | Contributor | CTC | 
 | :--- | :--- | 
-| **Habtamu Befekadu**<br>([CTC-894-26) | 
-| **Petros Geto**<br>([CTC-2934-26)) | 
+| **Habtamu Befekadu**<br> | ([CTC-894-26)
+| **Petros Geto**<br> | ([CTC-2934-26))
 ### Contributing
 
 
