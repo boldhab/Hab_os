@@ -36,15 +36,23 @@ class _HabitHistorySheetState extends ConsumerState<HabitHistorySheet> {
   }
 
   Future<void> _refillFreeze() async {
+    final prevError = ref.read(habitsProvider).errorMessage;
     await ref
         .read(habitsProvider.notifier)
         .refillStreakFreeze(widget.habit.id, count: 1);
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-          content: Text('Streak Freeze added! ❄️ Your streak is protected.')),
-    );
-    Navigator.pop(context);
+    final currentError = ref.read(habitsProvider).errorMessage;
+    if (currentError != null && currentError != prevError) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(currentError.replaceAll('Exception: ', ''))),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Streak Freeze added! ❄️ Your streak is protected.')),
+      );
+      Navigator.pop(context);
+    }
   }
 
   @override
@@ -140,7 +148,7 @@ class _HabitHistorySheetState extends ConsumerState<HabitHistorySheet> {
               Expanded(
                 child: _StatCard(
                   label: 'Freezes',
-                  value: '${widget.habit.streakFreezes} left',
+                  value: '${widget.habit.streakFreezes}/3 left',
                   icon: '❄️',
                 ),
               ),
@@ -152,6 +160,7 @@ class _HabitHistorySheetState extends ConsumerState<HabitHistorySheet> {
           Builder(
             builder: (context) {
               final semantics = AppSemanticColors.of(context);
+              final isAtMaxFreezes = widget.habit.streakFreezes >= 3;
               return Container(
                 padding: const EdgeInsets.symmetric(
                     horizontal: AppSpacing.sm + 4, vertical: AppSpacing.sm),
@@ -167,14 +176,23 @@ class _HabitHistorySheetState extends ConsumerState<HabitHistorySheet> {
                     const SizedBox(width: AppSpacing.sm),
                     Expanded(
                       child: Text(
-                        'Streak Freezes protect against 1 missed day without breaking your streak.',
+                        isAtMaxFreezes
+                            ? 'Maximum streak shield capacity reached (3/3).'
+                            : 'Streak Freezes protect against 1 missed day without breaking your streak.',
                         style: TextStyle(fontSize: 11, color: semantics.info),
                       ),
                     ),
                     TextButton(
-                      onPressed: _refillFreeze,
-                      child: const Text('+ Add Freeze',
-                          style: TextStyle(fontSize: 11)),
+                      onPressed: isAtMaxFreezes ? null : _refillFreeze,
+                      child: Text(
+                        isAtMaxFreezes ? 'Max Shields' : '+ Add Freeze',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: isAtMaxFreezes
+                              ? semantics.info.withAlpha(120)
+                              : null,
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -219,7 +237,11 @@ class _HabitHistorySheetState extends ConsumerState<HabitHistorySheet> {
                       separatorBuilder: (_, __) => const Divider(height: 1),
                       itemBuilder: (context, index) {
                         final log = _logs[index];
-                        final dateStr = log.date.split('T')[0];
+                        final parsedDate =
+                            DateTime.tryParse(log.date)?.toLocal();
+                        final dateStr = parsedDate != null
+                            ? '${parsedDate.year}-${parsedDate.month.toString().padLeft(2, '0')}-${parsedDate.day.toString().padLeft(2, '0')}'
+                            : log.date.split('T')[0];
                         final semantics = AppSemanticColors.of(context);
 
                         return Material(
