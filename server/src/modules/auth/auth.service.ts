@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import { Prisma } from '@prisma/client';
@@ -24,6 +25,7 @@ export interface LoginDTO {
 
 export interface UpdateProfileDTO {
   name?: string;
+  bio?: string;
   avatarUrl?: string;
   timezone?: string;
   dateFormat?: string;
@@ -47,6 +49,7 @@ export const generateAuthTokens = async (userId: string): Promise<AuthTokens> =>
 
   const refreshToken = jwt.sign({ id: userId }, JWT_REFRESH_SECRET, {
     expiresIn: JWT_REFRESH_EXPIRES_IN as jwt.SignOptions['expiresIn'],
+    jwtid: crypto.randomUUID(),
   });
 
   const expiresAt = new Date();
@@ -91,13 +94,15 @@ export const register = async (data: RegisterDTO) => {
       preferences: {
         create: {
           dashboardModules: [
-            'priorities',
-            'life_score',
-            'coding_stats',
-            'study_timer',
-            'gym_workout',
-            'finance_summary',
-            'habits',
+            'LIFE_SCORE',
+            'HABITS',
+            'TASKS',
+            'SCHEDULE',
+            'ACADEMIC',
+            'PROJECTS',
+            'FITNESS',
+            'FINANCE',
+            'RECENT_ACTIVITY',
           ],
           dailyCodingTargetMins: 120,
           dailyStudyTargetMins: 90,
@@ -225,6 +230,7 @@ export const getProfile = async (userId: string) => {
       id: true,
       email: true,
       name: true,
+      bio: true,
       avatarUrl: true,
       timezone: true,
       dateFormat: true,
@@ -245,10 +251,11 @@ export const getProfile = async (userId: string) => {
  * UC-04: Update user profile
  */
 export const updateProfile = async (userId: string, data: UpdateProfileDTO) => {
-  const { name, avatarUrl, timezone, dateFormat, currentPassword, newPassword } = data;
+  const { name, bio, avatarUrl, timezone, dateFormat, currentPassword, newPassword } = data;
 
   const updateData: Prisma.UserUpdateInput = {};
   if (name !== undefined) updateData.name = name;
+  if (bio !== undefined) updateData.bio = bio;
   if (avatarUrl !== undefined) updateData.avatarUrl = avatarUrl;
   if (timezone !== undefined) updateData.timezone = timezone;
   if (dateFormat !== undefined) updateData.dateFormat = dateFormat;
@@ -274,6 +281,7 @@ export const updateProfile = async (userId: string, data: UpdateProfileDTO) => {
       id: true,
       email: true,
       name: true,
+      bio: true,
       avatarUrl: true,
       timezone: true,
       dateFormat: true,
