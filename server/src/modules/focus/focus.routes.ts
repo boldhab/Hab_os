@@ -6,6 +6,7 @@ import {
   startFocusSchema,
   endFocusSchema,
   logCompletedFocusSchema,
+  cancelFocusSchema,
   getFocusQuerySchema,
   focusIdParamSchema,
 } from './focus.validation';
@@ -21,6 +22,12 @@ router.post(
   validate(focusIdParamSchema, 'params'),
   validate(endFocusSchema),
   focusController.endSession
+);
+router.post(
+  '/:id/cancel',
+  validate(focusIdParamSchema, 'params'),
+  validate(cancelFocusSchema),
+  focusController.cancelSession
 );
 router.post('/log', validate(logCompletedFocusSchema), focusController.logCompletedSession);
 router.get('/', validate(getFocusQuerySchema, 'query'), focusController.getFocusSessions);
