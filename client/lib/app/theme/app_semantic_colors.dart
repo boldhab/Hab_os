@@ -30,6 +30,9 @@ class AppSemanticColors extends ThemeExtension<AppSemanticColors> {
   final Color infoContainer;
   final Color onInfoContainer;
 
+  /// Convenience alias for [danger] to support standard Flutter conventions
+  Color get error => danger;
+
   const AppSemanticColors({
     required this.success,
     required this.onSuccess,

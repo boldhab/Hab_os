@@ -69,49 +69,72 @@ class AppTheme {
       // ── Input Decoration Theme ─────────────────────────────────────────────
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: colorScheme.surfaceContainerHighest,
+        fillColor: colorScheme.brightness == Brightness.dark
+            ? colorScheme.surfaceContainerHighest.withAlpha(85)
+            : colorScheme.surfaceContainerHighest.withAlpha(45),
         isDense: true,
         contentPadding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.md,
-          vertical: AppSpacing.sm + 4,
+          vertical: AppSpacing.md - 2,
         ),
-        border: const OutlineInputBorder(
-          borderRadius: AppRadius.input,
-          borderSide: BorderSide.none,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(
+            color: colorScheme.outlineVariant.withAlpha(70),
+            width: 1.0,
+          ),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: AppRadius.input,
+          borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide(
-            color: colorScheme.outlineVariant.withAlpha(80),
+            color: colorScheme.outlineVariant.withAlpha(85),
             width: 1.0,
           ),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: AppRadius.input,
+          borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide(
             color: colorScheme.primary,
-            width: 1.5,
+            width: 1.8,
           ),
         ),
         errorBorder: OutlineInputBorder(
-          borderRadius: AppRadius.input,
+          borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide(
-            color: colorScheme.error,
+            color: colorScheme.error.withAlpha(160),
             width: 1.0,
           ),
         ),
         focusedErrorBorder: OutlineInputBorder(
-          borderRadius: AppRadius.input,
+          borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide(
             color: colorScheme.error,
-            width: 1.5,
+            width: 1.8,
           ),
         ),
         hintStyle: textTheme.bodyMedium?.copyWith(
-          color: colorScheme.onSurfaceVariant,
+          color: colorScheme.onSurfaceVariant.withAlpha(125),
+          fontWeight: FontWeight.w400,
         ),
         labelStyle: textTheme.bodyMedium?.copyWith(
-          color: colorScheme.onSurfaceVariant,
+          color: colorScheme.onSurfaceVariant.withAlpha(200),
+          fontWeight: FontWeight.w500,
+        ),
+        floatingLabelStyle: textTheme.labelMedium?.copyWith(
+          color: colorScheme.primary,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.15,
+        ),
+        floatingLabelBehavior: FloatingLabelBehavior.auto,
+        prefixIconColor: colorScheme.onSurfaceVariant.withAlpha(190),
+        suffixIconColor: colorScheme.onSurfaceVariant.withAlpha(190),
+        helperStyle: textTheme.bodySmall?.copyWith(
+          color: colorScheme.onSurfaceVariant.withAlpha(160),
+        ),
+        errorStyle: textTheme.bodySmall?.copyWith(
+          color: colorScheme.error,
+          fontWeight: FontWeight.w500,
+          fontSize: 11.5,
         ),
       ),
 
