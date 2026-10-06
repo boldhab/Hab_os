@@ -95,11 +95,7 @@ Modern personal management is plagued by several core issues:
 | **Fitness Enthusiasts** | Logging exercises, set/rep progressions, 1RM personal records, and body measurements. | Gym & Fitness, Body Metrics, Routines |
 | **Personal Budgeters** | Tracking daily expenses and income, category thresholds, monthly budget caps, and savings rates. | Personal Finance, Budget Alerts, Analytics |
 
-### Roles & Access Control
 
-- **Standard Authenticated User (`ACTOR_USER`)**: Owns full CRUD access over personal domain resources. Cannot view, modify, or leak data from any other registered user account.
-- **Background Worker Engine (`ACTOR_SYSTEM`)**: Internal cron job runner executing scheduled tasks, midnight streak decay evaluations, budget notifications, and external webhook triggers.
-- **System Administrator (`ACTOR_ADMIN`)**: Operates management scripts, database migrations, security audits, and system configuration directly via secure command-line interfaces.
 
 ---
 
