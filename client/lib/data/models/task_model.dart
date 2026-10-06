@@ -102,6 +102,7 @@ class TaskModel extends Equatable {
   final List<TaskModel> subtasks;
   final List<Map<String, dynamic>> blockedBy;
   final List<Map<String, dynamic>> blocking;
+  final double order;
 
   const TaskModel({
     required this.id,
@@ -133,6 +134,7 @@ class TaskModel extends Equatable {
     this.subtasks = const [],
     this.blockedBy = const [],
     this.blocking = const [],
+    this.order = 0.0,
     this.createdAt,
     this.updatedAt,
   });
@@ -194,6 +196,7 @@ class TaskModel extends Equatable {
       subtasks: subtasksList,
       blockedBy: blockedByList,
       blocking: blockingList,
+      order: (json['order'] as num?)?.toDouble() ?? 0.0,
       createdAt: json['createdAt'],
       updatedAt: json['updatedAt'],
     );
@@ -219,6 +222,17 @@ class TaskModel extends Equatable {
     TaskProjectSummary? project,
     TaskGoalSummary? goal,
     List<TaskFocusSessionSummary>? focusSessions,
+    String? parentTaskId,
+    bool? isRecurring,
+    String? recurrenceRule,
+    bool? isBlocked,
+    String? subtaskFraction,
+    int? subtaskPercent,
+    List<dynamic>? blockedByPrerequisites,
+    List<TaskModel>? subtasks,
+    List<Map<String, dynamic>>? blockedBy,
+    List<Map<String, dynamic>>? blocking,
+    double? order,
     String? createdAt,
     String? updatedAt,
   }) {
@@ -242,6 +256,17 @@ class TaskModel extends Equatable {
       project: project ?? this.project,
       goal: goal ?? this.goal,
       focusSessions: focusSessions ?? this.focusSessions,
+      parentTaskId: parentTaskId ?? this.parentTaskId,
+      isRecurring: isRecurring ?? this.isRecurring,
+      recurrenceRule: recurrenceRule ?? this.recurrenceRule,
+      isBlocked: isBlocked ?? this.isBlocked,
+      subtaskFraction: subtaskFraction ?? this.subtaskFraction,
+      subtaskPercent: subtaskPercent ?? this.subtaskPercent,
+      blockedByPrerequisites: blockedByPrerequisites ?? this.blockedByPrerequisites,
+      subtasks: subtasks ?? this.subtasks,
+      blockedBy: blockedBy ?? this.blockedBy,
+      blocking: blocking ?? this.blocking,
+      order: order ?? this.order,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -268,6 +293,17 @@ class TaskModel extends Equatable {
         project,
         goal,
         focusSessions,
+        parentTaskId,
+        isRecurring,
+        recurrenceRule,
+        isBlocked,
+        subtaskFraction,
+        subtaskPercent,
+        blockedByPrerequisites,
+        subtasks,
+        blockedBy,
+        blocking,
+        order,
         createdAt,
         updatedAt,
       ];

@@ -151,6 +151,7 @@ class _TaskDetailsScreenState extends ConsumerState<TaskDetailsScreen> {
   @override
   Widget build(BuildContext context) {
     final taskAsync = ref.watch(taskDetailsProvider(widget.taskId));
+    final task = taskAsync.valueOrNull;
     final colorScheme = Theme.of(context).colorScheme;
     final primaryRed = colorScheme.primary;
 
@@ -161,6 +162,37 @@ class _TaskDetailsScreenState extends ConsumerState<TaskDetailsScreen> {
         backgroundColor: colorScheme.surface,
         elevation: 0,
         actions: [
+          if (task != null)
+            IconButton(
+              icon: const Icon(Icons.sync_rounded),
+              tooltip: 'Sync Google Calendar',
+              onPressed: () async {
+                AppHaptics.light();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Syncing task with Google Calendar...'),
+                    duration: Duration(seconds: 1),
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+                final success = await ref
+                    .read(tasksProvider.notifier)
+                    .syncTaskToCalendar(task.id);
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        success
+                            ? 'Task synchronized to Google Calendar'
+                            : 'Calendar sync failed',
+                      ),
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                  ref.invalidate(taskDetailsProvider(widget.taskId));
+                }
+              },
+            ),
           IconButton(
             icon: const Icon(Icons.refresh_rounded),
             onPressed: () => ref.invalidate(taskDetailsProvider(widget.taskId)),
@@ -658,7 +690,8 @@ class _TaskDetailsScreenState extends ConsumerState<TaskDetailsScreen> {
             Expanded(
               child: FilledButton.icon(
                 onPressed: () {
-                  ref.read(focusProvider.notifier).setCategory('CODING');
+                  AppHaptics.medium();
+                  ref.read(focusProvider.notifier).startTimerForTask(task);
                   context.go('/focus');
                 },
                 style: FilledButton.styleFrom(

@@ -4,6 +4,7 @@ import '../../../../data/models/task_model.dart';
 import '../../../../app/theme/app_theme.dart';
 import '../../projects/projects_screen.dart';
 import '../../../providers/goals_provider.dart';
+import '../../../widgets/common/form_section_header.dart';
 
 class TaskFormDialog extends ConsumerStatefulWidget {
   final TaskModel? task;
@@ -205,39 +206,34 @@ class _TaskFormDialogState extends ConsumerState<TaskFormDialog> {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Title Field (Large)
+          // Title Field
           TextFormField(
             controller: _titleController,
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+            autofocus: !isEditing,
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
             decoration: InputDecoration(
-              hintText: 'What needs to be done? *',
-              hintStyle: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w500,
-                color: colorScheme.onSurfaceVariant.withAlpha(120),
-              ),
-              border: InputBorder.none,
-              focusedBorder: InputBorder.none,
-              enabledBorder: InputBorder.none,
-              contentPadding: EdgeInsets.zero,
+              labelText: 'Task Title *',
+              hintText: 'What needs to be done?',
+              prefixIcon: Icon(Icons.check_circle_outline_rounded,
+                  color: primaryRed, size: 20),
             ),
             validator: (val) =>
-                val == null || val.trim().isEmpty ? 'Title is required' : null,
+                val == null || val.trim().isEmpty ? 'Task title is required' : null,
           ),
 
           // Smart Date Pill
           if (_detectedDate != null && _detectedLabel != null) ...[
-            const SizedBox(height: 6),
+            const SizedBox(height: 8),
             InkWell(
               onTap: _applyDetectedDate,
               borderRadius: BorderRadius.circular(AppRadius.pill),
               child: Container(
                 padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.sm + 4, vertical: AppSpacing.xs),
+                    horizontal: AppSpacing.sm + 4, vertical: AppSpacing.xs + 2),
                 decoration: BoxDecoration(
                   color: primaryRed.withAlpha(20),
                   borderRadius: BorderRadius.circular(AppRadius.pill),
-                  border: Border.all(color: primaryRed.withAlpha(60)),
+                  border: Border.all(color: primaryRed.withAlpha(70)),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -262,86 +258,120 @@ class _TaskFormDialogState extends ConsumerState<TaskFormDialog> {
           ],
           AppSpacing.verticalGapMd,
 
-          // Description
+          // Description Field
           TextFormField(
             controller: _descController,
             maxLines: 2,
             style: const TextStyle(fontSize: 14),
-            decoration: InputDecoration(
-              hintText: 'Add description or notes (optional)',
-              hintStyle:
-                  TextStyle(color: colorScheme.onSurfaceVariant.withAlpha(140)),
-              filled: true,
-              fillColor: colorScheme.surfaceContainerLow,
-              contentPadding: const EdgeInsets.all(12),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide.none,
-              ),
+            decoration: const InputDecoration(
+              labelText: 'Description (optional)',
+              hintText: 'Add description, checklist or notes...',
+              prefixIcon: Icon(Icons.notes_rounded, size: 20),
+              alignLabelWithHint: true,
             ),
           ),
           AppSpacing.verticalGapLg,
 
           // Priority Selectors (Chips)
-          Text(
-            'PRIORITY',
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0.8,
-              color: colorScheme.onSurfaceVariant,
-            ),
+          const FormSectionHeader(
+            title: 'Priority',
+            icon: Icons.flag_outlined,
           ),
-          AppSpacing.verticalGapSm,
-          Row(
-            children: [
-              _buildPriorityChip('LOW', 'Low', const Color(0xFF4285F4)),
-              const SizedBox(width: 8),
-              _buildPriorityChip('MEDIUM', 'Medium', const Color(0xFFFBBC05)),
-              const SizedBox(width: 8),
-              _buildPriorityChip('HIGH', 'High', const Color(0xFFEA4335)),
-              const SizedBox(width: 8),
-              _buildPriorityChip(
-                  'CRITICAL', 'Critical', const Color(0xFFDC2626)),
-            ],
+          AppSpacing.verticalGapXs,
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _buildPriorityChip('LOW', 'Low', const Color(0xFF4285F4)),
+                const SizedBox(width: 8),
+                _buildPriorityChip('MEDIUM', 'Medium', const Color(0xFFFBBC05)),
+                const SizedBox(width: 8),
+                _buildPriorityChip('HIGH', 'High', const Color(0xFFEA4335)),
+                const SizedBox(width: 8),
+                _buildPriorityChip(
+                    'CRITICAL', 'Critical', const Color(0xFFDC2626)),
+              ],
+            ),
           ),
           AppSpacing.verticalGapLg,
 
           // Due Date Row
+          const FormSectionHeader(
+            title: 'Due Date',
+            icon: Icons.calendar_today_rounded,
+          ),
+          AppSpacing.verticalGapXs,
           InkWell(
             onTap: _pickDueDate,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(14),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               decoration: BoxDecoration(
-                color: colorScheme.surfaceContainerLow,
-                borderRadius: BorderRadius.circular(12),
+                color: colorScheme.surfaceContainerHighest.withAlpha(45),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: _dueDate != null
+                      ? primaryRed.withAlpha(120)
+                      : colorScheme.outlineVariant.withAlpha(85),
+                ),
               ),
               child: Row(
                 children: [
-                  Icon(Icons.calendar_today_rounded,
-                      size: 18, color: primaryRed),
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: primaryRed.withAlpha(20),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(Icons.calendar_month_rounded,
+                        size: 18, color: primaryRed),
+                  ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: Text(
-                      _dueDate == null
-                          ? 'Set Due Date'
-                          : 'Due: ${_dueDate!.year}-${_dueDate!.month.toString().padLeft(2, '0')}-${_dueDate!.day.toString().padLeft(2, '0')}',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
-                        color: _dueDate == null
-                            ? colorScheme.onSurfaceVariant
-                            : colorScheme.onSurface,
-                      ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _dueDate == null
+                              ? 'No Due Date'
+                              : 'Due: ${_dueDate!.year}-${_dueDate!.month.toString().padLeft(2, '0')}-${_dueDate!.day.toString().padLeft(2, '0')}',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                            color: _dueDate == null
+                                ? colorScheme.onSurfaceVariant
+                                : colorScheme.onSurface,
+                          ),
+                        ),
+                        if (_dueDate != null) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            'Reminder scheduled for this date',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: colorScheme.onSurfaceVariant.withAlpha(160),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ),
                   if (_dueDate != null)
                     IconButton(
                       icon: const Icon(Icons.clear_rounded, size: 18),
+                      tooltip: 'Clear due date',
                       onPressed: () => setState(() => _dueDate = null),
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
+                    )
+                  else
+                    Text(
+                      'Select',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: primaryRed,
+                      ),
                     ),
                 ],
               ),
@@ -357,20 +387,21 @@ class _TaskFormDialogState extends ConsumerState<TaskFormDialog> {
               padding: const EdgeInsets.symmetric(vertical: 6),
               child: Row(
                 children: [
-                  Text(
-                    'More Options',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: primaryRed,
-                    ),
-                  ),
                   Icon(
                     _showMoreOptions
                         ? Icons.keyboard_arrow_up_rounded
                         : Icons.keyboard_arrow_down_rounded,
                     color: primaryRed,
                     size: 20,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    _showMoreOptions ? 'Fewer Options' : 'More Options (Project, Goal, Time)',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: primaryRed,
+                    ),
                   ),
                 ],
               ),
@@ -401,13 +432,38 @@ class _TaskFormDialogState extends ConsumerState<TaskFormDialog> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        isEditing ? 'Edit Task' : 'New Task',
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w800,
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: primaryRed.withAlpha(25),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Icon(Icons.task_alt_rounded,
+                            size: 20, color: primaryRed),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              isEditing ? 'Edit Task' : 'New Task',
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            Text(
+                              isEditing
+                                  ? 'Update task details and timeline'
+                                  : 'Create an actionable task item',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: colorScheme.onSurfaceVariant.withAlpha(170),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                       IconButton(
@@ -416,7 +472,7 @@ class _TaskFormDialogState extends ConsumerState<TaskFormDialog> {
                       ),
                     ],
                   ),
-                  const Divider(height: 20),
+                  const Divider(height: 24),
                   Flexible(child: SingleChildScrollView(child: formContent)),
                   const SizedBox(height: 20),
                   Row(
@@ -427,15 +483,17 @@ class _TaskFormDialogState extends ConsumerState<TaskFormDialog> {
                         child: const Text('Cancel'),
                       ),
                       const SizedBox(width: 12),
-                      FilledButton(
+                      FilledButton.icon(
+                        icon: const Icon(Icons.check_rounded, size: 18),
                         onPressed: _submit,
                         style: FilledButton.styleFrom(
                           backgroundColor: primaryRed,
+                          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
                         ),
-                        child: Text(isEditing ? 'Save Changes' : 'Create Task'),
+                        label: Text(isEditing ? 'Save Changes' : 'Create Task'),
                       ),
                     ],
                   ),
@@ -473,12 +531,37 @@ class _TaskFormDialogState extends ConsumerState<TaskFormDialog> {
               ),
               const SizedBox(height: 12),
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    isEditing ? 'Edit Task' : 'New Task',
-                    style: const TextStyle(
-                        fontSize: 20, fontWeight: FontWeight.w800),
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: primaryRed.withAlpha(25),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(Icons.task_alt_rounded,
+                        size: 20, color: primaryRed),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          isEditing ? 'Edit Task' : 'New Task',
+                          style: const TextStyle(
+                              fontSize: 18, fontWeight: FontWeight.w800),
+                        ),
+                        Text(
+                          isEditing
+                              ? 'Update task details and timeline'
+                              : 'Create an actionable task item',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: colorScheme.onSurfaceVariant.withAlpha(170),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                   IconButton(
                     icon: const Icon(Icons.close_rounded),
@@ -486,7 +569,7 @@ class _TaskFormDialogState extends ConsumerState<TaskFormDialog> {
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
+              const Divider(height: 20),
               Flexible(
                 child: SingleChildScrollView(
                   child: formContent,
@@ -495,19 +578,20 @@ class _TaskFormDialogState extends ConsumerState<TaskFormDialog> {
               const SizedBox(height: 16),
               SizedBox(
                 width: double.infinity,
-                height: 52,
-                child: FilledButton(
+                height: 50,
+                child: FilledButton.icon(
+                  icon: const Icon(Icons.check_rounded, size: 18),
                   onPressed: _submit,
                   style: FilledButton.styleFrom(
                     backgroundColor: primaryRed,
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
+                      borderRadius: BorderRadius.circular(14),
                     ),
                   ),
-                  child: Text(
+                  label: Text(
                     isEditing ? 'Save Changes' : 'Create Task',
                     style: const TextStyle(
-                        fontWeight: FontWeight.w700, fontSize: 16),
+                        fontWeight: FontWeight.w700, fontSize: 15),
                   ),
                 ),
               ),
@@ -521,6 +605,9 @@ class _TaskFormDialogState extends ConsumerState<TaskFormDialog> {
   Widget _buildPriorityChip(String id, String label, Color color) {
     final selected = _priority == id;
     return ChoiceChip(
+      avatar: selected
+          ? Icon(Icons.check_circle_rounded, size: 14, color: color)
+          : null,
       label: Text(label),
       selected: selected,
       selectedColor: color.withAlpha(30),
@@ -542,16 +629,11 @@ class _TaskFormDialogState extends ConsumerState<TaskFormDialog> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Status Chips
-        Text(
-          'STATUS',
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w800,
-            letterSpacing: 0.8,
-            color: colorScheme.onSurfaceVariant,
-          ),
+        const FormSectionHeader(
+          title: 'Status',
+          icon: Icons.traffic_rounded,
         ),
-        const SizedBox(height: 6),
+        AppSpacing.verticalGapXs,
         Wrap(
           spacing: 8,
           children: [
@@ -561,15 +643,19 @@ class _TaskFormDialogState extends ConsumerState<TaskFormDialog> {
             _buildStatusChip('COMPLETED', 'Completed'),
           ],
         ),
-        AppSpacing.verticalGapMd,
+        AppSpacing.verticalGapLg,
 
         // Linked Project Dropdown
         projectsAsync.when(
           data: (projects) => DropdownButtonFormField<String?>(
             value: _selectedProjectId,
-            decoration: const InputDecoration(labelText: 'Linked Project'),
+            decoration: const InputDecoration(
+              labelText: 'Linked Project',
+              prefixIcon: Icon(Icons.folder_outlined, size: 20),
+            ),
             items: [
-              const DropdownMenuItem<String?>(value: null, child: Text('None')),
+              const DropdownMenuItem<String?>(
+                  value: null, child: Text('None (No Project)')),
               ...projects.map((p) => DropdownMenuItem<String?>(
                     value: p.id,
                     child: Text(p.title),
@@ -586,9 +672,13 @@ class _TaskFormDialogState extends ConsumerState<TaskFormDialog> {
         goalsAsync.when(
           data: (goals) => DropdownButtonFormField<String?>(
             value: _selectedGoalId,
-            decoration: const InputDecoration(labelText: 'Linked Goal'),
+            decoration: const InputDecoration(
+              labelText: 'Linked Goal',
+              prefixIcon: Icon(Icons.track_changes_rounded, size: 20),
+            ),
             items: [
-              const DropdownMenuItem<String?>(value: null, child: Text('None')),
+              const DropdownMenuItem<String?>(
+                  value: null, child: Text('None (No Goal)')),
               ...goals.map((g) => DropdownMenuItem<String?>(
                     value: g.id,
                     child: Text(g.title),
@@ -609,38 +699,63 @@ class _TaskFormDialogState extends ConsumerState<TaskFormDialog> {
           controller: _estMinutesController,
           keyboardType: TextInputType.number,
           decoration: const InputDecoration(
-            labelText: 'Estimated Time (minutes)',
+            labelText: 'Estimated Time',
             hintText: 'e.g. 45',
+            prefixIcon: Icon(Icons.timer_outlined, size: 20),
+            suffixText: 'min',
           ),
         ),
         AppSpacing.verticalGapMd,
 
-        // Recurrence Toggle
-        SwitchListTile(
-          contentPadding: EdgeInsets.zero,
-          title: const Text('Recurring Task'),
-          subtitle: const Text('Repeats automatically on schedule'),
-          value: _isRecurring,
-          onChanged: (val) => setState(() => _isRecurring = val),
-        ),
-        if (_isRecurring) ...[
-          const SizedBox(height: 6),
-          DropdownButtonFormField<String>(
-            value: _recurrenceRule,
-            decoration: const InputDecoration(labelText: 'Repeat Frequency'),
-            items: const [
-              DropdownMenuItem(value: 'DAILY', child: Text('Daily')),
-              DropdownMenuItem(
-                  value: 'WEEKDAYS', child: Text('Weekdays (Mon-Fri)')),
-              DropdownMenuItem(value: 'WEEKLY', child: Text('Weekly')),
-              DropdownMenuItem(value: 'BIWEEKLY', child: Text('Every 2 Weeks')),
-              DropdownMenuItem(value: 'MONTHLY', child: Text('Monthly')),
-            ],
-            onChanged: (val) {
-              if (val != null) setState(() => _recurrenceRule = val);
-            },
+        // Recurrence Toggle Container
+        Container(
+          decoration: BoxDecoration(
+            color: colorScheme.surfaceContainerHighest.withAlpha(35),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: colorScheme.outlineVariant.withAlpha(70),
+            ),
           ),
-        ],
+          child: Column(
+            children: [
+              SwitchListTile(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 14),
+                title: const Text('Recurring Task',
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                subtitle: Text('Repeats automatically on schedule',
+                    style: TextStyle(
+                        fontSize: 12,
+                        color: colorScheme.onSurfaceVariant.withAlpha(160))),
+                value: _isRecurring,
+                onChanged: (val) => setState(() => _isRecurring = val),
+              ),
+              if (_isRecurring) ...[
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+                  child: DropdownButtonFormField<String>(
+                    value: _recurrenceRule,
+                    decoration: const InputDecoration(
+                      labelText: 'Repeat Frequency',
+                      prefixIcon: Icon(Icons.repeat_rounded, size: 20),
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: 'DAILY', child: Text('Daily')),
+                      DropdownMenuItem(
+                          value: 'WEEKDAYS', child: Text('Weekdays (Mon-Fri)')),
+                      DropdownMenuItem(value: 'WEEKLY', child: Text('Weekly')),
+                      DropdownMenuItem(
+                          value: 'BIWEEKLY', child: Text('Every 2 Weeks')),
+                      DropdownMenuItem(value: 'MONTHLY', child: Text('Monthly')),
+                    ],
+                    onChanged: (val) {
+                      if (val != null) setState(() => _recurrenceRule = val);
+                    },
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
       ],
     );
   }
