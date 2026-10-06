@@ -18,6 +18,8 @@ model User {
   name                 String?
   bio                  String?
   avatarUrl            String?
+  googleId             String?                @unique
+  authProvider         String                 @default("local")
   timezone             String                 @default("UTC")
   dateFormat           String                 @default("YYYY-MM-DD")
   createdAt            DateTime               @default(now())

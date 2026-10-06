@@ -1,9 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import prisma from '../config/db';
 import ApiError from '../common/apiError';
 import asyncHandler from '../common/asyncHandler';
 import env from '../config/env';
+import authService from '../modules/auth/auth.service';
 
 export interface AuthenticatedUser {
   id: string;
@@ -43,25 +43,24 @@ export const authenticate = asyncHandler(async (req: Request, _res: Response, ne
       env.JWT_SECRET
     ) as JwtPayload;
 
-    const user = await prisma.user.findUnique({
-      where: { id: decoded.id },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        timezone: true,
-        dateFormat: true,
-        avatarUrl: true,
-      },
-    });
+    // Look up user from in-memory store instead of database
+    const storedUser = authService.getUserById(decoded.id);
 
-    if (!user) {
+    if (!storedUser) {
       throw new ApiError(401, 'User associated with this token no longer exists');
     }
 
-    authReq.user = user;
+    authReq.user = {
+      id: storedUser.id,
+      email: storedUser.email,
+      name: storedUser.name,
+      timezone: storedUser.timezone,
+      dateFormat: storedUser.dateFormat,
+      avatarUrl: storedUser.avatarUrl,
+    };
     next();
   } catch (error: unknown) {
+    if (error instanceof ApiError) throw error;
     if (error instanceof Error && error.name === 'TokenExpiredError') {
       throw new ApiError(401, 'Access token has expired, please refresh token');
     }

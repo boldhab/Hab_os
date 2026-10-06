@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../providers/auth_provider.dart';
+import '../../../core/utils/google_auth_launcher.dart';
 
 class GoogleLogoIcon extends StatelessWidget {
   final double size;
@@ -102,13 +103,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   void _signInWithGoogle() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text('Google Sign-In coming soon!'),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-    );
+    GoogleAuthLauncher.launch(context);
   }
 
   @override
@@ -127,6 +122,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
         );
+      }
+      if (next.status == AuthStatus.authenticated) {
+        context.go('/');
       }
     });
 

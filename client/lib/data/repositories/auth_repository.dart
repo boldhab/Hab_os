@@ -77,6 +77,42 @@ class AuthRepository {
     }
   }
 
+  Future<UserModel> signInWithGoogle({
+    String? idToken,
+    String? email,
+    String? name,
+    String? avatarUrl,
+    String? googleId,
+  }) async {
+    try {
+      final response = await dio.post(
+        ApiEndpoints.googleAuth,
+        data: {
+          if (idToken != null && idToken.isNotEmpty) 'idToken': idToken,
+          if (email != null && email.isNotEmpty) 'email': email,
+          if (name != null && name.isNotEmpty) 'name': name,
+          if (avatarUrl != null && avatarUrl.isNotEmpty) 'avatarUrl': avatarUrl,
+          if (googleId != null && googleId.isNotEmpty) 'googleId': googleId,
+        },
+      );
+
+      final data = response.data['data'] ?? response.data;
+      final user = UserModel.fromJson(Map<String, dynamic>.from(data['user']));
+      final tokens =
+          AuthTokensModel.fromJson(Map<String, dynamic>.from(data['tokens']));
+
+      await storage.saveAccessToken(tokens.accessToken);
+      await storage.saveRefreshToken(tokens.refreshToken);
+      await storage.saveUserId(user.id);
+
+      return user;
+    } on DioException catch (e) {
+      final message = e.response?.data?['message'] ??
+          'Google authentication failed. Please try again.';
+      throw Exception(message);
+    }
+  }
+
   Future<UserModel?> getProfile() async {
     try {
       final response = await dio.get(ApiEndpoints.profile);

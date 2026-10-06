@@ -84,6 +84,28 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
+  Future<void> signInWithGoogle({
+    String? idToken,
+    String? email,
+    String? name,
+    String? avatarUrl,
+    String? googleId,
+  }) async {
+    state = AuthState.authenticating();
+    try {
+      final user = await authRepo.signInWithGoogle(
+        idToken: idToken,
+        email: email,
+        name: name,
+        avatarUrl: avatarUrl,
+        googleId: googleId,
+      );
+      state = AuthState.authenticated(user);
+    } catch (e) {
+      state = AuthState.error(e.toString().replaceAll('Exception: ', ''));
+    }
+  }
+
   Future<void> logout() async {
     await authRepo.logout();
     state = AuthState.unauthenticated();
