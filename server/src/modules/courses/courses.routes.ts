@@ -13,9 +13,12 @@ import {
   addClassScheduleSchema,
   whatIfFinalGradeSchema,
   uuidParamSchema,
+  courseIdParamSchema,
   courseAssignmentParamSchema,
   courseExamParamSchema,
   courseScheduleParamSchema,
+  recordStudySessionSchema,
+  academicSummaryQuerySchema,
 } from './courses.validation';
 
 const router = Router();
@@ -24,8 +27,8 @@ const router = Router();
 router.use(authenticate);
 
 // --- Academic Overview & GPA Engine ---
-router.get('/summary', coursesController.getAcademicSummary);
-router.get('/gpa', coursesController.getGpaOverview);
+router.get('/summary', validate(academicSummaryQuerySchema, 'query'), coursesController.getAcademicSummary);
+router.get('/gpa', validate(academicSummaryQuerySchema, 'query'), coursesController.getGpaOverview);
 router.get('/schedules', coursesController.getClassSchedules);
 
 // --- Courses CRUD ---
@@ -43,6 +46,7 @@ router.delete('/:id', validate(uuidParamSchema, 'params'), coursesController.del
 // --- Assignments ---
 router.post(
   '/:courseId/assignments',
+  validate(courseIdParamSchema, 'params'),
   validate(createAssignmentSchema),
   coursesController.createAssignment
 );
@@ -61,6 +65,7 @@ router.delete(
 // --- Exams ---
 router.post(
   '/:courseId/exams',
+  validate(courseIdParamSchema, 'params'),
   validate(createExamSchema),
   coursesController.createExam
 );
@@ -79,14 +84,16 @@ router.delete(
 // --- Attendance ---
 router.post(
   '/:courseId/attendance',
+  validate(courseIdParamSchema, 'params'),
   validate(recordAttendanceSchema),
   coursesController.recordAttendance
 );
 
 // --- Class Schedules (Weekly Timetable) ---
-router.get('/:courseId/schedules', coursesController.getClassSchedules);
+router.get('/:courseId/schedules', validate(courseIdParamSchema, 'params'), coursesController.getClassSchedules);
 router.post(
   '/:courseId/schedules',
+  validate(courseIdParamSchema, 'params'),
   validate(addClassScheduleSchema),
   coursesController.addClassSchedule
 );
@@ -99,12 +106,18 @@ router.delete(
 // --- What-If Final Exam Calculator ---
 router.post(
   '/:courseId/what-if',
+  validate(courseIdParamSchema, 'params'),
   validate(whatIfFinalGradeSchema),
   coursesController.calculateWhatIfFinalGrade
 );
 
 // --- Study Sessions ---
-router.post('/:courseId/study', coursesController.recordStudySession);
-router.get('/:courseId/study', coursesController.getStudySessions);
+router.post(
+  '/:courseId/study',
+  validate(courseIdParamSchema, 'params'),
+  validate(recordStudySessionSchema),
+  coursesController.recordStudySession
+);
+router.get('/:courseId/study', validate(courseIdParamSchema, 'params'), coursesController.getStudySessions);
 
 export default router;

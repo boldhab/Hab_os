@@ -21,7 +21,7 @@ export const updateCourseSchema = Joi.object({
   credits: Joi.number().integer().min(1).max(10),
   progress: Joi.number().min(0).max(100),
   color: Joi.string().trim(),
-});
+}).min(1);
 
 export const createAssignmentSchema = Joi.object({
   title: Joi.string().trim().min(1).max(255).required().messages({
@@ -35,8 +35,15 @@ export const createAssignmentSchema = Joi.object({
   type: Joi.string().valid('HOMEWORK', 'ESSAY', 'PROJECT', 'LAB', 'QUIZ').default('HOMEWORK'),
   weight: Joi.number().min(0).max(100).default(10.0),
   status: Joi.string().valid('NOT_STARTED', 'IN_PROGRESS', 'SUBMITTED', 'GRADED').default('NOT_STARTED'),
-  grade: Joi.number().min(0).allow(null),
   maxGrade: Joi.number().min(1).default(100.0),
+  grade: Joi.number().min(0).allow(null),
+}).custom((value, helpers) => {
+  if (value.grade !== null && value.grade !== undefined && value.maxGrade !== undefined) {
+    if (value.grade > value.maxGrade) {
+      return helpers.error('any.custom', { message: 'Grade cannot exceed maximum grade' });
+    }
+  }
+  return value;
 });
 
 export const updateAssignmentSchema = Joi.object({
@@ -46,8 +53,15 @@ export const updateAssignmentSchema = Joi.object({
   type: Joi.string().valid('HOMEWORK', 'ESSAY', 'PROJECT', 'LAB', 'QUIZ'),
   weight: Joi.number().min(0).max(100).allow(null),
   status: Joi.string().valid('NOT_STARTED', 'IN_PROGRESS', 'SUBMITTED', 'GRADED'),
-  grade: Joi.number().min(0).allow(null),
   maxGrade: Joi.number().min(1),
+  grade: Joi.number().min(0).allow(null),
+}).min(1).custom((value, helpers) => {
+  if (value.grade !== null && value.grade !== undefined && value.maxGrade !== undefined) {
+    if (value.grade > value.maxGrade) {
+      return helpers.error('any.custom', { message: 'Grade cannot exceed maximum grade' });
+    }
+  }
+  return value;
 });
 
 export const createExamSchema = Joi.object({
@@ -61,8 +75,15 @@ export const createExamSchema = Joi.object({
   startTime: Joi.string().pattern(/^([01]\d|2[0-3]):([0-5]\d)$/).allow('', null),
   examType: Joi.string().valid('MIDTERM', 'FINAL', 'QUIZ', 'ORAL').default('MIDTERM'),
   weight: Joi.number().min(0).max(100).allow(null),
-  grade: Joi.number().min(0).allow(null),
   maxGrade: Joi.number().min(1).default(100.0),
+  grade: Joi.number().min(0).allow(null),
+}).custom((value, helpers) => {
+  if (value.grade !== null && value.grade !== undefined && value.maxGrade !== undefined) {
+    if (value.grade > value.maxGrade) {
+      return helpers.error('any.custom', { message: 'Grade cannot exceed maximum grade' });
+    }
+  }
+  return value;
 });
 
 export const updateExamSchema = Joi.object({
@@ -71,8 +92,15 @@ export const updateExamSchema = Joi.object({
   startTime: Joi.string().pattern(/^([01]\d|2[0-3]):([0-5]\d)$/).allow('', null),
   examType: Joi.string().valid('MIDTERM', 'FINAL', 'QUIZ', 'ORAL'),
   weight: Joi.number().min(0).max(100).allow(null),
-  grade: Joi.number().min(0).allow(null),
   maxGrade: Joi.number().min(1),
+  grade: Joi.number().min(0).allow(null),
+}).min(1).custom((value, helpers) => {
+  if (value.grade !== null && value.grade !== undefined && value.maxGrade !== undefined) {
+    if (value.grade > value.maxGrade) {
+      return helpers.error('any.custom', { message: 'Grade cannot exceed maximum grade' });
+    }
+  }
+  return value;
 });
 
 export const recordAttendanceSchema = Joi.object({
@@ -94,17 +122,39 @@ export const addClassScheduleSchema = Joi.object({
     'any.required': 'End time is required',
   }),
   room: Joi.string().trim().allow('', null),
+}).custom((value, helpers) => {
+  if (value.startTime && value.endTime && value.startTime >= value.endTime) {
+    return helpers.error('any.custom', { message: 'End time must be after start time' });
+  }
+  return value;
 });
 
 export const whatIfFinalGradeSchema = Joi.object({
   targetPercentage: Joi.number().min(0).max(100).required().messages({
     'any.required': 'Target percentage is required',
   }),
-  finalExamWeight: Joi.number().min(1).max(100).default(30.0),
+  finalExamWeight: Joi.number().min(0.1).max(100).optional(),
+});
+
+export const recordStudySessionSchema = Joi.object({
+  durationMinutes: Joi.number().integer().min(1).max(1440).required().messages({
+    'any.required': 'Duration in minutes is required',
+    'number.min': 'Duration must be at least 1 minute',
+  }),
+  notes: Joi.string().trim().allow('', null),
+  startTime: Joi.date().iso().allow(null),
+});
+
+export const academicSummaryQuerySchema = Joi.object({
+  semester: Joi.string().trim().allow('', null),
 });
 
 export const uuidParamSchema = Joi.object({
   id: Joi.string().uuid().required(),
+});
+
+export const courseIdParamSchema = Joi.object({
+  courseId: Joi.string().uuid().required(),
 });
 
 export const courseAssignmentParamSchema = Joi.object({
