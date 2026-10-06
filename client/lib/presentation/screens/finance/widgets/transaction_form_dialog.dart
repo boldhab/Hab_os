@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../app/theme/app_theme.dart';
+import '../../../widgets/common/form_section_header.dart';
 
 class TransactionFormDialog extends StatefulWidget {
   const TransactionFormDialog({super.key});
@@ -58,95 +59,236 @@ class _TransactionFormDialogState extends State<TransactionFormDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final primaryRed = colorScheme.primary;
     final semantics = AppSemanticColors.of(context);
 
-    return AlertDialog(
-      title: const Text('Add Transaction'),
-      content: SingleChildScrollView(
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Type Segmented Button
-              SegmentedButton<String>(
-                segments: [
-                  ButtonSegment(
-                    value: 'EXPENSE',
-                    label: const Text('Expense'),
-                    icon: Icon(Icons.arrow_downward_rounded,
-                        color: semantics.danger),
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      clipBehavior: Clip.antiAlias,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 500),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Header
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 18, 16, 12),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: primaryRed.withAlpha(25),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(Icons.account_balance_wallet_rounded,
+                        size: 20, color: primaryRed),
                   ),
-                  ButtonSegment(
-                    value: 'INCOME',
-                    label: const Text('Income'),
-                    icon: Icon(Icons.arrow_upward_rounded,
-                        color: semantics.success),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Add Transaction',
+                          style: TextStyle(
+                              fontSize: 18, fontWeight: FontWeight.w800),
+                        ),
+                        Text(
+                          'Record an income or expense transaction',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: colorScheme.onSurfaceVariant.withAlpha(170),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded),
+                    onPressed: () => Navigator.of(context).pop(null),
                   ),
                 ],
-                selected: {_type},
-                onSelectionChanged: (sel) {
-                  setState(() => _type = sel.first);
-                },
               ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _amountController,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
-                decoration: const InputDecoration(
-                  labelText: 'Amount (\$)',
-                  prefixText: '\$ ',
-                  hintText: '0.00',
+            ),
+            const Divider(height: 1),
+
+            // Form Body
+            Flexible(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(20),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Type Segmented Button
+                      SegmentedButton<String>(
+                        segments: [
+                          ButtonSegment(
+                            value: 'EXPENSE',
+                            label: const Text('Expense'),
+                            icon: Icon(Icons.arrow_downward_rounded,
+                                color: semantics.danger),
+                          ),
+                          ButtonSegment(
+                            value: 'INCOME',
+                            label: const Text('Income'),
+                            icon: Icon(Icons.arrow_upward_rounded,
+                                color: semantics.success),
+                          ),
+                        ],
+                        selected: {_type},
+                        onSelectionChanged: (sel) {
+                          setState(() => _type = sel.first);
+                        },
+                      ),
+                      const SizedBox(height: 20),
+
+                      const FormSectionHeader(
+                        title: 'Transaction Details',
+                        icon: Icons.edit_note_rounded,
+                      ),
+                      TextFormField(
+                        controller: _amountController,
+                        autofocus: true,
+                        keyboardType:
+                            const TextInputType.numberWithOptions(decimal: true),
+                        decoration: InputDecoration(
+                          labelText: 'Amount *',
+                          prefixIcon: Icon(Icons.attach_money_rounded,
+                              color: primaryRed, size: 20),
+                          hintText: '0.00',
+                        ),
+                        validator: (val) {
+                          final n = double.tryParse(val ?? '');
+                          if (n == null || n <= 0) {
+                            return 'Enter a positive valid amount';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 14),
+                      TextFormField(
+                        controller: _descController,
+                        decoration: const InputDecoration(
+                          labelText: 'Description (optional)',
+                          hintText: 'e.g. Grocery shopping, salary, dinner',
+                          prefixIcon:
+                              Icon(Icons.description_outlined, size: 20),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      TextFormField(
+                        controller: _sourceController,
+                        decoration: const InputDecoration(
+                          labelText: 'Payment Method / Source',
+                          hintText: 'e.g. Cash, Debit Card, Chase, PayPal',
+                          prefixIcon: Icon(Icons.credit_card_rounded, size: 20),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+
+                      const FormSectionHeader(
+                        title: 'Transaction Date',
+                        icon: Icons.calendar_today_rounded,
+                      ),
+                      InkWell(
+                        onTap: _pickDate,
+                        borderRadius: BorderRadius.circular(14),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 12),
+                          decoration: BoxDecoration(
+                            color: colorScheme.surfaceContainerHighest
+                                .withAlpha(45),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: colorScheme.outlineVariant.withAlpha(85),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(6),
+                                decoration: BoxDecoration(
+                                  color: primaryRed.withAlpha(20),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Icon(Icons.calendar_month_rounded,
+                                    size: 18, color: primaryRed),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      '${_date.year}-${_date.month.toString().padLeft(2, '0')}-${_date.day.toString().padLeft(2, '0')}',
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 14),
+                                    ),
+                                    Text(
+                                      'Tap to select a different date',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: colorScheme.onSurfaceVariant
+                                            .withAlpha(160),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Icon(Icons.chevron_right_rounded,
+                                  size: 20,
+                                  color: colorScheme.onSurfaceVariant),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                validator: (val) {
-                  final n = double.tryParse(val ?? '');
-                  if (n == null || n <= 0) return 'Enter a positive amount';
-                  return null;
-                },
               ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _descController,
-                decoration: const InputDecoration(
-                  labelText: 'Description',
-                  hintText: 'e.g. Grocery shopping',
-                ),
+            ),
+            const Divider(height: 1),
+
+            // Actions Footer
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 14, 20, 16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(null),
+                    child: const Text('Cancel'),
+                  ),
+                  const SizedBox(width: 12),
+                  FilledButton.icon(
+                    icon: const Icon(Icons.check_rounded, size: 18),
+                    onPressed: _submit,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: primaryRed,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 18, vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    label: const Text('Save Transaction'),
+                  ),
+                ],
               ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _sourceController,
-                decoration: const InputDecoration(
-                  labelText: 'Payment Method / Source',
-                  hintText: 'e.g. CASH, CARD, BANK',
-                ),
-              ),
-              const SizedBox(height: 16),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Transaction Date'),
-                subtitle: Text(
-                  '${_date.year}-${_date.month.toString().padLeft(2, '0')}-${_date.day.toString().padLeft(2, '0')}',
-                ),
-                trailing: IconButton(
-                  icon: const Icon(Icons.calendar_today_rounded),
-                  onPressed: _pickDate,
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(null),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: _submit,
-          child: const Text('Save'),
-        ),
-      ],
     );
   }
 }
+

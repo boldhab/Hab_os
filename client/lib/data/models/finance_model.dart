@@ -85,6 +85,11 @@ class BudgetModel extends Equatable {
   final double monthlyLimit;
   final int month;
   final int year;
+  final double spent;
+  final double remaining;
+  final double percentageUsed;
+  final bool isWarning;
+  final bool isExceeded;
   final TransactionCategorySummary? category;
 
   const BudgetModel({
@@ -93,16 +98,35 @@ class BudgetModel extends Equatable {
     required this.monthlyLimit,
     required this.month,
     required this.year,
+    this.spent = 0.0,
+    this.remaining = 0.0,
+    this.percentageUsed = 0.0,
+    this.isWarning = false,
+    this.isExceeded = false,
     this.category,
   });
 
   factory BudgetModel.fromJson(Map<String, dynamic> json) {
+    final limit = (json['monthlyLimit'] as num?)?.toDouble() ?? 0.0;
+    final spentVal = (json['spent'] as num?)?.toDouble() ?? 0.0;
+    final remainingVal = json['remaining'] != null
+        ? (json['remaining'] as num).toDouble()
+        : (limit - spentVal > 0 ? limit - spentVal : 0.0);
+    final percentVal = json['percentageUsed'] != null
+        ? (json['percentageUsed'] as num).toDouble()
+        : (limit > 0 ? (spentVal / limit) * 100 : 0.0);
+
     return BudgetModel(
       id: json['id'] ?? '',
-      categoryId: json['categoryId'] ?? '',
-      monthlyLimit: (json['monthlyLimit'] as num?)?.toDouble() ?? 0.0,
+      categoryId: json['categoryId'] ?? json['category']?['id'] ?? '',
+      monthlyLimit: limit,
       month: json['month'] ?? 1,
       year: json['year'] ?? 2026,
+      spent: spentVal,
+      remaining: remainingVal,
+      percentageUsed: percentVal,
+      isWarning: json['isWarning'] as bool? ?? (percentVal >= 80 && spentVal <= limit),
+      isExceeded: json['isExceeded'] as bool? ?? (spentVal > limit),
       category: json['category'] != null
           ? TransactionCategorySummary.fromJson(
               Map<String, dynamic>.from(json['category']))
@@ -111,8 +135,19 @@ class BudgetModel extends Equatable {
   }
 
   @override
-  List<Object?> get props =>
-      [id, categoryId, monthlyLimit, month, year, category];
+  List<Object?> get props => [
+        id,
+        categoryId,
+        monthlyLimit,
+        month,
+        year,
+        spent,
+        remaining,
+        percentageUsed,
+        isWarning,
+        isExceeded,
+        category,
+      ];
 }
 
 class FinanceAnalyticsModel extends Equatable {
@@ -136,4 +171,43 @@ class FinanceAnalyticsModel extends Equatable {
 
   @override
   List<Object?> get props => [totalIncome, totalExpense, netSavings];
+}
+
+class PaginationInfo extends Equatable {
+  final int total;
+  final int page;
+  final int limit;
+  final int totalPages;
+
+  const PaginationInfo({
+    required this.total,
+    required this.page,
+    required this.limit,
+    required this.totalPages,
+  });
+
+  factory PaginationInfo.fromJson(Map<String, dynamic> json) {
+    return PaginationInfo(
+      total: (json['total'] as num?)?.toInt() ?? 0,
+      page: (json['page'] as num?)?.toInt() ?? 1,
+      limit: (json['limit'] as num?)?.toInt() ?? 20,
+      totalPages: (json['totalPages'] as num?)?.toInt() ?? 1,
+    );
+  }
+
+  @override
+  List<Object?> get props => [total, page, limit, totalPages];
+}
+
+class PaginatedTransactions extends Equatable {
+  final List<TransactionModel> transactions;
+  final PaginationInfo pagination;
+
+  const PaginatedTransactions({
+    required this.transactions,
+    required this.pagination,
+  });
+
+  @override
+  List<Object?> get props => [transactions, pagination];
 }
