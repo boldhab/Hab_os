@@ -20,15 +20,19 @@ export interface LifeScoreBreakdown {
  */
 export const calculateLifeScore = async (userId: string): Promise<LifeScoreBreakdown> => {
   const now = new Date();
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
-  const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+  const utcYear = now.getUTCFullYear();
+  const utcMonth = now.getUTCMonth();
+  const utcDate = now.getUTCDate();
 
-  const dayOfWeek = now.getDay();
-  const diffToMonday = now.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
-  const startOfWeek = new Date(now.setDate(diffToMonday));
-  startOfWeek.setHours(0, 0, 0, 0);
+  // UTC midnight boundaries matching habit_logs UTC calendar records
+  const startOfToday = new Date(Date.UTC(utcYear, utcMonth, utcDate, 0, 0, 0, 0));
+  const endOfToday = new Date(Date.UTC(utcYear, utcMonth, utcDate, 23, 59, 59, 999));
 
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0);
+  const dayOfWeek = now.getUTCDay();
+  const diffToMonday = utcDate - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
+  const startOfWeek = new Date(Date.UTC(utcYear, utcMonth, diffToMonday, 0, 0, 0, 0));
+
+  const startOfMonth = new Date(Date.UTC(utcYear, utcMonth, 1, 0, 0, 0, 0));
 
   // Fetch all domain data concurrently
   const [
@@ -70,10 +74,10 @@ export const calculateLifeScore = async (userId: string): Promise<LifeScoreBreak
       },
     }),
     prisma.focusSession.findMany({
-      where: { userId, startTime: { gte: startOfToday, lte: endOfToday } },
+      where: { userId, status: 'COMPLETED', startTime: { gte: startOfToday, lte: endOfToday } },
     }),
     prisma.workout.findMany({
-      where: { userId, date: { gte: startOfWeek } },
+      where: { userId, date: { gte: startOfWeek, lte: now } },
     }),
     prisma.course.findMany({
       where: { userId },
@@ -83,15 +87,23 @@ export const calculateLifeScore = async (userId: string): Promise<LifeScoreBreak
       },
     }),
     prisma.transaction.aggregate({
-      where: { userId, type: 'EXPENSE', date: { gte: startOfMonth } },
+      where: {
+        userId,
+        type: 'EXPENSE',
+        date: { gte: startOfMonth, lt: new Date(Date.UTC(utcYear, utcMonth + 1, 1)) },
+      },
       _sum: { amount: true },
     }),
     prisma.transaction.aggregate({
-      where: { userId, type: 'INCOME', date: { gte: startOfMonth } },
+      where: {
+        userId,
+        type: 'INCOME',
+        date: { gte: startOfMonth, lt: new Date(Date.UTC(utcYear, utcMonth + 1, 1)) },
+      },
       _sum: { amount: true },
     }),
     prisma.budget.findMany({
-      where: { userId },
+      where: { userId, month: utcMonth + 1, year: utcYear },
     }),
   ]);
 
@@ -108,21 +120,35 @@ export const calculateLifeScore = async (userId: string): Promise<LifeScoreBreak
     recommendations.push(`Clear ${overdueTasks} overdue task(s) to restore your Task component score.`);
   }
 
-  // 2. Habit Score (Weight: 0.20, Difficulty Weighted)
+  // 2. Habit Score (Weight: 0.20, Difficulty Weighted + Partial Progress Credit)
   let habitScore = 80;
   if (habits.length > 0) {
     const totalWeight = habits.reduce((sum, h) => sum + (h.weight || 1.0), 0);
-    const completedWeight = habits
-      .filter((h) => h.logs.length > 0 && h.logs[0].isCompleted)
-      .reduce((sum, h) => sum + (h.weight || 1.0), 0);
-    const rate = totalWeight > 0 ? (completedWeight / totalWeight) * 100 : 0;
+    let earnedWeight = 0;
+    let fullyCompletedCount = 0;
+
+    for (const h of habits) {
+      const w = h.weight || 1.0;
+      const log = h.logs[0];
+      if (!log) continue;
+
+      if (log.isCompleted) {
+        earnedWeight += w;
+        fullyCompletedCount++;
+      } else if (h.targetType !== 'CHECKBOX' && h.targetValue > 0 && (log.value ?? 0) > 0) {
+        // Proportional partial credit for duration and numeric target habits
+        const progressRatio = Math.min(1.0, Math.max(0, log.value / h.targetValue));
+        earnedWeight += w * progressRatio;
+      }
+    }
+
+    const rate = totalWeight > 0 ? (earnedWeight / totalWeight) * 100 : 0;
     const avgStreak = habits.reduce((sum, h) => sum + h.currentStreak, 0) / habits.length;
     const streakBonus = Math.min(15, avgStreak * 2);
-    habitScore = Math.min(100, rate * 0.85 + streakBonus);
+    habitScore = Math.min(100, Math.round(rate * 0.85 + streakBonus));
 
-    const completedCount = habits.filter((h) => h.logs.length > 0 && h.logs[0].isCompleted).length;
-    if (completedCount < habits.length) {
-      recommendations.push(`Complete remaining ${habits.length - completedCount} habit(s) today to maximize habit consistency.`);
+    if (fullyCompletedCount < habits.length) {
+      recommendations.push(`Complete remaining ${habits.length - fullyCompletedCount} habit(s) today to maximize habit consistency.`);
     }
   }
 
@@ -163,9 +189,9 @@ export const calculateLifeScore = async (userId: string): Promise<LifeScoreBreak
 
   // 6. Personal Finance Score (Weight: 0.15)
   let financeScore = 85;
-  const totalSpent = monthExpenses._sum.amount || 0;
-  const totalEarned = monthIncome._sum.amount || 0;
-  const totalBudget = budgets.reduce((sum, b) => sum + b.monthlyLimit, 0);
+  const totalSpent = monthExpenses._sum.amount ? Number(monthExpenses._sum.amount) : 0;
+  const totalEarned = monthIncome._sum.amount ? Number(monthIncome._sum.amount) : 0;
+  const totalBudget = budgets.reduce((sum, b) => sum + Number(b.monthlyLimit), 0);
 
   if (totalBudget > 0) {
     const budgetAdherence = totalSpent <= totalBudget ? 100 : Math.max(0, 100 - ((totalSpent - totalBudget) / totalBudget) * 100);
@@ -185,13 +211,35 @@ export const calculateLifeScore = async (userId: string): Promise<LifeScoreBreak
 
   const customWeights = (user?.preferences?.lifeScoreWeights as Record<string, number> | null) || {};
 
+  // Backward compatibility: map legacy 'focus' to coding & study if coding/study are missing
+  const legacyFocus = typeof customWeights.focus === 'number' ? customWeights.focus : undefined;
+  const rawCoding = typeof customWeights.coding === 'number'
+    ? customWeights.coding
+    : (legacyFocus !== undefined ? legacyFocus / 2 : undefined);
+  const rawStudy = typeof customWeights.study === 'number'
+    ? customWeights.study
+    : (legacyFocus !== undefined ? legacyFocus / 2 : undefined);
+
+  // Check if customWeights are in percentage scale (> 1.0)
+  const numericValues = [
+    customWeights.tasks,
+    customWeights.habits,
+    rawCoding,
+    rawStudy,
+    customWeights.gym,
+    customWeights.finance,
+  ].filter((v): v is number => typeof v === 'number');
+
+  const isPercentageScale = numericValues.some((v) => v > 1.0);
+  const scaleMultiplier = isPercentageScale ? 100 : 1;
+
   const weights = {
-    tasks: typeof customWeights.tasks === 'number' ? customWeights.tasks : defaultWeights.tasks,
-    habits: typeof customWeights.habits === 'number' ? customWeights.habits : defaultWeights.habits,
-    coding: typeof customWeights.coding === 'number' ? customWeights.coding : defaultWeights.coding,
-    study: typeof customWeights.study === 'number' ? customWeights.study : defaultWeights.study,
-    gym: typeof customWeights.gym === 'number' ? customWeights.gym : defaultWeights.gym,
-    finance: typeof customWeights.finance === 'number' ? customWeights.finance : defaultWeights.finance,
+    tasks: typeof customWeights.tasks === 'number' ? Math.max(0, customWeights.tasks) : defaultWeights.tasks * scaleMultiplier,
+    habits: typeof customWeights.habits === 'number' ? Math.max(0, customWeights.habits) : defaultWeights.habits * scaleMultiplier,
+    coding: typeof rawCoding === 'number' ? Math.max(0, rawCoding) : defaultWeights.coding * scaleMultiplier,
+    study: typeof rawStudy === 'number' ? Math.max(0, rawStudy) : defaultWeights.study * scaleMultiplier,
+    gym: typeof customWeights.gym === 'number' ? Math.max(0, customWeights.gym) : defaultWeights.gym * scaleMultiplier,
+    finance: typeof customWeights.finance === 'number' ? Math.max(0, customWeights.finance) : defaultWeights.finance * scaleMultiplier,
   };
 
   const rawOverall =
@@ -202,7 +250,8 @@ export const calculateLifeScore = async (userId: string): Promise<LifeScoreBreak
     gymScore * weights.gym +
     financeScore * weights.finance;
 
-  const overallScore = Number(rawOverall.toFixed(1));
+  const totalWeight = Object.values(weights).reduce((sum, weight) => sum + weight, 0);
+  const overallScore = Number((totalWeight > 0 ? rawOverall / totalWeight : 0).toFixed(1));
 
   // Determine Level
   let level: 'OPTIMAL' | 'PRODUCTIVE' | 'BALANCED' | 'NEEDS_ATTENTION' = 'BALANCED';
@@ -211,16 +260,18 @@ export const calculateLifeScore = async (userId: string): Promise<LifeScoreBreak
   else if (overallScore >= 50) level = 'BALANCED';
   else level = 'NEEDS_ATTENTION';
 
+  const normWeight = (w: number) => totalWeight > 0 ? Number((w / totalWeight).toFixed(2)) : 0;
+
   return {
     overallScore,
     level,
     components: {
-      tasks: { score: Number(taskScore.toFixed(1)), weight: weights.tasks, label: 'Tasks & Deadlines' },
-      habits: { score: Number(habitScore.toFixed(1)), weight: weights.habits, label: 'Habit Streaks' },
-      coding: { score: Number(codingScore.toFixed(1)), weight: weights.coding, label: 'Development Focus' },
-      study: { score: Number(studyScore.toFixed(1)), weight: weights.study, label: 'Academic & Learning' },
-      gym: { score: Number(gymScore.toFixed(1)), weight: weights.gym, label: 'Physical Fitness' },
-      finance: { score: Number(financeScore.toFixed(1)), weight: weights.finance, label: 'Financial Health' },
+      tasks: { score: Number(taskScore.toFixed(1)), weight: normWeight(weights.tasks), label: 'Tasks & Deadlines' },
+      habits: { score: Number(habitScore.toFixed(1)), weight: normWeight(weights.habits), label: 'Habit Streaks' },
+      coding: { score: Number(codingScore.toFixed(1)), weight: normWeight(weights.coding), label: 'Development Focus' },
+      study: { score: Number(studyScore.toFixed(1)), weight: normWeight(weights.study), label: 'Academic & Learning' },
+      gym: { score: Number(gymScore.toFixed(1)), weight: normWeight(weights.gym), label: 'Physical Fitness' },
+      finance: { score: Number(financeScore.toFixed(1)), weight: normWeight(weights.finance), label: 'Financial Health' },
     },
     recommendations,
     calculatedAt: new Date(),
@@ -233,13 +284,16 @@ export const calculateLifeScore = async (userId: string): Promise<LifeScoreBreak
 export const snapshotDailyLifeScore = async (userId: string) => {
   const breakdown = await calculateLifeScore(userId);
 
-  const startOfToday = new Date();
-  startOfToday.setHours(0, 0, 0, 0);
+  const now = new Date();
+  const startOfToday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
 
   const existingLog = await prisma.lifeScoreLog.findFirst({
     where: {
       userId,
-      date: { gte: startOfToday },
+      date: {
+        gte: startOfToday,
+        lt: new Date(startOfToday.getTime() + 24 * 60 * 60 * 1000),
+      },
     },
   });
 
@@ -260,7 +314,7 @@ export const snapshotDailyLifeScore = async (userId: string) => {
   } else {
     log = await prisma.lifeScoreLog.create({
       data: {
-        date: new Date(),
+        date: startOfToday,
         overallScore: breakdown.overallScore,
         taskScore: breakdown.components.tasks.score,
         habitScore: breakdown.components.habits.score,
