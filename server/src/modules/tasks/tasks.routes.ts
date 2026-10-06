@@ -1,15 +1,16 @@
-import { Router, Request, Response } from 'express';
+import { Router } from 'express';
 import * as tasksController from './tasks.controller';
-import tasksService from './tasks.service';
-import { authenticate, AuthRequest } from '../../middleware/auth';
+import { authenticate } from '../../middleware/auth';
 import { validate } from '../../middleware/validate';
-import ApiResponse from '../../common/apiResponse';
-import asyncHandler from '../../common/asyncHandler';
 import {
   createTaskSchema,
   updateTaskSchema,
   getTasksQuerySchema,
   taskIdParamSchema,
+  reorderTaskSchema,
+  createSubtaskSchema,
+  addDependencySchema,
+  dependencyParamsSchema,
 } from './tasks.validation';
 
 const router = Router();
@@ -21,15 +22,9 @@ router.post('/', validate(createTaskSchema), tasksController.createTask);
 router.get('/', validate(getTasksQuerySchema, 'query'), tasksController.getTasks);
 router.get('/stats', tasksController.getTaskStats);
 router.get('/workload', tasksController.getDailyWorkload);
-
-router.get(
-  '/matrix',
-  asyncHandler(async (req: Request, res: Response) => {
-    const authReq = req as AuthRequest;
-    const matrix = await tasksService.getEisenhowerMatrix(authReq.user!.id);
-    return ApiResponse.success(res, matrix, 'Eisenhower matrix retrieved');
-  })
-);
+router.get('/matrix', tasksController.getEisenhowerMatrix);
+router.post('/reorder', validate(reorderTaskSchema), tasksController.reorderTask);
+router.post('/sync-calendar', tasksController.syncAllTasksCalendar);
 
 router.get('/:id', validate(taskIdParamSchema, 'params'), tasksController.getTaskById);
 
@@ -44,6 +39,7 @@ router.put(
 router.patch(
   '/:id',
   validate(taskIdParamSchema, 'params'),
+  validate(updateTaskSchema),
   tasksController.updateTask
 );
 
@@ -61,30 +57,29 @@ router.delete(
 
 router.post(
   '/:id/subtasks',
-  asyncHandler(async (req: Request, res: Response) => {
-    const authReq = req as AuthRequest;
-    const subtask = await tasksService.createSubtask(authReq.user!.id, req.params.id, req.body);
-    return ApiResponse.success(res, subtask, 'Subtask created', 201);
-  })
+  validate(taskIdParamSchema, 'params'),
+  validate(createSubtaskSchema),
+  tasksController.createSubtask
 );
 
 router.post(
   '/:id/dependencies',
-  asyncHandler(async (req: Request, res: Response) => {
-    const authReq = req as AuthRequest;
-    const { blockingTaskId } = req.body;
-    const dependency = await tasksService.addDependency(authReq.user!.id, req.params.id, blockingTaskId);
-    return ApiResponse.success(res, dependency, 'Task dependency added', 201);
-  })
+  validate(taskIdParamSchema, 'params'),
+  validate(addDependencySchema),
+  tasksController.addDependency
 );
 
 router.delete(
   '/:id/dependencies/:blockingId',
-  asyncHandler(async (req: Request, res: Response) => {
-    const authReq = req as AuthRequest;
-    await tasksService.removeDependency(authReq.user!.id, req.params.id, req.params.blockingId);
-    return ApiResponse.success(res, null, 'Task dependency removed');
-  })
+  validate(dependencyParamsSchema, 'params'),
+  tasksController.removeDependency
+);
+
+router.post(
+  '/:id/sync-calendar',
+  validate(taskIdParamSchema, 'params'),
+  tasksController.syncTaskToCalendar
 );
 
 export default router;
+

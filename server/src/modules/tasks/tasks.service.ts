@@ -1,14 +1,19 @@
 import { Prisma } from '@prisma/client';
 import prisma from '../../config/db';
 import ApiError from '../../common/apiError';
+import logger from '../../utils/logger';
 import { invalidateDashboardCache } from '../dashboard/dashboard.service';
-import { recalculateGoalProgress } from '../goals/goals.service';
+import { recalculateGoalProgress, recalculateGoalProgressTx } from '../goals/goals.service';
+import calendarSyncService from './calendarSync.service';
+
+type DbClient = Prisma.TransactionClient | typeof prisma;
 
 export interface CreateTaskDTO {
   title: string;
   description?: string | null;
   priority?: string;
   status?: string;
+  isCompleted?: boolean;
   dueDate?: Date | string | null;
   estimatedMinutes?: number | null;
   projectId?: string | null;
@@ -39,6 +44,12 @@ export interface UpdateTaskDTO {
   recurrenceRule?: string | null;
 }
 
+export interface ReorderTaskDTO {
+  targetTaskId: string;
+  prevOrder?: number;
+  nextOrder?: number;
+}
+
 export interface GetTasksQuery {
   view?: 'today' | 'upcoming' | 'overdue' | 'completed' | 'all';
   status?: string;
@@ -51,21 +62,107 @@ export interface GetTasksQuery {
   parentTaskId?: string;
   page?: number | string;
   limit?: number | string;
+  cursor?: string;
 }
+
+/**
+ * Helper: Validates multi-tenant ownership for related resources (IDOR prevention)
+ */
+const validateRelationOwnership = async (
+  userId: string,
+  relations: {
+    projectId?: string | null;
+    goalId?: string | null;
+    milestoneId?: string | null;
+    categoryId?: string | null;
+    courseId?: string | null;
+    parentTaskId?: string | null;
+  },
+  currentTaskId?: string,
+  db: DbClient = prisma
+) => {
+  if (relations.projectId) {
+    const project = await db.project.findFirst({
+      where: { id: relations.projectId, userId },
+      select: { id: true },
+    });
+    if (!project) throw new ApiError(404, 'Linked project not found or access denied');
+  }
+
+  if (relations.goalId) {
+    const goal = await db.goal.findFirst({
+      where: { id: relations.goalId, userId },
+      select: { id: true },
+    });
+    if (!goal) throw new ApiError(404, 'Linked goal not found or access denied');
+  }
+
+  if (relations.milestoneId) {
+    const milestone = await db.milestone.findFirst({
+      where: { id: relations.milestoneId, goal: { userId } },
+      select: { id: true },
+    });
+    if (!milestone) throw new ApiError(404, 'Linked milestone not found or access denied');
+  }
+
+  if (relations.categoryId) {
+    const category = await db.category.findFirst({
+      where: { id: relations.categoryId, userId },
+      select: { id: true },
+    });
+    if (!category) throw new ApiError(404, 'Linked category not found or access denied');
+  }
+
+  if (relations.courseId) {
+    const course = await db.course.findFirst({
+      where: { id: relations.courseId, userId },
+      select: { id: true },
+    });
+    if (!course) throw new ApiError(404, 'Linked course not found or access denied');
+  }
+
+  if (relations.parentTaskId) {
+    const visited = new Set<string>();
+    let ancestorId: string | null = relations.parentTaskId;
+
+    while (ancestorId) {
+      if (currentTaskId && ancestorId === currentTaskId) {
+        throw new ApiError(400, 'A task cannot be assigned beneath one of its descendants');
+      }
+      if (visited.has(ancestorId)) {
+        throw new ApiError(400, 'Task hierarchy contains a circular parent relationship');
+      }
+      visited.add(ancestorId);
+
+      const parentTaskRecord: { id: string; parentTaskId: string | null } | null = await db.task.findFirst({
+        where: { id: ancestorId, userId },
+        select: { id: true, parentTaskId: true },
+      });
+      if (!parentTaskRecord) throw new ApiError(404, 'Parent task not found or access denied');
+      ancestorId = parentTaskRecord.parentTaskId;
+    }
+  }
+};
 
 /**
  * Helper: Downstream recalculation of project progress (UC-42)
  */
-const recalculateProjectProgress = async (projectId: string) => {
-  const totalTasks = await prisma.task.count({ where: { projectId } });
-  if (totalTasks === 0) return;
+const recalculateProjectProgress = async (projectId: string, db: DbClient = prisma) => {
+  const totalTasks = await db.task.count({ where: { projectId } });
+  if (totalTasks === 0) {
+    await db.project.update({
+      where: { id: projectId },
+      data: { progress: 0 },
+    });
+    return;
+  }
 
-  const completedTasks = await prisma.task.count({
+  const completedTasks = await db.task.count({
     where: { projectId, isCompleted: true },
   });
 
   const progress = Number(((completedTasks / totalTasks) * 100).toFixed(1));
-  await prisma.project.update({
+  await db.project.update({
     where: { id: projectId },
     data: { progress },
   });
@@ -74,10 +171,15 @@ const recalculateProjectProgress = async (projectId: string) => {
 /**
  * Helper: Automatically synchronizes parent task status based on subtasks
  */
-const evaluateParentCompletion = async (userId: string, parentTaskId: string): Promise<void> => {
-  const parent = await prisma.task.findFirst({
+const evaluateParentCompletion = async (userId: string, parentTaskId: string, db: DbClient = prisma): Promise<void> => {
+  const parent = await db.task.findFirst({
     where: { id: parentTaskId, userId },
-    include: { subtasks: true },
+    include: {
+      subtasks: true,
+      blockedBy: {
+        include: { blockingTask: { select: { isCompleted: true } } },
+      },
+    },
   });
 
   if (!parent || parent.subtasks.length === 0) return;
@@ -85,16 +187,21 @@ const evaluateParentCompletion = async (userId: string, parentTaskId: string): P
   const allSubtasksDone = parent.subtasks.every((s) => s.isCompleted);
 
   if (allSubtasksDone && !parent.isCompleted) {
-    await prisma.task.update({
-      where: { id: parentTaskId },
-      data: {
-        isCompleted: true,
-        status: 'COMPLETED',
-        completedAt: new Date(),
-      },
-    });
+    const hasIncompleteBlockers = parent.blockedBy.some((b) => !b.blockingTask.isCompleted);
+    if (!hasIncompleteBlockers) {
+      await db.task.update({
+        where: { id: parentTaskId },
+        data: {
+          isCompleted: true,
+          status: 'COMPLETED',
+          completedAt: new Date(),
+        },
+      });
+      if (parent.projectId) await recalculateProjectProgress(parent.projectId, db);
+      if (parent.goalId) await recalculateGoalProgressTx(parent.goalId, db);
+    }
   } else if (!allSubtasksDone && parent.isCompleted) {
-    await prisma.task.update({
+    await db.task.update({
       where: { id: parentTaskId },
       data: {
         isCompleted: false,
@@ -102,13 +209,15 @@ const evaluateParentCompletion = async (userId: string, parentTaskId: string): P
         completedAt: null,
       },
     });
+    if (parent.projectId) await recalculateProjectProgress(parent.projectId, db);
+    if (parent.goalId) await recalculateGoalProgressTx(parent.goalId, db);
   }
 };
 
 /**
  * Helper: Spawns next occurrence for a recurring task
  */
-const generateNextRecurringInstance = async (userId: string, task: any): Promise<void> => {
+const generateNextRecurringInstance = async (userId: string, task: any, db: DbClient = prisma): Promise<void> => {
   const baseDate = task.dueDate ? new Date(task.dueDate) : new Date();
   const nextDate = new Date(baseDate);
   const rule = (task.recurrenceRule || 'DAILY').toUpperCase();
@@ -126,7 +235,7 @@ const generateNextRecurringInstance = async (userId: string, task: any): Promise
     nextDate.setDate(now.getDate() + 1);
   }
 
-  await prisma.task.create({
+  await db.task.create({
     data: {
       userId,
       title: task.title,
@@ -139,6 +248,8 @@ const generateNextRecurringInstance = async (userId: string, task: any): Promise
       projectId: task.projectId,
       categoryId: task.categoryId,
       goalId: task.goalId,
+      milestoneId: task.milestoneId || null,
+      courseId: task.courseId || null,
       parentTaskId: task.parentTaskId,
       isRecurring: true,
       recurrenceRule: task.recurrenceRule,
@@ -147,28 +258,73 @@ const generateNextRecurringInstance = async (userId: string, task: any): Promise
 };
 
 /**
- * Cycle detection via DFS
+ * Cycle detection via BFS with batch-prefetched dependency graph.
+ *
+ * Loads all dependency edges for the user's task graph in a single query,
+ * builds an in-memory adjacency map, then performs BFS from targetId to
+ * check if sourceId is reachable — which would indicate a cycle.
  */
-const detectCycle = async (sourceId: string, targetId: string): Promise<boolean> => {
+const detectCycle = async (sourceId: string, targetId: string, db: DbClient = prisma): Promise<boolean> => {
+  // Batch-fetch the entire dependency graph in one query
+  const allEdges = await db.taskDependency.findMany({
+    where: {
+      OR: [
+        { blockedTaskId: sourceId },
+        { blockedTaskId: targetId },
+        { blockingTaskId: sourceId },
+        { blockingTaskId: targetId },
+      ],
+    },
+    select: { blockedTaskId: true, blockingTaskId: true },
+  });
+
+  // If the graph is small enough from the OR filter, expand to full subgraph
+  // by collecting all reachable node IDs and re-fetching
+  const nodeIds = new Set<string>();
+  for (const e of allEdges) {
+    nodeIds.add(e.blockedTaskId);
+    nodeIds.add(e.blockingTaskId);
+  }
+
+  const fullEdges = nodeIds.size > 0
+    ? await db.taskDependency.findMany({
+        where: {
+          OR: [
+            { blockedTaskId: { in: [...nodeIds] } },
+            { blockingTaskId: { in: [...nodeIds] } },
+          ],
+        },
+        select: { blockedTaskId: true, blockingTaskId: true },
+      })
+    : allEdges;
+
+  // Build adjacency map: blockedTaskId -> [blockingTaskIds]
+  const adjacency = new Map<string, string[]>();
+  for (const edge of fullEdges) {
+    const list = adjacency.get(edge.blockedTaskId);
+    if (list) {
+      list.push(edge.blockingTaskId);
+    } else {
+      adjacency.set(edge.blockedTaskId, [edge.blockingTaskId]);
+    }
+  }
+
+  // BFS from targetId; if we reach sourceId, adding sourceId->targetId would form a cycle
   const visited = new Set<string>();
   const queue = [targetId];
 
   while (queue.length > 0) {
     const current = queue.shift()!;
-    if (current === sourceId) {
-      return true;
-    }
-
+    if (current === sourceId) return true;
+    if (visited.has(current)) continue;
     visited.add(current);
 
-    const dependencies = await prisma.taskDependency.findMany({
-      where: { blockedTaskId: current },
-      select: { blockingTaskId: true },
-    });
-
-    for (const dep of dependencies) {
-      if (!visited.has(dep.blockingTaskId)) {
-        queue.push(dep.blockingTaskId);
+    const neighbors = adjacency.get(current);
+    if (neighbors) {
+      for (const next of neighbors) {
+        if (!visited.has(next)) {
+          queue.push(next);
+        }
       }
     }
   }
@@ -180,47 +336,70 @@ const detectCycle = async (sourceId: string, targetId: string): Promise<boolean>
  * UC-10: Create Task
  */
 export const createTask = async (userId: string, data: CreateTaskDTO) => {
-  const task = await prisma.task.create({
-    data: {
-      title: data.title,
-      description: data.description,
-      priority: data.priority || 'MEDIUM',
-      status: data.status || 'TODO',
-      dueDate: data.dueDate ? new Date(data.dueDate) : null,
-      estimatedMinutes: data.estimatedMinutes,
-      parentTaskId: data.parentTaskId || null,
-      isRecurring: data.isRecurring || false,
-      recurrenceRule: data.recurrenceRule || null,
-      userId,
-      projectId: data.projectId,
-      goalId: data.goalId,
-      milestoneId: data.milestoneId || null,
-      categoryId: data.categoryId,
-      courseId: data.courseId,
-    },
-    include: {
-      project: { select: { id: true, title: true, color: true } },
-      goal: { select: { id: true, title: true } },
-      category: { select: { id: true, name: true, color: true, icon: true } },
-      course: { select: { id: true, name: true, color: true } },
-    },
+  await validateRelationOwnership(userId, data);
+
+  const isCompleted = data.isCompleted === true || data.status === 'COMPLETED';
+  const status = isCompleted ? 'COMPLETED' : (data.status || 'TODO');
+  const completedAt = isCompleted ? new Date() : null;
+
+  const task = await prisma.$transaction(async (tx) => {
+    const created = await tx.task.create({
+      data: {
+        title: data.title,
+        description: data.description,
+        priority: data.priority || 'MEDIUM',
+        status,
+        isCompleted,
+        completedAt,
+        dueDate: data.dueDate ? new Date(data.dueDate) : null,
+        estimatedMinutes: data.estimatedMinutes,
+        parentTaskId: data.parentTaskId || null,
+        isRecurring: data.isRecurring || false,
+        recurrenceRule: data.recurrenceRule || null,
+        userId,
+        projectId: data.projectId,
+        goalId: data.goalId,
+        milestoneId: data.milestoneId || null,
+        categoryId: data.categoryId,
+        courseId: data.courseId,
+      },
+      include: {
+        project: { select: { id: true, title: true, color: true } },
+        goal: { select: { id: true, title: true } },
+        category: { select: { id: true, name: true, color: true, icon: true } },
+        course: { select: { id: true, name: true, color: true } },
+      },
+    });
+
+    if (data.parentTaskId) {
+      await evaluateParentCompletion(userId, data.parentTaskId, tx);
+    }
+    if (data.projectId) await recalculateProjectProgress(data.projectId, tx);
+    if (data.goalId) await recalculateGoalProgressTx(data.goalId, tx);
+
+    return created;
   });
 
-
-  if (data.projectId) await recalculateProjectProgress(data.projectId);
-  if (data.goalId) await recalculateGoalProgress(data.goalId);
-
   invalidateDashboardCache(userId);
+
+  if (task.dueDate) {
+    calendarSyncService.syncTaskToCalendar(userId, task.id).catch((err) => {
+      logger.warn(`[CalendarSync] Background sync failed for task ${task.id}: ${err.message}`);
+    });
+  }
+
   return task;
 };
 
 /**
- * UC-15, UC-16: Get Tasks with Filtering, Views, Search and Pagination
+ * UC-15, UC-16: Get Tasks with Filtering, Views, Search, Pagination (Offset + Cursor)
  */
 export const getTasks = async (userId: string, query: GetTasksQuery) => {
   const page = Math.max(1, Number(query.page) || 1);
   const limit = Math.min(100, Math.max(1, Number(query.limit) || 20));
   const skip = (page - 1) * limit;
+  const isCursorMode = Boolean(query.cursor);
+  const cursor = query.cursor;
 
   const { view, status, priority, projectId, goalId, categoryId, courseId, search, parentTaskId } = query;
 
@@ -263,7 +442,6 @@ export const getTasks = async (userId: string, query: GetTasksQuery) => {
     where.parentTaskId = null;
   }
 
-
   if (search && search.trim() !== '') {
     where.AND = [
       {
@@ -275,23 +453,26 @@ export const getTasks = async (userId: string, query: GetTasksQuery) => {
     ];
   }
 
-  const [rawTasks, total] = await Promise.all([
+  const [fetchedTasks, total] = await Promise.all([
     prisma.task.findMany({
       where,
-      skip,
-      take: limit,
+      take: isCursorMode ? limit + 1 : limit,
+      ...(isCursorMode
+        ? { cursor: { id: cursor }, skip: 1 }
+        : { skip }),
       orderBy: [
         { isCompleted: 'asc' },
+        { order: 'asc' },
         { priority: 'desc' },
         { dueDate: 'asc' },
         { createdAt: 'desc' },
+        { id: 'asc' },
       ],
       include: {
         project: { select: { id: true, title: true, color: true } },
         goal: { select: { id: true, title: true } },
         category: { select: { id: true, name: true, color: true, icon: true } },
         course: { select: { id: true, name: true, color: true } },
-
         subtasks: {
           select: {
             id: true,
@@ -312,6 +493,16 @@ export const getTasks = async (userId: string, query: GetTasksQuery) => {
     }),
     prisma.task.count({ where }),
   ]);
+
+  let rawTasks = fetchedTasks;
+  let hasMore = false;
+  let nextCursor: string | null = null;
+
+  if (isCursorMode && rawTasks.length > limit) {
+    hasMore = true;
+    rawTasks = rawTasks.slice(0, limit);
+    nextCursor = rawTasks[rawTasks.length - 1].id;
+  }
 
   const formatted = rawTasks.map((t) => {
     const subtaskCount = t.subtasks?.length || 0;
@@ -336,9 +527,11 @@ export const getTasks = async (userId: string, query: GetTasksQuery) => {
 
   const paginationMeta = {
     total,
-    page,
+    page: isCursorMode ? null : page,
     limit,
     totalPages: Math.ceil(total / limit),
+    nextCursor,
+    hasMore: isCursorMode ? hasMore : page < Math.ceil(total / limit),
   };
 
   return {
@@ -381,7 +574,6 @@ export const getTaskById = async (userId: string, taskId: string) => {
     },
   });
 
-
   if (!task) {
     throw new ApiError(404, 'Task not found');
   }
@@ -390,34 +582,168 @@ export const getTaskById = async (userId: string, taskId: string) => {
 };
 
 /**
- * UC-11: Update Task
+ * UC-11: Update Task (Wrapped in Atomic Prisma Transaction)
  */
 export const updateTask = async (userId: string, taskId: string, data: UpdateTaskDTO) => {
-  const existingTask = await prisma.task.findFirst({
-    where: { id: taskId, userId },
+  const updatedTask = await prisma.$transaction(async (tx) => {
+    const existingTask = await tx.task.findFirst({
+      where: { id: taskId, userId },
+    });
+
+    if (!existingTask) {
+      throw new ApiError(404, 'Task not found');
+    }
+
+    await validateRelationOwnership(userId, data, taskId, tx);
+
+    const updateData: Prisma.TaskUpdateInput = {};
+
+    if (data.title !== undefined) updateData.title = data.title;
+    if (data.description !== undefined) updateData.description = data.description;
+    if (data.priority !== undefined) updateData.priority = data.priority;
+    if (data.estimatedMinutes !== undefined) updateData.estimatedMinutes = data.estimatedMinutes;
+    if (data.dueDate !== undefined) updateData.dueDate = data.dueDate ? new Date(data.dueDate) : null;
+    if (data.parentTaskId !== undefined) {
+      if (data.parentTaskId) {
+        updateData.parentTask = { connect: { id: data.parentTaskId } };
+      } else if (existingTask.parentTaskId) {
+        updateData.parentTask = { disconnect: true };
+      }
+    }
+    if (data.isRecurring !== undefined) updateData.isRecurring = data.isRecurring;
+    if (data.recurrenceRule !== undefined) updateData.recurrenceRule = data.recurrenceRule;
+
+    if (data.isCompleted !== undefined || data.status !== undefined) {
+      let willComplete = false;
+      let targetStatus = existingTask.status;
+
+      if (data.isCompleted !== undefined) {
+        willComplete = data.isCompleted;
+        targetStatus = willComplete ? 'COMPLETED' : (data.status && data.status !== 'COMPLETED' ? data.status : 'TODO');
+      } else if (data.status !== undefined) {
+        willComplete = data.status === 'COMPLETED';
+        targetStatus = data.status;
+      }
+
+      if (willComplete && !existingTask.isCompleted) {
+        const blockers = await tx.taskDependency.findMany({
+          where: {
+            blockedTaskId: taskId,
+            blockingTask: { isCompleted: false },
+          },
+          include: {
+            blockingTask: { select: { title: true } },
+          },
+        });
+
+        if (blockers.length > 0) {
+          const titles = blockers.map((b) => `"${b.blockingTask.title}"`).join(', ');
+          throw new ApiError(400, `Cannot complete task: blocked by unfinished prerequisite(s): ${titles}`);
+        }
+      }
+      updateData.isCompleted = willComplete;
+      updateData.status = targetStatus;
+      updateData.completedAt = willComplete ? (existingTask.completedAt || new Date()) : null;
+    }
+
+    if (data.projectId !== undefined) {
+      if (data.projectId) {
+        updateData.project = { connect: { id: data.projectId } };
+      } else if (existingTask.projectId) {
+        updateData.project = { disconnect: true };
+      }
+    }
+    if (data.goalId !== undefined) {
+      if (data.goalId) {
+        updateData.goal = { connect: { id: data.goalId } };
+      } else if (existingTask.goalId) {
+        updateData.goal = { disconnect: true };
+      }
+    }
+    if (data.milestoneId !== undefined) {
+      if (data.milestoneId) {
+        updateData.milestone = { connect: { id: data.milestoneId } };
+      } else if (existingTask.milestoneId) {
+        updateData.milestone = { disconnect: true };
+      }
+    }
+    if (data.categoryId !== undefined) {
+      if (data.categoryId) {
+        updateData.category = { connect: { id: data.categoryId } };
+      } else if (existingTask.categoryId) {
+        updateData.category = { disconnect: true };
+      }
+    }
+    if (data.courseId !== undefined) {
+      if (data.courseId) {
+        updateData.course = { connect: { id: data.courseId } };
+      } else if (existingTask.courseId) {
+        updateData.course = { disconnect: true };
+      }
+    }
+
+    const taskResult = await tx.task.update({
+      where: { id: taskId },
+      data: updateData,
+      include: {
+        project: { select: { id: true, title: true, color: true } },
+        goal: { select: { id: true, title: true } },
+        category: { select: { id: true, name: true, color: true, icon: true } },
+        course: { select: { id: true, name: true, color: true } },
+      },
+    });
+
+    if (existingTask.parentTaskId) {
+      await evaluateParentCompletion(userId, existingTask.parentTaskId, tx);
+    }
+
+    if (!existingTask.isCompleted && taskResult.isCompleted && taskResult.isRecurring) {
+      await generateNextRecurringInstance(userId, taskResult, tx);
+    }
+
+    const affectedProjects = [existingTask.projectId, data.projectId].filter(Boolean) as string[];
+    for (const pid of new Set(affectedProjects)) {
+      await recalculateProjectProgress(pid, tx);
+    }
+
+    const affectedGoals = [existingTask.goalId, data.goalId].filter(Boolean) as string[];
+    for (const gid of new Set(affectedGoals)) {
+      await recalculateGoalProgressTx(gid, tx);
+    }
+
+    return taskResult;
   });
 
-  if (!existingTask) {
-    throw new ApiError(404, 'Task not found');
+  invalidateDashboardCache(userId);
+
+  if (updatedTask.dueDate || updatedTask.googleEventId) {
+    calendarSyncService.syncTaskToCalendar(userId, updatedTask.id).catch((err) => {
+      logger.warn(`[CalendarSync] Background sync failed for task ${updatedTask.id}: ${err.message}`);
+    });
   }
 
-  const updateData: Prisma.TaskUpdateInput = {};
+  return updatedTask;
+};
 
-  if (data.title !== undefined) updateData.title = data.title;
-  if (data.description !== undefined) updateData.description = data.description;
-  if (data.priority !== undefined) updateData.priority = data.priority;
-  if (data.estimatedMinutes !== undefined) updateData.estimatedMinutes = data.estimatedMinutes;
-  if (data.dueDate !== undefined) updateData.dueDate = data.dueDate ? new Date(data.dueDate) : null;
-  if (data.parentTaskId !== undefined) {
-    updateData.parentTask = data.parentTaskId ? { connect: { id: data.parentTaskId } } : { disconnect: true };
-  }
-  if (data.isRecurring !== undefined) updateData.isRecurring = data.isRecurring;
-  if (data.recurrenceRule !== undefined) updateData.recurrenceRule = data.recurrenceRule;
+/**
+ * UC-13: Toggle Task Completion (Wrapped in Atomic Prisma Transaction)
+ */
+export const toggleTaskComplete = async (userId: string, taskId: string) => {
+  const updatedTask = await prisma.$transaction(async (tx) => {
+    const task = await tx.task.findFirst({
+      where: { id: taskId, userId },
+    });
 
-  if (data.isCompleted !== undefined || data.status !== undefined) {
-    const isCompleted = data.isCompleted !== undefined ? data.isCompleted : data.status === 'COMPLETED';
-    if (isCompleted && !existingTask.isCompleted) {
-      const blockers = await prisma.taskDependency.findMany({
+    if (!task) {
+      throw new ApiError(404, 'Task not found');
+    }
+
+    const isCompleted = !task.isCompleted;
+    const status = isCompleted ? 'COMPLETED' : 'TODO';
+    const completedAt = isCompleted ? new Date() : null;
+
+    if (isCompleted) {
+      const blockers = await tx.taskDependency.findMany({
         where: {
           blockedTaskId: taskId,
           blockingTask: { isCompleted: false },
@@ -432,126 +758,82 @@ export const updateTask = async (userId: string, taskId: string, data: UpdateTas
         throw new ApiError(400, `Cannot complete task: blocked by unfinished prerequisite(s): ${titles}`);
       }
     }
-    updateData.isCompleted = isCompleted;
-    updateData.status = data.status || (isCompleted ? 'COMPLETED' : 'TODO');
-    updateData.completedAt = isCompleted ? (existingTask.completedAt || new Date()) : null;
-  }
 
+    const taskResult = await tx.task.update({
+      where: { id: taskId },
+      data: {
+        isCompleted,
+        status,
+        completedAt,
+      },
+      include: {
+        project: { select: { id: true, title: true, color: true } },
+        goal: { select: { id: true, title: true } },
+        category: { select: { id: true, name: true, color: true, icon: true } },
+      },
+    });
 
-  if (data.projectId !== undefined) {
-    updateData.project = data.projectId ? { connect: { id: data.projectId } } : { disconnect: true };
-  }
-  if (data.goalId !== undefined) {
-    updateData.goal = data.goalId ? { connect: { id: data.goalId } } : { disconnect: true };
-  }
-  if (data.milestoneId !== undefined) {
-    updateData.milestone = data.milestoneId ? { connect: { id: data.milestoneId } } : { disconnect: true };
-  }
-  if (data.categoryId !== undefined) {
-    updateData.category = data.categoryId ? { connect: { id: data.categoryId } } : { disconnect: true };
-  }
-  if (data.courseId !== undefined) {
-    updateData.course = data.courseId ? { connect: { id: data.courseId } } : { disconnect: true };
-  }
+    if (task.parentTaskId) {
+      await evaluateParentCompletion(userId, task.parentTaskId, tx);
+    }
 
-  const updatedTask = await prisma.task.update({
-    where: { id: taskId },
-    data: updateData,
-    include: {
-      project: { select: { id: true, title: true, color: true } },
-      goal: { select: { id: true, title: true } },
-      category: { select: { id: true, name: true, color: true, icon: true } },
-      course: { select: { id: true, name: true, color: true } },
-    },
+    if (!task.isCompleted && taskResult.isCompleted && taskResult.isRecurring) {
+      await generateNextRecurringInstance(userId, taskResult, tx);
+    }
+
+    if (task.projectId) await recalculateProjectProgress(task.projectId, tx);
+    if (task.goalId) await recalculateGoalProgressTx(task.goalId, tx);
+
+    return taskResult;
   });
 
-
-  if (existingTask.parentTaskId) {
-    await evaluateParentCompletion(userId, existingTask.parentTaskId);
-  }
-
-  if (!existingTask.isCompleted && updatedTask.isCompleted && updatedTask.isRecurring) {
-    await generateNextRecurringInstance(userId, updatedTask);
-  }
-
-  const affectedProjects = [existingTask.projectId, data.projectId].filter(Boolean) as string[];
-  for (const pid of new Set(affectedProjects)) {
-    await recalculateProjectProgress(pid);
-  }
-
-  const affectedGoals = [existingTask.goalId, data.goalId].filter(Boolean) as string[];
-  for (const gid of new Set(affectedGoals)) {
-    await recalculateGoalProgress(gid);
-  }
-
   invalidateDashboardCache(userId);
+
+  if (updatedTask.dueDate || updatedTask.googleEventId) {
+    calendarSyncService.syncTaskToCalendar(userId, updatedTask.id).catch((err) => {
+      logger.warn(`[CalendarSync] Background sync failed for task ${updatedTask.id}: ${err.message}`);
+    });
+  }
+
   return updatedTask;
 };
 
+export const toggleComplete = toggleTaskComplete;
+
 /**
- * UC-13: Toggle Task Completion
+ * Reorder task using fractional positioning coordinates
  */
-export const toggleTaskComplete = async (userId: string, taskId: string) => {
+export const reorderTask = async (userId: string, params: ReorderTaskDTO) => {
+  const { targetTaskId, prevOrder, nextOrder } = params;
+
   const task = await prisma.task.findFirst({
-    where: { id: taskId, userId },
+    where: { id: targetTaskId, userId },
   });
 
   if (!task) {
     throw new ApiError(404, 'Task not found');
   }
 
-  const isCompleted = !task.isCompleted;
-  const status = isCompleted ? 'COMPLETED' : 'TODO';
-  const completedAt = isCompleted ? new Date() : null;
-
-  if (isCompleted) {
-    const blockers = await prisma.taskDependency.findMany({
-      where: {
-        blockedTaskId: taskId,
-        blockingTask: { isCompleted: false },
-      },
-      include: {
-        blockingTask: { select: { title: true } },
-      },
-    });
-
-    if (blockers.length > 0) {
-      const titles = blockers.map((b) => `"${b.blockingTask.title}"`).join(', ');
-      throw new ApiError(400, `Cannot complete task: blocked by unfinished prerequisite(s): ${titles}`);
-    }
+  let calculatedOrder: number;
+  if (prevOrder !== undefined && prevOrder !== null && nextOrder !== undefined && nextOrder !== null) {
+    calculatedOrder = (Number(prevOrder) + Number(nextOrder)) / 2;
+  } else if (prevOrder !== undefined && prevOrder !== null) {
+    calculatedOrder = Number(prevOrder) + 1.0;
+  } else if (nextOrder !== undefined && nextOrder !== null) {
+    calculatedOrder = Number(nextOrder) / 2;
+  } else {
+    calculatedOrder = 1.0;
   }
 
-  const updatedTask = await prisma.task.update({
-
-    where: { id: taskId },
-    data: {
-      isCompleted,
-      status,
-      completedAt,
-    },
-    include: {
-      project: { select: { id: true, title: true, color: true } },
-      goal: { select: { id: true, title: true } },
-      category: { select: { id: true, name: true, color: true, icon: true } },
-    },
+  const updated = await prisma.task.update({
+    where: { id: targetTaskId },
+    data: { order: calculatedOrder },
+    select: { id: true, order: true },
   });
 
-  if (task.parentTaskId) {
-    await evaluateParentCompletion(userId, task.parentTaskId);
-  }
-
-  if (!task.isCompleted && updatedTask.isCompleted && updatedTask.isRecurring) {
-    await generateNextRecurringInstance(userId, updatedTask);
-  }
-
-  if (task.projectId) await recalculateProjectProgress(task.projectId);
-  if (task.goalId) await recalculateGoalProgress(task.goalId);
-
   invalidateDashboardCache(userId);
-  return updatedTask;
+  return updated;
 };
-
-export const toggleComplete = toggleTaskComplete;
 
 /**
  * UC-12: Delete Task
@@ -571,6 +853,13 @@ export const deleteTask = async (userId: string, taskId: string) => {
   if (task.goalId) await recalculateGoalProgress(task.goalId);
 
   invalidateDashboardCache(userId);
+
+  if (task.googleEventId) {
+    calendarSyncService.deleteCalendarEvent(userId, task.googleEventId).catch((err) => {
+      logger.warn(`[CalendarSync] Background event deletion failed for task ${taskId}: ${err.message}`);
+    });
+  }
+
   return { message: 'Task deleted successfully' };
 };
 
@@ -630,21 +919,41 @@ export const createSubtask = async (userId: string, parentTaskId: string, data: 
     throw new ApiError(404, 'Parent task not found or access denied');
   }
 
-  const subtask = await prisma.task.create({
-    data: {
-      userId,
-      parentTaskId,
-      title: data.title,
-      description: data.description || null,
-      priority: data.priority || parent.priority,
-      status: 'TODO',
-      isCompleted: false,
-      projectId: parent.projectId,
-      goalId: parent.goalId,
-      categoryId: parent.categoryId,
-    },
+  const subtask = await prisma.$transaction(async (tx) => {
+    const created = await tx.task.create({
+      data: {
+        userId,
+        parentTaskId,
+        title: data.title,
+        description: data.description || null,
+        priority: data.priority || parent.priority,
+        status: 'TODO',
+        isCompleted: false,
+        projectId: parent.projectId,
+        goalId: parent.goalId,
+        categoryId: parent.categoryId,
+        milestoneId: parent.milestoneId,
+        courseId: parent.courseId,
+      },
+    });
+
+    if (parent.isCompleted) {
+      await tx.task.update({
+        where: { id: parentTaskId },
+        data: {
+          isCompleted: false,
+          status: 'IN_PROGRESS',
+          completedAt: null,
+        },
+      });
+      if (parent.projectId) await recalculateProjectProgress(parent.projectId, tx);
+      if (parent.goalId) await recalculateGoalProgressTx(parent.goalId, tx);
+    }
+
+    return created;
   });
 
+  invalidateDashboardCache(userId);
   return subtask;
 };
 
@@ -656,32 +965,41 @@ export const addDependency = async (userId: string, blockedTaskId: string, block
     throw new ApiError(400, 'A task cannot depend on itself');
   }
 
-  const [blocked, blocking] = await Promise.all([
-    prisma.task.findFirst({ where: { id: blockedTaskId, userId } }),
-    prisma.task.findFirst({ where: { id: blockingTaskId, userId } }),
-  ]);
+  return prisma.$transaction(async (tx) => {
+    const [blocked, blocking] = await Promise.all([
+      tx.task.findFirst({ where: { id: blockedTaskId, userId } }),
+      tx.task.findFirst({ where: { id: blockingTaskId, userId } }),
+    ]);
 
-  if (!blocked || !blocking) {
-    throw new ApiError(404, 'One or both tasks not found or access denied');
-  }
+    if (!blocked || !blocking) {
+      throw new ApiError(404, 'One or both tasks not found or access denied');
+    }
 
-  const hasCycle = await detectCycle(blockedTaskId, blockingTaskId);
-  if (hasCycle) {
-    throw new ApiError(
-      400,
-      'Circular dependency detected: adding this relation would create an infinite dependency loop'
-    );
-  }
+    const hasCycle = await detectCycle(blockedTaskId, blockingTaskId, tx);
+    if (hasCycle) {
+      throw new ApiError(
+        400,
+        'Circular dependency detected: adding this relation would create an infinite dependency loop'
+      );
+    }
 
-  return await prisma.taskDependency.create({
-    data: {
-      blockedTaskId,
-      blockingTaskId,
-    },
-    include: {
-      blockingTask: { select: { id: true, title: true, isCompleted: true } },
-      blockedTask: { select: { id: true, title: true } },
-    },
+    try {
+      return await tx.taskDependency.create({
+        data: {
+          blockedTaskId,
+          blockingTaskId,
+        },
+        include: {
+          blockingTask: { select: { id: true, title: true, isCompleted: true } },
+          blockedTask: { select: { id: true, title: true } },
+        },
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new ApiError(409, 'This task dependency already exists');
+      }
+      throw error;
+    }
   });
 };
 
@@ -880,5 +1198,7 @@ export default {
   removeDependency,
   getEisenhowerMatrix,
   getDailyWorkload,
+  reorderTask,
 };
+
 

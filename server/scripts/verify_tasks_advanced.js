@@ -115,6 +115,32 @@ async function runAdvancedTasksVerification() {
     `Sub1: ${sub1Id}, Sub2: ${sub2Id}`
   );
 
+  const invalidSubtaskRes = await makeRequest(
+    `/api/v1/tasks/${parentId}/subtasks`,
+    'POST',
+    {},
+    authHeaders
+  );
+  assert(
+    invalidSubtaskRes.statusCode === 400,
+    'Invalid subtask payload is rejected with HTTP 400',
+    `Status: ${invalidSubtaskRes.statusCode}`
+  );
+
+  const hierarchyCycleRes = await makeRequest(
+    `/api/v1/tasks/${parentId}`,
+    'PUT',
+    { parentTaskId: sub1Id },
+    authHeaders
+  );
+  assert(
+    hierarchyCycleRes.statusCode === 400 &&
+      typeof hierarchyCycleRes.body.message === 'string' &&
+      hierarchyCycleRes.body.message.includes('descendant'),
+    'Assigning a task beneath its descendant is rejected',
+    `Status: ${hierarchyCycleRes.statusCode}, Error: ${hierarchyCycleRes.body.message}`
+  );
+
   // Complete subtask 1: parent should stay incomplete (1/2 done)
   await makeRequest(`/api/v1/tasks/${sub1Id}/complete`, 'PATCH', null, authHeaders);
   const check1Res = await makeRequest('/api/v1/tasks', 'GET', null, authHeaders);
@@ -189,6 +215,18 @@ async function runAdvancedTasksVerification() {
   const taskBRes = await makeRequest('/api/v1/tasks', 'POST', { title: 'Task B: API Integration' }, authHeaders);
   const taskAId = taskARes.body.data.id;
   const taskBId = taskBRes.body.data.id;
+
+  const invalidDependencyRes = await makeRequest(
+    `/api/v1/tasks/${taskBId}/dependencies`,
+    'POST',
+    {},
+    authHeaders
+  );
+  assert(
+    invalidDependencyRes.statusCode === 400,
+    'Invalid dependency payload is rejected with HTTP 400',
+    `Status: ${invalidDependencyRes.statusCode}`
+  );
 
   // Add dependency: Task B is blocked by Task A
   const depRes = await makeRequest(
