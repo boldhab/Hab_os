@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/api_endpoints.dart';
 import '../../../../core/network/api_client.dart';
@@ -46,13 +48,17 @@ final gymPRsProvider =
   final dio = ref.watch(dioProvider);
   final response = await dio.get(ApiEndpoints.gymPRs);
   final data = response.data['data'];
-  if (data is Map && data.containsKey('personalRecords')) {
-    final list = data['personalRecords'] as List;
-    return list
-        .map((i) => PersonalRecordModel.fromJson(Map<String, dynamic>.from(i)))
-        .toList();
+  List items = [];
+  if (data is List) {
+    items = data;
+  } else if (data is Map && data.containsKey('personalRecords')) {
+    items = data['personalRecords'] as List;
+  } else if (data is Map && data.containsKey('data') && data['data'] is List) {
+    items = data['data'] as List;
   }
-  return [];
+  return items
+      .map((i) => PersonalRecordModel.fromJson(Map<String, dynamic>.from(i)))
+      .toList();
 });
 
 final gymStatsProvider = FutureProvider.autoDispose<GymStatsModel>((ref) async {
@@ -114,6 +120,24 @@ class GymController {
     final res = await dio.post(ApiEndpoints.gymWorkouts, data: {
       'name': name,
       'date': DateTime.now().toIso8601String(),
+      'durationMinutes': durationMinutes,
+      if (notes != null && notes.isNotEmpty) 'notes': notes,
+      'exercises': exercises,
+    });
+    invalidateGymData();
+    return Map<String, dynamic>.from(res.data['data'] ?? {});
+  }
+
+  Future<Map<String, dynamic>> updateWorkout({
+    required String workoutId,
+    required String name,
+    String? notes,
+    int durationMinutes = 60,
+    required List<Map<String, dynamic>> exercises,
+  }) async {
+    final dio = ref.read(dioProvider);
+    final res = await dio.put(ApiEndpoints.gymWorkoutById(workoutId), data: {
+      'name': name,
       'durationMinutes': durationMinutes,
       if (notes != null && notes.isNotEmpty) 'notes': notes,
       'exercises': exercises,
