@@ -23,8 +23,12 @@ class DashboardRepository {
     return DashboardFeedModel.fromJson(Map<String, dynamic>.from(data));
   }
 
-  Future<void> logHabit(String habitId) async {
-    await _dio.post(ApiEndpoints.habitLog(habitId));
+  Future<void> logHabit(String habitId,
+      {bool isCompleted = true, int value = 1}) async {
+    await _dio.post(
+      ApiEndpoints.habitLog(habitId),
+      data: {'isCompleted': isCompleted, 'value': value},
+    );
   }
 
   Future<void> toggleTask(String taskId, bool isCompleted) async {
