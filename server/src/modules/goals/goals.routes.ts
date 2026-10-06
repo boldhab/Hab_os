@@ -10,6 +10,7 @@ import {
   createCheckInSchema,
   contributeGoalSchema,
   uuidParamSchema,
+  goalIdParamSchema,
   goalMilestoneParamSchema,
 } from './goals.validation';
 
@@ -46,10 +47,12 @@ router.post(
 // --- Milestones ---
 router.get(
   '/:goalId/milestones',
+  validate(goalIdParamSchema, 'params'),
   goalsController.getMilestones
 );
 router.post(
   '/:goalId/milestones',
+  validate(goalIdParamSchema, 'params'),
   validate(createMilestoneSchema),
   goalsController.createMilestone
 );

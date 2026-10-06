@@ -57,32 +57,40 @@ export interface CreateCheckInDTO {
   note?: string | null;
 }
 
+export interface CalculatedGoalProgress {
+  progress: number;
+  status: string;
+}
+
 /**
- * Auto-recalculate goal progress from weighted milestones + tasks, or financial target (UC-117)
+ * Pure calculation logic for goal progress given goal, milestones, and tasks
  */
-export const recalculateGoalProgress = async (goalId: string): Promise<number> => {
-  const goal = await prisma.goal.findUnique({
-    where: { id: goalId },
-    include: {
-      milestones: {
-        include: {
-          tasks: { select: { id: true, isCompleted: true } },
-        },
-      },
-      tasks: { select: { id: true, isCompleted: true, milestoneId: true } },
-    },
-  });
-
-  if (!goal) return 0;
-
+export const computeGoalProgressDetails = (goal: {
+  category: string;
+  targetAmount?: number | null;
+  currentAmount?: number | null;
+  progress: number;
+  milestones: Array<{
+    id: string;
+    weight: number;
+    isCompleted: boolean;
+    tasks: Array<{ id: string; isCompleted: boolean }>;
+  }>;
+  tasks: Array<{ id: string; isCompleted: boolean; milestoneId?: string | null }>;
+}): {
+  progress: number;
+  status: string;
+  milestoneUpdates: Array<{ id: string; isCompleted: boolean; status: string }>;
+} => {
   let progress = 0;
+  const milestoneUpdates: Array<{ id: string; isCompleted: boolean; status: string }> = [];
 
   // 1. FINANCIAL goals: prioritize targetAmount if present
   if (goal.category === 'FINANCIAL' && goal.targetAmount && goal.targetAmount > 0) {
     const current = goal.currentAmount ?? 0;
     progress = Number(Math.min(100, Math.max(0, (current / goal.targetAmount) * 100)).toFixed(1));
   }
-  // 2. Goals with Milestones: weighted average of milestone progress
+  // 2. Goals with Milestones: normalized weighted average of milestone progress
   else if (goal.milestones.length > 0) {
     let totalWeight = 0;
     let weightedProgressSum = 0;
@@ -101,12 +109,10 @@ export const recalculateGoalProgress = async (goalId: string): Promise<number> =
 
         // Auto-synchronize milestone status if changed
         if (m.isCompleted !== allDone) {
-          await prisma.milestone.update({
-            where: { id: m.id },
-            data: {
-              isCompleted: allDone,
-              status: allDone ? 'COMPLETED' : doneTasks > 0 ? 'IN_PROGRESS' : 'NOT_STARTED',
-            },
+          milestoneUpdates.push({
+            id: m.id,
+            isCompleted: allDone,
+            status: allDone ? 'COMPLETED' : doneTasks > 0 ? 'IN_PROGRESS' : 'NOT_STARTED',
           });
         }
       } else {
@@ -117,6 +123,8 @@ export const recalculateGoalProgress = async (goalId: string): Promise<number> =
       weightedProgressSum += milestoneProgressRatio * weight;
     }
 
+    // Auto-normalized: weightedProgressSum / totalWeight automatically normalizes weights
+    // regardless of whether weights sum to 1.0, 100, or arbitrary numbers
     progress = totalWeight > 0 ? Number(((weightedProgressSum / totalWeight) * 100).toFixed(1)) : 0;
   }
   // 3. Goals without milestones but with direct tasks
@@ -130,12 +138,52 @@ export const recalculateGoalProgress = async (goalId: string): Promise<number> =
 
   const status = progress >= 100 ? 'COMPLETED' : progress > 0 ? 'IN_PROGRESS' : 'NOT_STARTED';
 
-  await prisma.goal.update({
+  return { progress, status, milestoneUpdates };
+};
+
+/**
+ * Auto-recalculate goal progress from weighted milestones + tasks, or financial target with transaction support (UC-117)
+ */
+export const recalculateGoalProgressTx = async (
+  goalId: string,
+  txClient: any = prisma
+): Promise<number> => {
+  const goal = await txClient.goal.findUnique({
+    where: { id: goalId },
+    include: {
+      milestones: {
+        include: {
+          tasks: { select: { id: true, isCompleted: true } },
+        },
+      },
+      tasks: { select: { id: true, isCompleted: true, milestoneId: true } },
+    },
+  });
+
+  if (!goal) return 0;
+
+  const { progress, status, milestoneUpdates } = computeGoalProgressDetails(goal);
+
+  for (const update of milestoneUpdates) {
+    await txClient.milestone.update({
+      where: { id: update.id },
+      data: {
+        isCompleted: update.isCompleted,
+        status: update.status,
+      },
+    });
+  }
+
+  await txClient.goal.update({
     where: { id: goalId },
     data: { progress, status },
   });
 
   return progress;
+};
+
+export const recalculateGoalProgress = async (goalId: string): Promise<number> => {
+  return recalculateGoalProgressTx(goalId, prisma);
 };
 
 // ==========================================
@@ -287,7 +335,12 @@ export const updateGoal = async (userId: string, goalId: string, data: UpdateGoa
     where: { id: goalId },
     data: {
       ...data,
-      targetDate: data.targetDate ? new Date(data.targetDate) : undefined,
+      targetDate:
+        data.targetDate !== undefined
+          ? data.targetDate
+            ? new Date(data.targetDate)
+            : null
+          : undefined,
     },
     include: {
       milestones: { orderBy: [{ order: 'asc' }, { targetDate: 'asc' }] },
@@ -336,27 +389,116 @@ export const getMilestones = async (userId: string, goalId: string) => {
   });
 };
 
+/**
+ * Pure evaluation function for goal health status including timeline pacing
+ */
+export const evaluateGoalHealthStatus = (goal: {
+  progress: number;
+  createdAt: Date;
+  targetDate: Date | null;
+  daysSinceActivity: number;
+  latestConfidence: 'ON_TRACK' | 'BEHIND' | 'AT_RISK' | null;
+  now?: Date;
+}): {
+  healthStatus: 'ON_TRACK' | 'BEHIND' | 'AT_RISK';
+  riskReason: string | null;
+  daysUntilTarget: number | null;
+  expectedProgress: number | null;
+} => {
+  const currentDate = goal.now || new Date();
+  let daysUntilTarget: number | null = null;
+  let expectedProgress: number | null = null;
+
+  if (goal.targetDate) {
+    const targetMs = new Date(goal.targetDate).getTime();
+    const createdMs = new Date(goal.createdAt).getTime();
+    const currentMs = currentDate.getTime();
+
+    const diffMs = targetMs - currentMs;
+    daysUntilTarget = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+
+    const totalDurationMs = Math.max(1, targetMs - createdMs);
+    const elapsedDurationMs = Math.max(0, currentMs - createdMs);
+
+    // Calculate expected linear progress based on elapsed time vs total time
+    expectedProgress = Math.min(100, Math.max(0, (elapsedDurationMs / totalDurationMs) * 100));
+  }
+
+  let healthStatus: 'ON_TRACK' | 'BEHIND' | 'AT_RISK' = 'ON_TRACK';
+  let riskReason: string | null = null;
+
+  // 1. Explicit user check-in override
+  if (goal.latestConfidence === 'AT_RISK') {
+    healthStatus = 'AT_RISK';
+    riskReason = 'User flagged check-in as at risk';
+  } else if (goal.latestConfidence === 'BEHIND') {
+    healthStatus = 'BEHIND';
+    riskReason = 'User flagged check-in as behind schedule';
+  }
+  // 2. Overdue detection
+  else if (daysUntilTarget !== null && daysUntilTarget <= 0 && goal.progress < 100) {
+    healthStatus = 'AT_RISK';
+    riskReason = `Target date has passed (${Math.abs(daysUntilTarget)} days overdue) with ${goal.progress}% completed`;
+  }
+  // 3. Imminent deadline risk
+  else if (daysUntilTarget !== null && daysUntilTarget <= 30 && goal.progress < 30) {
+    healthStatus = 'AT_RISK';
+    riskReason = `Target date is in ${daysUntilTarget} days but progress is only ${goal.progress}%`;
+  }
+  // 4. Stale activity risk
+  else if (goal.daysSinceActivity >= 14 && daysUntilTarget !== null && daysUntilTarget <= 60) {
+    healthStatus = 'AT_RISK';
+    riskReason = `No activity recorded in ${goal.daysSinceActivity} days`;
+  }
+  // 5. Short deadline behind check
+  else if (daysUntilTarget !== null && daysUntilTarget <= 14 && goal.progress < 70) {
+    healthStatus = 'BEHIND';
+    riskReason = `Target date is in ${daysUntilTarget} days but progress is only ${goal.progress}%`;
+  }
+  // 6. Dynamic pacing calculation (e.g., if user is 25%+ behind expected trajectory)
+  else if (expectedProgress !== null && expectedProgress > 20) {
+    const pacingDeficit = expectedProgress - goal.progress;
+    if (pacingDeficit >= 35) {
+      healthStatus = 'AT_RISK';
+      riskReason = `Pacing alert: Expected ${Math.round(expectedProgress)}% by now, currently at ${goal.progress}%`;
+    } else if (pacingDeficit >= 20) {
+      healthStatus = 'BEHIND';
+      riskReason = `Pacing alert: Trailing target pace by ${Math.round(pacingDeficit)}%`;
+    }
+  }
+
+  return {
+    healthStatus,
+    riskReason,
+    daysUntilTarget,
+    expectedProgress: expectedProgress !== null ? Number(expectedProgress.toFixed(1)) : null,
+  };
+};
+
 export const createMilestone = async (userId: string, goalId: string, data: CreateMilestoneDTO) => {
   const goal = await prisma.goal.findFirst({ where: { id: goalId, userId } });
   if (!goal) throw new ApiError(404, 'Goal not found');
 
-  const count = await prisma.milestone.count({ where: { goalId } });
+  return prisma.$transaction(async (tx) => {
+    const count = await tx.milestone.count({ where: { goalId } });
 
-  const milestone = await prisma.milestone.create({
-    data: {
-      title: data.title,
-      description: data.description,
-      targetDate: data.targetDate ? new Date(data.targetDate) : null,
-      isCompleted: data.isCompleted || false,
-      status: data.isCompleted ? 'COMPLETED' : 'NOT_STARTED',
-      weight: data.weight || 1.0,
-      order: data.order ?? count,
-      goalId,
-    },
+    const milestone = await tx.milestone.create({
+      data: {
+        title: data.title,
+        description: data.description,
+        targetDate: data.targetDate ? new Date(data.targetDate) : null,
+        isCompleted: data.isCompleted || false,
+        status: data.isCompleted ? 'COMPLETED' : 'NOT_STARTED',
+        weight: data.weight || 1.0,
+        order: data.order ?? count,
+        goalId,
+      },
+    });
+
+    await recalculateGoalProgressTx(goalId, tx);
+    invalidateDashboardCache(userId);
+    return milestone;
   });
-
-  await recalculateGoalProgress(goalId);
-  return milestone;
 };
 
 export const updateMilestone = async (
@@ -373,29 +515,41 @@ export const updateMilestone = async (
   });
   if (!milestone) throw new ApiError(404, 'Milestone not found');
 
-  const isCompleted = data.isCompleted !== undefined ? data.isCompleted : milestone.isCompleted;
-  const status = isCompleted ? 'COMPLETED' : data.status || 'IN_PROGRESS';
+  return prisma.$transaction(async (tx) => {
+    const isCompleted =
+      data.isCompleted !== undefined
+        ? data.isCompleted
+        : data.status !== undefined
+          ? data.status === 'COMPLETED'
+          : milestone.isCompleted;
+    const status = isCompleted
+      ? 'COMPLETED'
+      : data.status && data.status !== 'COMPLETED'
+        ? data.status
+        : 'IN_PROGRESS';
 
-  const updatedMilestone = await prisma.milestone.update({
-    where: { id: milestoneId },
-    data: {
-      title: data.title !== undefined ? data.title : milestone.title,
-      description: data.description !== undefined ? data.description : milestone.description,
-      targetDate:
-        data.targetDate !== undefined
-          ? data.targetDate
-            ? new Date(data.targetDate)
-            : null
-          : milestone.targetDate,
-      weight: data.weight !== undefined ? data.weight : milestone.weight,
-      order: data.order !== undefined ? data.order : milestone.order,
-      isCompleted,
-      status,
-    },
+    const updatedMilestone = await tx.milestone.update({
+      where: { id: milestoneId },
+      data: {
+        title: data.title !== undefined ? data.title : milestone.title,
+        description: data.description !== undefined ? data.description : milestone.description,
+        targetDate:
+          data.targetDate !== undefined
+            ? data.targetDate
+              ? new Date(data.targetDate)
+              : null
+            : milestone.targetDate,
+        weight: data.weight !== undefined ? data.weight : milestone.weight,
+        order: data.order !== undefined ? data.order : milestone.order,
+        isCompleted,
+        status,
+      },
+    });
+
+    await recalculateGoalProgressTx(goalId, tx);
+    invalidateDashboardCache(userId);
+    return updatedMilestone;
   });
-
-  await recalculateGoalProgress(goalId);
-  return updatedMilestone;
 };
 
 export const deleteMilestone = async (userId: string, goalId: string, milestoneId: string) => {
@@ -407,10 +561,12 @@ export const deleteMilestone = async (userId: string, goalId: string, milestoneI
   });
   if (!milestone) throw new ApiError(404, 'Milestone not found');
 
-  await prisma.milestone.delete({ where: { id: milestoneId } });
-  await recalculateGoalProgress(goalId);
-
-  return { message: 'Milestone deleted successfully' };
+  return prisma.$transaction(async (tx) => {
+    await tx.milestone.delete({ where: { id: milestoneId } });
+    await recalculateGoalProgressTx(goalId, tx);
+    invalidateDashboardCache(userId);
+    return { message: 'Milestone deleted successfully' };
+  });
 };
 
 // ==========================================
@@ -574,12 +730,6 @@ export const getGoalsHealth = async (userId: string) => {
   const onTrackGoals: any[] = [];
 
   for (const g of goals) {
-    let daysUntilTarget: number | null = null;
-    if (g.targetDate) {
-      const diffMs = new Date(g.targetDate).getTime() - now.getTime();
-      daysUntilTarget = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
-    }
-
     // Determine latest activity date
     const timestamps = [
       g.updatedAt.getTime(),
@@ -590,27 +740,20 @@ export const getGoalsHealth = async (userId: string) => {
     const latestActivityMs = Math.max(...timestamps);
     const daysSinceActivity = Math.floor((now.getTime() - latestActivityMs) / (1000 * 60 * 60 * 24));
 
-    const latestConfidence = g.checkIns.length > 0 ? g.checkIns[0].confidence : null;
+    const latestConfidence = (g.checkIns.length > 0 ? g.checkIns[0].confidence : null) as
+      | 'ON_TRACK'
+      | 'BEHIND'
+      | 'AT_RISK'
+      | null;
 
-    let healthStatus: 'ON_TRACK' | 'BEHIND' | 'AT_RISK' = 'ON_TRACK';
-    let riskReason: string | null = null;
-
-    if (latestConfidence === 'AT_RISK') {
-      healthStatus = 'AT_RISK';
-      riskReason = 'User flagged check-in as at risk';
-    } else if (daysUntilTarget !== null && daysUntilTarget <= 30 && g.progress < 30) {
-      healthStatus = 'AT_RISK';
-      riskReason = `Target date is in ${daysUntilTarget} days but progress is only ${g.progress}%`;
-    } else if (daysSinceActivity >= 14 && daysUntilTarget !== null && daysUntilTarget <= 60) {
-      healthStatus = 'AT_RISK';
-      riskReason = `No activity recorded in ${daysSinceActivity} days`;
-    } else if (latestConfidence === 'BEHIND') {
-      healthStatus = 'BEHIND';
-      riskReason = 'User flagged check-in as behind schedule';
-    } else if (daysUntilTarget !== null && daysUntilTarget <= 14 && g.progress < 70) {
-      healthStatus = 'BEHIND';
-      riskReason = `Target date is in ${daysUntilTarget} days but progress is only ${g.progress}%`;
-    }
+    const { healthStatus, riskReason, daysUntilTarget, expectedProgress } = evaluateGoalHealthStatus({
+      progress: g.progress,
+      createdAt: g.createdAt,
+      targetDate: g.targetDate,
+      daysSinceActivity,
+      latestConfidence,
+      now,
+    });
 
     const payload = {
       id: g.id,
@@ -621,6 +764,7 @@ export const getGoalsHealth = async (userId: string) => {
       progress: g.progress,
       daysUntilTarget,
       daysSinceActivity,
+      expectedProgress,
       latestConfidence,
       healthStatus,
       riskReason,
@@ -653,14 +797,22 @@ export const contributeFinancialGoal = async (userId: string, goalId: string, am
   if (!goal) throw new ApiError(404, 'Goal not found');
   if (goal.category !== 'FINANCIAL') throw new ApiError(400, 'Goal is not categorized as FINANCIAL');
 
-  const newCurrent = (goal.currentAmount || 0) + amount;
-  const updated = await prisma.goal.update({
-    where: { id: goalId },
-    data: { currentAmount: newCurrent },
-  });
+  return prisma.$transaction(async (tx) => {
+    // Atomic increment inside transaction to avoid race conditions
+    await tx.goal.update({
+      where: { id: goalId },
+      data: {
+        currentAmount: {
+          increment: amount,
+        },
+      },
+    });
 
-  await recalculateGoalProgress(goalId);
-  return updated;
+    await recalculateGoalProgressTx(goalId, tx);
+    const recalculatedGoal = await tx.goal.findUnique({ where: { id: goalId } });
+    invalidateDashboardCache(userId);
+    return recalculatedGoal;
+  });
 };
 
 export default {
@@ -680,4 +832,7 @@ export default {
   getGoalsHealth,
   contributeFinancialGoal,
   recalculateGoalProgress,
+  recalculateGoalProgressTx,
+  computeGoalProgressDetails,
+  evaluateGoalHealthStatus,
 };
