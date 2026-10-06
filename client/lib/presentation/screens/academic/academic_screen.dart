@@ -43,7 +43,8 @@ class _AcademicScreenState extends ConsumerState<AcademicScreen> {
     final selectedSemester = ref.watch(selectedSemesterProvider);
     final coursesAsync =
         ref.watch(academicCoursesListProvider(selectedSemester));
-    final summaryAsync = ref.watch(academicSummaryProvider);
+    final summaryAsync =
+        ref.watch(academicSummaryProvider(selectedSemester));
     final colorScheme = Theme.of(context).colorScheme;
     final primaryRed = colorScheme.primary;
 
@@ -137,20 +138,24 @@ class _AcademicScreenState extends ConsumerState<AcademicScreen> {
                     ),
                   ),
                   error: (_, __) => const SizedBox.shrink(),
-                  data: (summaryData) => Padding(
+                  data: (summary) => Padding(
                     padding: const EdgeInsets.only(bottom: 20),
-                    child: AcademicHeroCard(summaryData: summaryData),
+                    child: AcademicHeroCard(summaryData: summary.toMap()),
                   ),
                 ),
 
-                // 2. Up Next Section (Horizontal Deadline Cards)
-                coursesAsync.when(
-                  data: (courses) {
-                    if (courses.isEmpty) return const SizedBox.shrink();
+                // 2. Up Next Section (Real upcoming deliverables)
+                summaryAsync.when(
+                  data: (summary) {
+                    if (summary.upcomingDeliverables.isEmpty) {
+                      return const SizedBox.shrink();
+                    }
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 20),
                       child: AcademicUpNextSection(
-                        courses: courses,
+                        deliverables: summary.upcomingDeliverables,
+                        totalCount: summary.upcomingAssignmentsTotal +
+                            summary.upcomingExamsTotal,
                         onCourseTap: (id) {
                           if (isWide) {
                             setState(() => _selectedCourseId = id);

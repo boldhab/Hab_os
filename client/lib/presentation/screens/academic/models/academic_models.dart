@@ -312,6 +312,11 @@ class WhatIfResultModel {
   final double maxPossibleGrade;
   final String status;
   final String message;
+  final double? currentAverageOnGradedWork;
+  final double? earnedContributionTowardsFinal;
+  final double? remainingUngradedWeight;
+  final double? maxAchievableGrade;
+  final double? totalEvaluatedWeight;
 
   WhatIfResultModel({
     required this.targetPercentage,
@@ -323,6 +328,11 @@ class WhatIfResultModel {
     required this.maxPossibleGrade,
     required this.status,
     required this.message,
+    this.currentAverageOnGradedWork,
+    this.earnedContributionTowardsFinal,
+    this.remainingUngradedWeight,
+    this.maxAchievableGrade,
+    this.totalEvaluatedWeight,
   });
 
   factory WhatIfResultModel.fromJson(Map<String, dynamic> json) {
@@ -339,6 +349,170 @@ class WhatIfResultModel {
       maxPossibleGrade: (json['maxPossibleGrade'] as num?)?.toDouble() ?? 100.0,
       status: json['status'] ?? 'ACHIEVABLE',
       message: json['message'] ?? '',
+      currentAverageOnGradedWork:
+          (json['currentAverageOnGradedWork'] as num?)?.toDouble(),
+      earnedContributionTowardsFinal:
+          (json['earnedContributionTowardsFinal'] as num?)?.toDouble(),
+      remainingUngradedWeight:
+          (json['remainingUngradedWeight'] as num?)?.toDouble(),
+      maxAchievableGrade: (json['maxAchievableGrade'] as num?)?.toDouble(),
+      totalEvaluatedWeight: (json['totalEvaluatedWeight'] as num?)?.toDouble(),
     );
   }
 }
+
+class UpcomingDeliverableModel {
+  final String id;
+  final String title;
+  final String courseId;
+  final String courseName;
+  final String? courseCode;
+  final String courseColor;
+  final DateTime date;
+  final bool isExam;
+  final String? typeOrStatus;
+  final double? weight;
+  final String? startTime;
+
+  UpcomingDeliverableModel({
+    required this.id,
+    required this.title,
+    required this.courseId,
+    required this.courseName,
+    this.courseCode,
+    required this.courseColor,
+    required this.date,
+    required this.isExam,
+    this.typeOrStatus,
+    this.weight,
+    this.startTime,
+  });
+
+  factory UpcomingDeliverableModel.fromAssignment(Map<String, dynamic> json) {
+    final course = json['course'] as Map<String, dynamic>? ?? {};
+    return UpcomingDeliverableModel(
+      id: json['id'] ?? '',
+      title: json['title'] ?? 'Assignment',
+      courseId: course['id'] ?? '',
+      courseName: course['name'] ?? 'Course',
+      courseCode: course['code'],
+      courseColor: course['color'] ?? '#8B5CF6',
+      date: DateTime.tryParse(json['dueDate'] ?? '') ?? DateTime.now(),
+      isExam: false,
+      typeOrStatus: json['status'] ?? json['type'],
+      weight: (json['weight'] as num?)?.toDouble(),
+    );
+  }
+
+  factory UpcomingDeliverableModel.fromExam(Map<String, dynamic> json) {
+    final course = json['course'] as Map<String, dynamic>? ?? {};
+    return UpcomingDeliverableModel(
+      id: json['id'] ?? '',
+      title: json['title'] ?? 'Exam',
+      courseId: course['id'] ?? '',
+      courseName: course['name'] ?? 'Course',
+      courseCode: course['code'],
+      courseColor: course['color'] ?? '#8B5CF6',
+      date: DateTime.tryParse(json['examDate'] ?? '') ?? DateTime.now(),
+      isExam: true,
+      typeOrStatus: json['examType'],
+      weight: (json['weight'] as num?)?.toDouble(),
+      startTime: json['startTime'],
+    );
+  }
+}
+
+class StudySessionItemModel {
+  final String id;
+  final int durationMinutes;
+  final String? notes;
+  final DateTime startTime;
+
+  StudySessionItemModel({
+    required this.id,
+    required this.durationMinutes,
+    this.notes,
+    required this.startTime,
+  });
+
+  factory StudySessionItemModel.fromJson(Map<String, dynamic> json) {
+    return StudySessionItemModel(
+      id: json['id'] ?? '',
+      durationMinutes: (json['durationMinutes'] as num?)?.toInt() ?? 0,
+      notes: json['notes'],
+      startTime: DateTime.tryParse(json['startTime'] ?? '') ?? DateTime.now(),
+    );
+  }
+}
+
+class AcademicSummaryModel {
+  final int totalCourses;
+  final double overallAttendanceRate;
+  final double cumulativeGpa;
+  final String cumulativeLetter;
+  final int upcomingAssignmentsCount;
+  final int upcomingAssignmentsTotal;
+  final int upcomingExamsCount;
+  final int upcomingExamsTotal;
+  final List<UpcomingDeliverableModel> upcomingDeliverables;
+
+  AcademicSummaryModel({
+    required this.totalCourses,
+    required this.overallAttendanceRate,
+    required this.cumulativeGpa,
+    required this.cumulativeLetter,
+    required this.upcomingAssignmentsCount,
+    this.upcomingAssignmentsTotal = 0,
+    required this.upcomingExamsCount,
+    this.upcomingExamsTotal = 0,
+    required this.upcomingDeliverables,
+  });
+
+  factory AcademicSummaryModel.fromJson(Map<String, dynamic> json) {
+    final assignments = (json['upcomingAssignments'] as List?)
+            ?.map((i) => UpcomingDeliverableModel.fromAssignment(
+                Map<String, dynamic>.from(i)))
+            .toList() ??
+        [];
+    final exams = (json['upcomingExams'] as List?)
+            ?.map((i) =>
+                UpcomingDeliverableModel.fromExam(Map<String, dynamic>.from(i)))
+            .toList() ??
+        [];
+    final deliverables = [...assignments, ...exams];
+    deliverables.sort((a, b) => a.date.compareTo(b.date));
+
+    final assignmentsCount =
+        (json['upcomingAssignmentsCount'] as num?)?.toInt() ?? 0;
+    final assignmentsTotal =
+        (json['upcomingAssignmentsTotal'] as num?)?.toInt() ?? assignmentsCount;
+    final examsCount = (json['upcomingExamsCount'] as num?)?.toInt() ?? 0;
+    final examsTotal =
+        (json['upcomingExamsTotal'] as num?)?.toInt() ?? examsCount;
+
+    return AcademicSummaryModel(
+      totalCourses: (json['totalCourses'] as num?)?.toInt() ?? 0,
+      overallAttendanceRate:
+          (json['overallAttendanceRate'] as num?)?.toDouble() ?? 100.0,
+      cumulativeGpa: (json['cumulativeGpa'] as num?)?.toDouble() ?? 0.0,
+      cumulativeLetter: json['cumulativeLetter'] ?? 'N/A',
+      upcomingAssignmentsCount: assignmentsCount,
+      upcomingAssignmentsTotal: assignmentsTotal,
+      upcomingExamsCount: examsCount,
+      upcomingExamsTotal: examsTotal,
+      upcomingDeliverables: deliverables,
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'totalCourses': totalCourses,
+      'overallAttendanceRate': overallAttendanceRate,
+      'cumulativeGpa': cumulativeGpa,
+      'cumulativeLetter': cumulativeLetter,
+      'upcomingAssignmentsCount': upcomingAssignmentsCount,
+      'upcomingExamsCount': upcomingExamsCount,
+    };
+  }
+}
+

@@ -1,58 +1,54 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import '../../../../app/theme/app_theme.dart';
 import '../models/academic_models.dart';
 
 class AcademicUpNextSection extends StatelessWidget {
-  final List<CourseOverviewModel> courses;
+  final List<UpcomingDeliverableModel> deliverables;
+  final int? totalCount;
   final Function(String courseId)? onCourseTap;
 
   const AcademicUpNextSection({
     super.key,
-    required this.courses,
+    required this.deliverables,
+    this.totalCount,
     this.onCourseTap,
   });
+
+  String _formatDate(DateTime date, bool isExam, String? startTime) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final target = DateTime(date.year, date.month, date.day);
+    final diffDays = target.difference(today).inDays;
+
+    final prefix = isExam ? 'Exam: ' : 'Due ';
+    if (diffDays == 0) {
+      return '$prefix Today${startTime != null ? " ($startTime)" : ""}';
+    } else if (diffDays == 1) {
+      return '$prefix Tomorrow${startTime != null ? " ($startTime)" : ""}';
+    } else if (diffDays > 1 && diffDays <= 7) {
+      return '$prefix in $diffDays days';
+    } else {
+      final df = DateFormat('MMM d');
+      return '$prefix${df.format(date)}';
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
-    // Collect upcoming schedule items across enrolled courses
-    final items = <_UpNextItem>[];
+    if (deliverables.isEmpty) return const SizedBox.shrink();
 
-    for (final course in courses) {
-      if (course.assignmentsCount > 0) {
-        items.add(
-          _UpNextItem(
-            courseId: course.id,
-            courseCode:
-                course.code ?? course.name.substring(0, 3).toUpperCase(),
-            title: '${course.name} Assignment',
-            subtext: '${course.assignmentsCount} pending',
-            isExam: false,
-          ),
-        );
-      }
-      if (course.examsCount > 0) {
-        items.add(
-          _UpNextItem(
-            courseId: course.id,
-            courseCode:
-                course.code ?? course.name.substring(0, 3).toUpperCase(),
-            title: '${course.name} Exam',
-            subtext: '${course.examsCount} upcoming',
-            isExam: true,
-          ),
-        );
-      }
-    }
-
-    if (items.isEmpty) return const SizedBox.shrink();
+    final label = (totalCount != null && totalCount! > deliverables.length)
+        ? 'UP NEXT (${deliverables.length} of $totalCount)'
+        : 'UP NEXT';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'UP NEXT',
+          label,
           style: TextStyle(
             fontSize: 11,
             fontWeight: FontWeight.w800,
@@ -62,13 +58,19 @@ class AcademicUpNextSection extends StatelessWidget {
         ),
         AppSpacing.verticalGapSm,
         SizedBox(
-          height: 84,
+          height: 88,
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
-            itemCount: items.length,
+            itemCount: deliverables.length,
             separatorBuilder: (_, __) => const SizedBox(width: 10),
             itemBuilder: (context, index) {
-              final item = items[index];
+              final item = deliverables[index];
+              final code = item.courseCode ??
+                  (item.courseName.length >= 3
+                      ? item.courseName.substring(0, 3).toUpperCase()
+                      : item.courseName);
+              final subtext = _formatDate(item.date, item.isExam, item.startTime);
+
               return InkWell(
                 onTap: () {
                   AppHaptics.selection();
@@ -76,7 +78,7 @@ class AcademicUpNextSection extends StatelessWidget {
                 },
                 borderRadius: BorderRadius.circular(14),
                 child: Container(
-                  width: 200,
+                  width: 220,
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     color: colorScheme.surfaceContainerHighest.withAlpha(40),
@@ -104,13 +106,13 @@ class AcademicUpNextSection extends StatelessWidget {
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: Text(
-                              item.courseCode,
+                              code,
                               style: TextStyle(
                                 fontSize: 10,
                                 fontWeight: FontWeight.w800,
                                 color: item.isExam
-                                    ? colorScheme.tertiary
-                                    : colorScheme.primary,
+                                  ? colorScheme.tertiary
+                                  : colorScheme.primary,
                               ),
                             ),
                           ),
@@ -135,10 +137,13 @@ class AcademicUpNextSection extends StatelessWidget {
                         ),
                       ),
                       Text(
-                        item.subtext,
+                        subtext,
                         style: TextStyle(
                           fontSize: 11,
-                          color: colorScheme.onSurfaceVariant.withAlpha(140),
+                          fontWeight: FontWeight.w500,
+                          color: item.isExam
+                              ? colorScheme.tertiary
+                              : colorScheme.onSurfaceVariant.withAlpha(150),
                         ),
                       ),
                     ],
@@ -151,20 +156,4 @@ class AcademicUpNextSection extends StatelessWidget {
       ],
     );
   }
-}
-
-class _UpNextItem {
-  final String courseId;
-  final String courseCode;
-  final String title;
-  final String subtext;
-  final bool isExam;
-
-  _UpNextItem({
-    required this.courseId,
-    required this.courseCode,
-    required this.title,
-    required this.subtext,
-    required this.isExam,
-  });
 }

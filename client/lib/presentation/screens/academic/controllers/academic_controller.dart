@@ -32,11 +32,18 @@ final academicCoursesListProvider = FutureProvider.autoDispose
       .toList();
 });
 
-final academicSummaryProvider =
-    FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
+final academicSummaryProvider = FutureProvider.autoDispose
+    .family<AcademicSummaryModel, String?>((ref, semester) async {
   final dio = ref.watch(dioProvider);
-  final response = await dio.get(ApiEndpoints.academicSummary);
-  return Map<String, dynamic>.from(response.data['data']);
+  final response = await dio.get(
+    ApiEndpoints.academicSummary,
+    queryParameters:
+        semester != null && semester.isNotEmpty && semester != 'ALL'
+            ? {'semester': semester}
+            : null,
+  );
+  return AcademicSummaryModel.fromJson(
+      Map<String, dynamic>.from(response.data['data']));
 });
 
 final academicGpaProvider = FutureProvider.autoDispose
@@ -86,6 +93,27 @@ class AcademicController {
       'color': color,
     });
     invalidateAll();
+  }
+
+  Future<void> updateCourse({
+    required String courseId,
+    String? name,
+    String? code,
+    String? semester,
+    String? instructor,
+    int? credits,
+    String? color,
+  }) async {
+    final dio = ref.read(dioProvider);
+    await dio.put(ApiEndpoints.courseById(courseId), data: {
+      if (name != null) 'name': name,
+      if (code != null) 'code': code,
+      if (semester != null) 'semester': semester,
+      if (instructor != null) 'instructor': instructor,
+      if (credits != null) 'credits': credits,
+      if (color != null) 'color': color,
+    });
+    invalidateCourseViews(courseId);
   }
 
   Future<void> deleteCourse(String courseId) async {
