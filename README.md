@@ -35,22 +35,12 @@
   - [1. Clone Repository](#1-clone-repository)
   - [2. Backend Setup](#2-backend-setup)
   - [3. Frontend Setup (Flutter)](#3-frontend-setup-flutter)
-- [⚙️ Environment Configuration](#️-environment-configuration)
 - [🗄️ Database Setup](#️-database-setup)
   - [Migrations & Client Generation](#migrations--client-generation)
-  - [Database Seeding](#database-seeding)
-  - [Prisma Studio Inspection](#prisma-studio-inspection)
-- [🔌 API Overview](#-api-overview)
-  - [Response Envelope Standards](#response-envelope-standards)
-  - [Core Endpoint Registry](#core-endpoint-registry)
 - [📋 Use Cases Index](#-use-cases-index)
 - [🔐 Security](#-security)
-- [🧪 Testing](#-testing)
-  - [Backend Test Execution](#backend-test-execution)
-  - [Frontend Test Execution](#frontend-test-execution)
 - [🐳 Docker Setup](#-docker-setup)
 - [🚀 Deployment](#-deployment)
-- [🔮 Future Improvements](#-future-improvements)
 - [👥 Team & Responsibilities](#-team--responsibilities)
 
 ---
@@ -446,7 +436,7 @@ cd Hab_os
    ```bash
    cp .env.example .env
    ```
-   *(Review [Environment Configuration](#️-environment-configuration) below to adjust database connection details).*
+   *(Adjust database connection details if necessary).*
 
 4. **Spin up PostgreSQL via Docker** (if not using local Postgres):
    From the project root:
@@ -498,53 +488,6 @@ cd Hab_os
 
 ---
 
-## ⚙️ Environment Configuration
-
-The backend features strict startup validation using **Joi** (`server/src/config/env.ts`). If required variables are missing or use insecure defaults in production, the application refuses to boot.
-
-Create a `.env` file inside `server/` with the following variables:
-
-```ini
-# ==========================================
-# SERVER ENVIRONMENT CONFIGURATION
-# ==========================================
-
-# Application Environment: 'development' | 'production' | 'test'
-NODE_ENV=development
-
-# HTTP Listener Port
-PORT=5000
-
-# PostgreSQL Connection String (Format: postgresql://USER:PASSWORD@HOST:PORT/DB?schema=public)
-DATABASE_URL="postgresql://habos_user:habos_password@localhost:5432/habos_db?schema=public"
-
-# ==========================================
-# SECURITY & JWT SECRETS
-# ==========================================
-
-# Access Token Secret (Minimum 16 chars in dev, minimum 32 chars in production)
-JWT_SECRET=supersecretjwtkey_habos_2026_secure_unique
-
-# Refresh Token Secret (Minimum 16 chars in dev, minimum 32 chars in production)
-JWT_REFRESH_SECRET=supersecretrefreshjwtkey_habos_2026_secure_unique
-
-# Token Expiration Lifetimes
-JWT_EXPIRES_IN=15m
-JWT_REFRESH_EXPIRES_IN=30d
-
-# ==========================================
-# CORS & NETWORKING
-# ==========================================
-
-# Comma-separated list of allowed web origins (leave empty to allow local development)
-ALLOWED_ORIGINS=http://localhost:3000,http://localhost:8080
-```
-
-> [!CAUTION]
-> In `NODE_ENV=production`, using known default keys (e.g., `secret`, `password`, `123456`) or keys shorter than 32 characters triggers an immediate `process.exit(1)` security failure at boot.
-
----
-
 ## 🗄️ Database Setup
 
 HabOS utilizes **PostgreSQL 16** with **Prisma ORM**. The database schema is defined in `server/prisma/schema.prisma` and encompasses 50+ models organized across all 24 domains.
@@ -566,107 +509,6 @@ HabOS utilizes **PostgreSQL 16** with **Prisma ORM**. The database schema is def
   ```bash
   npm run prisma:push
   ```
-
-### Database Seeding
-
-Populate the database with default categories, initial user preferences, and demo tasks:
-```bash
-npm run prisma:seed
-```
-
-### Password Reset Utility
-
-In case you forget local test account credentials, use the included CLI tool:
-```bash
-npm run reset-password
-```
-
-### Prisma Studio Inspection
-
-Inspect and edit records visually in a browser GUI:
-```bash
-npx prisma studio
-```
-*Prisma Studio runs locally at `http://localhost:5555`.*
-
----
-
-## 🔌 API Overview
-
-HabOS provides a versioned RESTful API following strict URI path-based semantic versioning:
-```
-http://localhost:5000/api/v1/{resource}
-```
-
-### Response Envelope Standards
-
-All endpoints return a uniform response envelope:
-
-#### Standard Success Response
-```json
-{
-  "success": true,
-  "data": { ... },
-  "message": "Resource retrieved successfully"
-}
-```
-
-#### Standard Paginated Collection Response
-```json
-{
-  "success": true,
-  "data": {
-    "data": [ ...items... ],
-    "pagination": {
-      "total": 48,
-      "page": 1,
-      "limit": 20,
-      "totalPages": 3,
-      "hasMore": true,
-      "nextCursor": "uuid-next-token"
-    }
-  },
-  "message": "Items retrieved"
-}
-```
-
-#### Standard Error Response
-```json
-{
-  "success": false,
-  "error": {
-    "code": "VALIDATION_ERROR",
-    "message": "\"title\" is required",
-    "details": []
-  }
-}
-```
-
----
-
-### Core Endpoint Registry
-
-| Domain Route Prefix | Methods | Description & Covered Operations |
-| :--- | :--- | :--- |
-| `/api/v1/auth` | `POST`, `GET` | User registration, login, token refresh, and profile fetching. |
-| `/api/v1/dashboard` | `GET` | Aggregated dashboard feed, today's priority list, and Life Score. |
-| `/api/v1/lifescore` | `GET`, `POST` | Real-time Life Score calculation, domain weight updates, history logs. |
-| `/api/v1/tasks` | `GET`, `POST`, `PATCH`, `DELETE` | Task CRUD, status updates, priority matrix, time estimates. |
-| `/api/v1/schedule` | `GET`, `POST`, `PUT`, `DELETE` | Calendar events, time blocking, recurrence rules. |
-| `/api/v1/habits` | `GET`, `POST`, `POST /checkin` | Habit creation, streak calculations, completion heatmaps. |
-| `/api/v1/focus` | `GET`, `POST`, `PATCH` | Focus & Pomodoro session management, category tagging. |
-| `/api/v1/projects` | `GET`, `POST`, `PATCH`, `DELETE` | Dev Hub projects, features backlog, bug tracker, Kanban status. |
-| `/api/v1/courses` | `GET`, `POST`, `PATCH`, `DELETE` | Academic courses, assignments, exam schedules, GPA grades. |
-| `/api/v1/gym` | `GET`, `POST`, `PATCH`, `DELETE` | Workout logs, exercise sets/reps/weights, PR calculations. |
-| `/api/v1/finance` | `GET`, `POST`, `DELETE` | Income/expense transactions, monthly category budgets, analytics. |
-| `/api/v1/goals` | `GET`, `POST`, `PATCH`, `DELETE` | Long-term goals, milestone tracking, deadline roadmaps. |
-| `/api/v1/vault` | `GET`, `POST`, `PATCH`, `DELETE` | Markdown notes, code snippet repository, command sheets. |
-| `/api/v1/ai` | `GET`, `POST` | AI assistant queries, personalized daily advice, neglected area reports. |
-| `/api/v1/integrations`| `GET`, `POST`, `DELETE` | GitHub OAuth connection, LeetCode profile scraper sync. |
-| `/api/v1/tech` | `GET`, `POST`, `PATCH` | Technology learning tracks, documentation links, skill status. |
-| `/api/v1/analytics` | `GET` | Cross-domain analytics, periodic comparisons, productivity trends. |
-| `/api/v1/search` | `GET` | Multi-entity global search across tasks, notes, courses, and projects. |
-| `/api/v1/notifications`| `GET`, `PATCH`, `DELETE` | In-app notification queue, quiet hours configuration. |
 
 ---
 
@@ -731,58 +573,6 @@ Security in HabOS is implemented defensively across every layer of the architect
 
 ---
 
-## 🧪 Testing
-
-The repository features comprehensive testing suites covering unit calculations, clean architecture validation, and end-to-end security compliance.
-
-### Backend Test Execution
-
-Navigate to `server/`:
-
-```bash
-cd server
-
-# Run the master automated test runner
-npm test
-
-# Run the endpoint security and authentication auditor
-npm run test:security
-
-# Verify Clean Architecture and module separation rules
-npm run test:arch
-
-# Verify task state machines and downstream cascade triggers
-npm run test:tasks
-
-# Run domain unit tests (LifeScore & Academic course calculations)
-npm run test:unit
-
-# Run habit streaks & validation logic tests
-npm run test:habits
-
-# Run Pomodoro focus session tests
-npm run test:focus
-
-# Run sports science 1RM & PR calculations tests
-npm run test:gym
-```
-
-### Frontend Test Execution
-
-Navigate to `client/`:
-
-```bash
-cd client
-
-# Run all Flutter unit and widget tests
-flutter test
-
-# Run static analysis and lint checks
-flutter analyze
-```
-
----
-
 ## 🐳 Docker Setup
 
 HabOS provides a multi-stage Docker configuration and Docker Compose manifest for containerized deployments.
@@ -835,37 +625,6 @@ The database volume is persisted locally in the Docker volume `pgdata`.
    NODE_ENV=production npm start
    ```
 
-### Reverse Proxy Configuration (Nginx)
-
-In production deployments, place an Nginx reverse proxy in front of the HabOS Express container (`:5000`) for SSL/TLS termination:
-
-```nginx
-server {
-    listen 80;
-    server_name api.habos.dev;
-    return 301 https://$host$request_uri;
-}
-
-server {
-    listen 443 ssl http2;
-    server_name api.habos.dev;
-
-    ssl_certificate /etc/letsencrypt/live/api.habos.dev/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/api.habos.dev/privkey.pem;
-
-    location / {
-        proxy_pass http://127.0.0.1:5000;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_cache_bypass $http_upgrade;
-    }
-}
-```
 
 ### Mobile Client Release Builds
 
@@ -883,17 +642,6 @@ flutter build apk --release
 # iOS Release Build (requires macOS & Xcode)
 flutter build ipa --release
 ```
-
----
-
-## 🔮 Future Improvements
-
-- [ ] **Bidirectional CalDAV & Google Calendar Synchronization**: Sync schedule events and exams with external calendar providers.
-- [ ] **Native Wear OS & watchOS Companion Apps**: Quick set/rep logging for gym workouts and one-tap habit check-ins.
-- [ ] **Local LLM Integration (Ollama / LocalAI)**: On-device private AI assistant for task prioritization without third-party API dependencies.
-- [ ] **Offline-First Synchronization (CRDTs)**: Conflict-free offline replication between Flutter local SQLite/Isar and PostgreSQL.
-- [ ] **Web Dashboard**: Responsive desktop-first web client built with Next.js or Flutter Web.
-- [ ] **Automated Bank Feed Integration (Plaid / OpenBanking)**: Direct transaction imports with automatic expense categorization.
 
 ---
 
