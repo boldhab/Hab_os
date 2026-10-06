@@ -119,6 +119,17 @@ class HabitModel extends Equatable {
       targetFrequencyPeriod == 'WEEK' ||
       (targetFrequencyCount != null && targetFrequencyCount! > 1);
 
+  bool get isNumericProgress =>
+      targetType == 'COUNT' || targetType == 'DURATION';
+
+  int get currentTodayValue =>
+      todayLog?.value ?? (isCompletedToday ? targetValue : 0);
+
+  double get progressRatio {
+    if (targetValue <= 0) return isCompletedToday ? 1.0 : 0.0;
+    return (currentTodayValue / targetValue).clamp(0.0, 1.0);
+  }
+
   factory HabitModel.fromJson(Map<String, dynamic> json) {
     return HabitModel(
       id: json['id'] ?? '',

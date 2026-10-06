@@ -87,6 +87,18 @@ class HabitRepository {
     await _dio.post(ApiEndpoints.habitFreeze(id), data: {'count': count});
   }
 
+  // --- Categories ---
+  Future<List<HabitCategoryModel>> getCategories() async {
+    final response = await _dio.get('${ApiEndpoints.habits}/categories');
+    final data = response.data['data'] ?? response.data;
+    if (data is List) {
+      return data
+          .map((i) => HabitCategoryModel.fromJson(Map<String, dynamic>.from(i)))
+          .toList();
+    }
+    return [];
+  }
+
   // --- Routines ---
   Future<List<RoutineModel>> getRoutines() async {
     final response = await _dio.get(ApiEndpoints.habitRoutines);
