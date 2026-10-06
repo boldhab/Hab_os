@@ -19,9 +19,13 @@ export const createWorkoutSchema = Joi.object({
           .items(
             Joi.object({
               setNumber: Joi.number().integer().min(1).required(),
-              weightKg: Joi.number().min(0).required(),
-              repetitions: Joi.number().integer().min(0).required(),
+              weightKg: Joi.number().min(0).default(0),
+              repetitions: Joi.number().integer().min(0).default(0),
               rpe: Joi.number().min(0).max(10).allow(null),
+              tag: Joi.string().valid('W', 'N', 'D', 'F').default('N'),
+              durationSeconds: Joi.number().integer().min(0).allow(null),
+              distanceMeters: Joi.number().min(0).allow(null),
+              caloriesBurned: Joi.number().integer().min(0).allow(null),
               notes: Joi.string().trim().allow('', null),
             })
           )
@@ -38,7 +42,55 @@ export const updateWorkoutSchema = Joi.object({
   durationMinutes: Joi.number().integer().min(1).max(360),
   notes: Joi.string().trim().allow('', null),
   isCompleted: Joi.boolean(),
-  exercises: Joi.array().optional(),
+  exercises: Joi.array()
+    .items(
+      Joi.object({
+        exerciseId: Joi.string().uuid().required(),
+        order: Joi.number().integer().min(1).default(1),
+        sets: Joi.array()
+          .items(
+            Joi.object({
+              setNumber: Joi.number().integer().min(1).required(),
+              weightKg: Joi.number().min(0).default(0),
+              repetitions: Joi.number().integer().min(0).default(0),
+              rpe: Joi.number().min(0).max(10).allow(null),
+              tag: Joi.string().valid('W', 'N', 'D', 'F').default('N'),
+              durationSeconds: Joi.number().integer().min(0).allow(null),
+              distanceMeters: Joi.number().min(0).allow(null),
+              caloriesBurned: Joi.number().integer().min(0).allow(null),
+              notes: Joi.string().trim().allow('', null),
+            })
+          )
+          .default([]),
+      })
+    )
+    .optional(),
+});
+
+export const createTemplateSchema = Joi.object({
+  name: Joi.string().trim().min(1).max(255).required().messages({
+    'string.empty': 'Template name is required',
+    'any.required': 'Template name is required',
+  }),
+  category: Joi.string().trim().default('PPL'),
+  description: Joi.string().trim().allow('', null),
+  exercises: Joi.array()
+    .items(
+      Joi.object({
+        exerciseId: Joi.string().uuid().required(),
+        order: Joi.number().integer().min(1).default(1),
+        targetSets: Joi.number().integer().min(1).max(50).default(3),
+        targetReps: Joi.number().integer().min(1).max(200).default(10),
+        targetRpe: Joi.number().min(0).max(10).allow(null),
+        notes: Joi.string().trim().allow('', null),
+      })
+    )
+    .default([]),
+});
+
+export const paginationQuerySchema = Joi.object({
+  limit: Joi.number().integer().min(1).max(100).default(20),
+  category: Joi.string().trim().optional(),
 });
 
 export const createExerciseSchema = Joi.object({
@@ -61,9 +113,13 @@ export const addExerciseToWorkoutSchema = Joi.object({
     .items(
       Joi.object({
         setNumber: Joi.number().integer().min(1).required(),
-        weightKg: Joi.number().min(0).required(),
-        repetitions: Joi.number().integer().min(0).required(),
+        weightKg: Joi.number().min(0).default(0),
+        repetitions: Joi.number().integer().min(0).default(0),
         rpe: Joi.number().min(0).max(10).allow(null),
+        tag: Joi.string().valid('W', 'N', 'D', 'F').default('N'),
+        durationSeconds: Joi.number().integer().min(0).allow(null),
+        distanceMeters: Joi.number().min(0).allow(null),
+        caloriesBurned: Joi.number().integer().min(0).allow(null),
         notes: Joi.string().trim().allow('', null),
       })
     )
@@ -72,9 +128,13 @@ export const addExerciseToWorkoutSchema = Joi.object({
 
 export const recordSetSchema = Joi.object({
   setNumber: Joi.number().integer().min(1).required(),
-  weightKg: Joi.number().min(0).required(),
-  repetitions: Joi.number().integer().min(0).required(),
+  weightKg: Joi.number().min(0).default(0),
+  repetitions: Joi.number().integer().min(0).default(0),
   rpe: Joi.number().min(0).max(10).allow(null),
+  tag: Joi.string().valid('W', 'N', 'D', 'F').default('N'),
+  durationSeconds: Joi.number().integer().min(0).allow(null),
+  distanceMeters: Joi.number().min(0).allow(null),
+  caloriesBurned: Joi.number().integer().min(0).allow(null),
   notes: Joi.string().trim().allow('', null),
 });
 
@@ -94,6 +154,10 @@ export const recordBodyMetricSchema = Joi.object({
 
 export const uuidParamSchema = Joi.object({
   id: Joi.string().uuid().required(),
+});
+
+export const workoutExerciseIdParamSchema = Joi.object({
+  workoutExerciseId: Joi.string().uuid().required(),
 });
 
 export const workoutExerciseParamSchema = Joi.object({
