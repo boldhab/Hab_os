@@ -1,48 +1,34 @@
 import prisma from '../../config/db';
 import logger from '../../utils/logger';
+import { evaluateHabitStreak } from '../../modules/habits/habits.service';
 
 /**
  * Habit Streak Decay Job
- * Automatically decays or resets current streaks for habits that were missed yesterday.
+ * Evaluates active habit streaks, safely consuming streak freezes when days are missed
+ * or decaying broken streaks.
  * Runs periodically to ensure streaks accurately reflect daily consistency.
  */
 export async function runHabitStreakDecay(): Promise<{ evaluated: number; reset: number }> {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  const yesterday = new Date(today);
-  yesterday.setDate(yesterday.getDate() - 1);
-
-  // Fetch all active daily habits with their current streak > 0
+  // Fetch all active habits with positive streaks
   const activeHabits = await prisma.habit.findMany({
     where: {
       isActive: true,
-      frequency: 'DAILY',
       currentStreak: { gt: 0 },
-    },
-    include: {
-      logs: {
-        where: {
-          isCompleted: true,
-          date: { gte: yesterday },
-        },
-      },
     },
   });
 
   let resetCount = 0;
 
   for (const habit of activeHabits) {
-    // If there is NO completed log for yesterday or today, the streak is broken
-    const hasLogYesterdayOrToday = habit.logs.length > 0;
-
-    if (!hasLogYesterdayOrToday) {
-      await prisma.habit.update({
-        where: { id: habit.id },
-        data: { currentStreak: 0 },
-      });
-      resetCount++;
-      logger.info(`[HabitStreakDecay] Reset streak for habit "${habit.name}" (User: ${habit.userId})`);
+    const prevStreak = habit.currentStreak;
+    try {
+      const result = await evaluateHabitStreak(habit.id, habit, true);
+      if (prevStreak > 0 && result.currentStreak === 0) {
+        resetCount++;
+        logger.info(`[HabitStreakDecay] Reset broken streak for habit "${habit.name}" (User: ${habit.userId})`);
+      }
+    } catch (err) {
+      logger.error(`[HabitStreakDecay] Error evaluating streak for habit "${habit.id}":`, err);
     }
   }
 
@@ -51,3 +37,4 @@ export async function runHabitStreakDecay(): Promise<{ evaluated: number; reset:
 }
 
 export default runHabitStreakDecay;
+
