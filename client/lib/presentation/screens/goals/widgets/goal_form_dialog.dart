@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../app/theme/app_theme.dart';
+import '../../../widgets/common/form_section_header.dart';
 
 class GoalFormDialog extends StatefulWidget {
   final Future<void> Function(Map<String, dynamic> payload) onSubmit;
@@ -133,16 +134,38 @@ class _GoalFormDialogState extends State<GoalFormDialog> {
           children: [
             // Header
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 16, 12),
+              padding: const EdgeInsets.fromLTRB(20, 18, 16, 12),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    'New Goal',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w800,
-                          fontSize: 18,
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: primaryRed.withAlpha(25),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(Icons.flag_rounded, size: 20, color: primaryRed),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'New Goal',
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 18,
+                              ),
                         ),
+                        Text(
+                          'Set an ambitious milestone to work toward',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: colorScheme.onSurfaceVariant.withAlpha(170),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                   IconButton(
                     icon: const Icon(Icons.close_rounded),
@@ -160,37 +183,33 @@ class _GoalFormDialogState extends State<GoalFormDialog> {
                 padding: const EdgeInsets.all(AppSpacing.lg),
                 children: [
                   // Title Field
+                  const FormSectionHeader(
+                    title: 'Goal Objective',
+                    icon: Icons.edit_note_rounded,
+                  ),
                   TextFormField(
                     controller: _titleController,
+                    autofocus: true,
                     style: const TextStyle(
-                        fontSize: 18, fontWeight: FontWeight.w700),
+                        fontSize: 16, fontWeight: FontWeight.w600),
                     decoration: InputDecoration(
-                      hintText: 'What is your goal? *',
-                      hintStyle: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w500,
-                        color: colorScheme.onSurfaceVariant.withAlpha(120),
-                      ),
-                      border: InputBorder.none,
-                      contentPadding: EdgeInsets.zero,
+                      labelText: 'Goal Title *',
+                      hintText: 'What is your goal?',
+                      prefixIcon: Icon(Icons.flag_rounded,
+                          color: primaryRed, size: 20),
                     ),
                     validator: (val) => val == null || val.trim().isEmpty
-                        ? 'Title is required'
+                        ? 'Goal title is required'
                         : null,
                   ),
-                  const SizedBox(height: 16),
+                  AppSpacing.verticalGapLg,
 
                   // Category Selection Icons
-                  Text(
-                    'CATEGORY',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.8,
-                      color: colorScheme.onSurfaceVariant.withAlpha(150),
-                    ),
+                  const FormSectionHeader(
+                    title: 'Category Domain',
+                    icon: Icons.category_outlined,
                   ),
-                  AppSpacing.verticalGapSm,
+                  AppSpacing.verticalGapXs,
                   SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     child: Row(
@@ -200,10 +219,12 @@ class _GoalFormDialogState extends State<GoalFormDialog> {
                         return Padding(
                           padding: const EdgeInsets.only(right: 8),
                           child: ChoiceChip(
-                            avatar: Icon(c['icon'] as IconData, size: 16),
+                            avatar: Icon(c['icon'] as IconData,
+                                size: 16,
+                                color: selected ? primaryRed : colorScheme.onSurfaceVariant),
                             label: Text(c['label'] as String),
                             selected: selected,
-                            selectedColor: primaryRed.withAlpha(30),
+                            selectedColor: primaryRed.withAlpha(25),
                             labelStyle: TextStyle(
                               color:
                                   selected ? primaryRed : colorScheme.onSurface,
@@ -223,36 +244,30 @@ class _GoalFormDialogState extends State<GoalFormDialog> {
 
                   // Financial Amount Input if FINANCIAL selected
                   if (_category == 'FINANCIAL') ...[
+                    const FormSectionHeader(
+                      title: 'Financial Target',
+                      icon: Icons.savings_outlined,
+                    ),
                     TextFormField(
                       controller: _targetAmountController,
                       keyboardType:
                           const TextInputType.numberWithOptions(decimal: true),
                       decoration: InputDecoration(
-                        labelText: 'Target Savings Amount (\$)',
-                        prefixText: '\$ ',
-                        filled: true,
-                        fillColor:
-                            colorScheme.surfaceContainerHighest.withAlpha(40),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(14),
-                          borderSide: BorderSide.none,
-                        ),
+                        labelText: 'Target Savings Amount *',
+                        prefixIcon: Icon(Icons.attach_money_rounded,
+                            color: primaryRed, size: 20),
+                        hintText: '0.00',
                       ),
                     ),
                     AppSpacing.verticalGapLg,
                   ],
 
                   // Priority Segmented Selector
-                  Text(
-                    'PRIORITY',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.8,
-                      color: colorScheme.onSurfaceVariant.withAlpha(150),
-                    ),
+                  const FormSectionHeader(
+                    title: 'Priority',
+                    icon: Icons.priority_high_rounded,
                   ),
-                  AppSpacing.verticalGapSm,
+                  AppSpacing.verticalGapXs,
                   Row(
                     children: _priorities.map((p) {
                       final selected = _priority == p;
@@ -273,8 +288,13 @@ class _GoalFormDialogState extends State<GoalFormDialog> {
                                 color: selected
                                     ? primaryRed
                                     : colorScheme.surfaceContainerHighest
-                                        .withAlpha(40),
+                                        .withAlpha(45),
                                 borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: selected
+                                      ? primaryRed
+                                      : colorScheme.outlineVariant.withAlpha(70),
+                                ),
                               ),
                               child: Text(
                                 p[0] + p.substring(1).toLowerCase(),
@@ -297,6 +317,11 @@ class _GoalFormDialogState extends State<GoalFormDialog> {
                   AppSpacing.verticalGapLg,
 
                   // Target Date Picker Tile
+                  const FormSectionHeader(
+                    title: 'Target Date',
+                    icon: Icons.calendar_today_rounded,
+                  ),
+                  AppSpacing.verticalGapXs,
                   InkWell(
                     onTap: _pickDate,
                     borderRadius: BorderRadius.circular(14),
@@ -305,22 +330,32 @@ class _GoalFormDialogState extends State<GoalFormDialog> {
                           horizontal: 14, vertical: 12),
                       decoration: BoxDecoration(
                         color:
-                            colorScheme.surfaceContainerHighest.withAlpha(40),
+                            colorScheme.surfaceContainerHighest.withAlpha(45),
                         borderRadius: BorderRadius.circular(14),
                         border: Border.all(
-                            color: colorScheme.outlineVariant.withAlpha(30)),
+                          color: _targetDate != null
+                              ? primaryRed.withAlpha(120)
+                              : colorScheme.outlineVariant.withAlpha(85),
+                        ),
                       ),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Row(
                             children: [
-                              Icon(Icons.calendar_today_rounded,
-                                  size: 18, color: primaryRed),
-                              const SizedBox(width: 10),
+                              Container(
+                                padding: const EdgeInsets.all(6),
+                                decoration: BoxDecoration(
+                                  color: primaryRed.withAlpha(20),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Icon(Icons.calendar_today_rounded,
+                                    size: 18, color: primaryRed),
+                              ),
+                              const SizedBox(width: 12),
                               Text(
                                 _targetDate == null
-                                    ? 'Set Target Date'
+                                    ? 'Set Target Completion Date'
                                     : 'Target: ${_targetDate!.year}-${_targetDate!.month.toString().padLeft(2, '0')}-${_targetDate!.day.toString().padLeft(2, '0')}',
                                 style: TextStyle(
                                   fontSize: 14,
@@ -342,26 +377,29 @@ class _GoalFormDialogState extends State<GoalFormDialog> {
                   InkWell(
                     onTap: () =>
                         setState(() => _showMoreDetails = !_showMoreDetails),
-                    child: Row(
-                      children: [
-                        Icon(
-                          _showMoreDetails
-                              ? Icons.expand_less_rounded
-                              : Icons.expand_more_rounded,
-                          color: primaryRed,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          _showMoreDetails
-                              ? 'Hide description'
-                              : 'More details (Description)',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Row(
+                        children: [
+                          Icon(
+                            _showMoreDetails
+                                ? Icons.expand_less_rounded
+                                : Icons.expand_more_rounded,
                             color: primaryRed,
                           ),
-                        ),
-                      ],
+                          const SizedBox(width: 6),
+                          Text(
+                            _showMoreDetails
+                                ? 'Hide description'
+                                : 'More details (Motivation & Notes)',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: primaryRed,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                   if (_showMoreDetails) ...[
@@ -369,15 +407,11 @@ class _GoalFormDialogState extends State<GoalFormDialog> {
                     TextFormField(
                       controller: _descController,
                       maxLines: 3,
-                      decoration: InputDecoration(
-                        hintText: 'Add notes or motivation...',
-                        filled: true,
-                        fillColor:
-                            colorScheme.surfaceContainerHighest.withAlpha(40),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(14),
-                          borderSide: BorderSide.none,
-                        ),
+                      decoration: const InputDecoration(
+                        labelText: 'Description & Motivation',
+                        hintText: 'Why is this goal important? Add motivation or milestones...',
+                        prefixIcon: Icon(Icons.notes_rounded, size: 20),
+                        alignLabelWithHint: true,
                       ),
                     ),
                   ],
@@ -391,14 +425,17 @@ class _GoalFormDialogState extends State<GoalFormDialog> {
               child: SizedBox(
                 width: double.infinity,
                 height: 50,
-                child: FilledButton(
+                child: FilledButton.icon(
+                  icon: _isSaving
+                      ? const SizedBox.shrink()
+                      : const Icon(Icons.check_rounded, size: 18),
                   onPressed: _isSaving ? null : _submit,
                   style: FilledButton.styleFrom(
                     backgroundColor: primaryRed,
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16)),
+                        borderRadius: BorderRadius.circular(14)),
                   ),
-                  child: _isSaving
+                  label: _isSaving
                       ? const SizedBox(
                           width: 20,
                           height: 20,
@@ -406,7 +443,7 @@ class _GoalFormDialogState extends State<GoalFormDialog> {
                               strokeWidth: 2, color: Colors.white),
                         )
                       : const Text('Create Goal',
-                          style: TextStyle(fontWeight: FontWeight.w700)),
+                          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
                 ),
               ),
             ),
