@@ -647,19 +647,13 @@ flutter build ipa --release
 
 ## 👥 Team & Responsibilities
 
-| Contributor | Role | Core Responsibilities |
-| :--- | :--- | :--- |
-| **Habtamu Befekadu**<br>([@habtamubefekadu20](https://github.com/boldhab)) | **Creator & Lead Software Architect** | • Overall System Architecture & Life Score Algorithm Design<br>• Flutter Mobile Client (Clean Architecture + Riverpod)<br>• Express.js Backend & Prisma Relational Schema Engineering<br>• Security Hardening, Verification Scripts & CI/CD Dockerization |
-
+| Contributor | CTC | 
+| :--- | :--- | 
+| **Habtamu Befekadu**<br>([CTC-894-26) | 
+| **Petros Geto**<br>([CTC-2934-26)) | 
 ### Contributing
 
-Contributions, bug reports, and feature requests are welcome:
-1. Fork the repository.
-2. Create a feature branch: `git checkout -b feature/amazing-feature`.
-3. Commit your changes adhering to conventional commits: `git commit -m "feat(tasks): add recurrence support"`.
-4. Run tests: `npm test` and `flutter test`.
-5. Push to the branch: `git push origin feature/amazing-feature`.
-6. Open a Pull Request.
+
 
 ---
 
