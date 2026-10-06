@@ -1,11 +1,33 @@
 import 'package:flutter/material.dart';
 import '../../../../app/theme/app_theme.dart';
-import '../analytics_screen.dart';
+import '../../../../domain/models/retrospective_model.dart';
+
+class _ActivityGlanceItem {
+  final String label;
+  final int sharePercent;
+  final double aisUnits;
+  final Color color;
+  final String countDisplay;
+
+  const _ActivityGlanceItem({
+    required this.label,
+    required this.sharePercent,
+    required this.aisUnits,
+    required this.color,
+    required this.countDisplay,
+  });
+}
 
 class AnalyticsAtAGlanceCard extends StatelessWidget {
   final RetrospectiveModel retro;
 
   const AnalyticsAtAGlanceCard({super.key, required this.retro});
+
+  // Standardized Activity Impact Score (AIS) operational weights
+  static const double _focusHourWeight = 60.0;
+  static const double _taskWeight = 10.0;
+  static const double _workoutWeight = 40.0;
+  static const double _habitWeight = 5.0;
 
   @override
   Widget build(BuildContext context) {
@@ -13,44 +35,57 @@ class AnalyticsAtAGlanceCard extends StatelessWidget {
     final primaryRed = colorScheme.primary;
     final semantics = AppSemanticColors.of(context);
 
-    final focusUnits = retro.totalFocusHours.round();
-    final tasksUnits = retro.completedTasksCount;
-    final workoutsUnits = retro.workoutsCount;
-    final habitsUnits = retro.habitsCompletedCount;
-    final totalSum = focusUnits + tasksUnits + workoutsUnits + habitsUnits;
+    // Initial validation pass: Check raw trace metrics without early integer rounding
+    final hasTraceActivity = retro.totalFocusHours > 0 ||
+        retro.completedTasksCount > 0 ||
+        retro.workoutsCount > 0 ||
+        retro.habitsCompletedCount > 0;
 
-    if (totalSum == 0) return const SizedBox.shrink();
+    if (!hasTraceActivity) return const SizedBox.shrink();
 
-    final focusShare = (focusUnits / totalSum * 100).round();
-    final tasksShare = (tasksUnits / totalSum * 100).round();
-    final workoutsShare = (workoutsUnits / totalSum * 100).round();
-    final habitsShare = (habitsUnits / totalSum * 100).round();
+    // Standardized Activity Impact Score (AIS) normalization
+    final focusAis = retro.totalFocusHours * _focusHourWeight;
+    final tasksAis = retro.completedTasksCount * _taskWeight;
+    final workoutsAis = retro.workoutsCount * _workoutWeight;
+    final habitsAis = retro.habitsCompletedCount * _habitWeight;
+    final totalAis = focusAis + tasksAis + workoutsAis + habitsAis;
+
+    if (totalAis <= 0.0) return const SizedBox.shrink();
+
+    final focusShare = ((focusAis / totalAis) * 100).round();
+    final tasksShare = ((tasksAis / totalAis) * 100).round();
+    final workoutsShare = ((workoutsAis / totalAis) * 100).round();
+    final habitsShare = ((habitsAis / totalAis) * 100).round();
 
     final items = [
-      {
-        'label': 'Focus',
-        'share': focusShare,
-        'color': primaryRed,
-        'count': '${retro.totalFocusHours.toStringAsFixed(1)}h'
-      },
-      {
-        'label': 'Tasks',
-        'share': tasksShare,
-        'color': semantics.success,
-        'count': '${retro.completedTasksCount}'
-      },
-      {
-        'label': 'Workouts',
-        'share': workoutsShare,
-        'color': colorScheme.secondary,
-        'count': '${retro.workoutsCount}'
-      },
-      {
-        'label': 'Habits',
-        'share': habitsShare,
-        'color': colorScheme.tertiary,
-        'count': '${retro.habitsCompletedCount}'
-      },
+      _ActivityGlanceItem(
+        label: 'Focus',
+        sharePercent: focusShare,
+        aisUnits: focusAis,
+        color: primaryRed,
+        countDisplay: '${retro.totalFocusHours.toStringAsFixed(1)}h',
+      ),
+      _ActivityGlanceItem(
+        label: 'Tasks',
+        sharePercent: tasksShare,
+        aisUnits: tasksAis,
+        color: semantics.success,
+        countDisplay: '${retro.completedTasksCount}',
+      ),
+      _ActivityGlanceItem(
+        label: 'Workouts',
+        sharePercent: workoutsShare,
+        aisUnits: workoutsAis,
+        color: colorScheme.secondary,
+        countDisplay: '${retro.workoutsCount}',
+      ),
+      _ActivityGlanceItem(
+        label: 'Habits',
+        sharePercent: habitsShare,
+        aisUnits: habitsAis,
+        color: colorScheme.tertiary,
+        countDisplay: '${retro.habitsCompletedCount}',
+      ),
     ];
 
     return Container(
@@ -64,7 +99,7 @@ class AnalyticsAtAGlanceCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'THIS WEEK AT A GLANCE',
+            'THIS WEEK AT A GLANCE (IMPACT SCORE)',
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w800,
@@ -81,14 +116,13 @@ class AnalyticsAtAGlanceCard extends StatelessWidget {
               height: 10,
               child: Row(
                 children: items.map((item) {
-                  final share = item['share'] as int;
-                  final color = item['color'] as Color;
-                  if (share <= 0) return const SizedBox.shrink();
+                  if (item.aisUnits <= 0) return const SizedBox.shrink();
+                  final flex = item.sharePercent > 0 ? item.sharePercent : 1;
 
                   return Expanded(
-                    flex: share,
+                    flex: flex,
                     child: Container(
-                      color: color,
+                      color: item.color,
                       margin: const EdgeInsets.only(right: 1),
                     ),
                   );
@@ -103,11 +137,6 @@ class AnalyticsAtAGlanceCard extends StatelessWidget {
             spacing: 14,
             runSpacing: 6,
             children: items.map((item) {
-              final label = item['label'] as String;
-              final share = item['share'] as int;
-              final color = item['color'] as Color;
-              final count = item['count'] as String;
-
               return Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -115,19 +144,21 @@ class AnalyticsAtAGlanceCard extends StatelessWidget {
                     width: 7,
                     height: 7,
                     decoration: BoxDecoration(
-                      color: color,
+                      color: item.color,
                       shape: BoxShape.circle,
                     ),
                   ),
                   const SizedBox(width: 5),
                   Text(
-                    label,
+                    item.label,
                     style: const TextStyle(
-                        fontSize: 11, fontWeight: FontWeight.w600),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                   const SizedBox(width: 4),
                   Text(
-                    '$count ($share%)',
+                    '${item.countDisplay} (${item.sharePercent}%)',
                     style: TextStyle(
                       fontSize: 10,
                       color: colorScheme.onSurfaceVariant.withAlpha(140),

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../app/theme/app_theme.dart';
-import '../analytics_screen.dart';
+import '../../../../domain/models/retrospective_model.dart';
 
 class AnalyticsStatTiles extends StatelessWidget {
   final RetrospectiveModel retro;

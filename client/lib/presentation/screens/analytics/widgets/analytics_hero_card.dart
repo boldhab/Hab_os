@@ -1,7 +1,7 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../../../app/theme/app_theme.dart';
-import '../analytics_screen.dart';
+import '../../../../domain/models/retrospective_model.dart';
 
 class AnalyticsHeroCard extends StatelessWidget {
   final RetrospectiveModel retro;
