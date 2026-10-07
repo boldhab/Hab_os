@@ -601,45 +601,9 @@ The database volume is persisted locally in the Docker volume `pgdata`.
 
 ---
 
-## 🚀 Deployment
-
-### Production Build Steps
-
-1. **Build Server Application**:
-   ```bash
-   cd server
-   npm ci
-   npm run prisma:generate
-   npm run build
-   ```
-2. **Execute Database Migrations in Production**:
-   ```bash
-   npx prisma migrate deploy
-   ```
-3. **Start Production Service**:
-   ```bash
-   NODE_ENV=production npm start
-   ```
 
 
-### Mobile Client Release Builds
 
-Build production binaries for target platforms:
-
-```bash
-cd client
-
-# Android App Bundle (Google Play Store)
-flutter build appbundle --release
-
-# Android APK
-flutter build apk --release
-
-# iOS Release Build (requires macOS & Xcode)
-flutter build ipa --release
-```
-
----
 
 ## 👥 Team & Responsibilities
 
