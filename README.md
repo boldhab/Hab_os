@@ -569,38 +569,6 @@ Security in HabOS is implemented defensively across every layer of the architect
 
 ---
 
-## 🐳 Docker Setup
-
-HabOS provides a multi-stage Docker configuration and Docker Compose manifest for containerized deployments.
-
-### Multi-Stage Backend Dockerfile
-
-The backend uses a multi-stage build (`node:20-alpine`) to keep production container images lightweight and secure:
-1. **Builder Stage**: Installs all dependencies, generates the Prisma client, and compiles TypeScript into `dist/`.
-2. **Runner Stage**: Copies only compiled artifacts, production dependencies, and Prisma binaries, running as an unprivileged container.
-
-### Running with Docker Compose
-
-To launch both PostgreSQL 16 and the Express API in containerized mode:
-
-```bash
-# Start all containers in the background
-docker compose up -d
-
-# View real-time container logs
-docker compose logs -f
-
-# Verify running containers
-docker compose ps
-
-# Shut down containers while preserving persistent database volumes
-docker compose down
-```
-
-The database volume is persisted locally in the Docker volume `pgdata`.
-
----
-
 
 
 
