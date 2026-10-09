@@ -191,5 +191,183 @@
     }
   }
 
+  function renderUsers() {
+    const container = document.getElementById('users-cards-container');
+    if (!container) return;
+
+    const q = (document.getElementById('input-search-users')?.value || '').toLowerCase().trim();
+    const role = document.getElementById('select-role-filter')?.value || 'ALL';
+
+    const filtered = state.users.filter((u) => {
+      const matchRole =
+        role === 'ALL' ||
+        (role === 'ADMIN' && u.role === 'ADMIN') ||
+        (role === 'ACTOR_USER' && u.role !== 'ADMIN');
+      const matchQ =
+        !q ||
+        (u.name && u.name.toLowerCase().includes(q)) ||
+        u.email.toLowerCase().includes(q);
+      return matchRole && matchQ;
+    });
+
+    if (filtered.length === 0) {
+      container.innerHTML = `
+        <div class="card-panel" style="text-align:center; padding: 32px 16px; color:var(--text-muted);">
+          No users match your criteria.
+        </div>
+      `;
+      return;
+    }
+
+    container.innerHTML = filtered
+      .map((u) => {
+        const isAdmin = u.role === 'ADMIN';
+        const date = u.createdAt ? new Date(u.createdAt).toLocaleDateString() : 'Active';
+        const initial = (u.name || u.email || 'U').charAt(0).toUpperCase();
+
+        return `
+        <div class="mobile-item-card">
+          <div class="mobile-item-top">
+            <div class="mobile-item-main">
+              <div class="user-avatar-circle">${initial}</div>
+              <div class="mobile-item-text">
+                <div class="mobile-item-title">${escapeHtml(u.name || 'User')}</div>
+                <div class="mobile-item-subtitle">${escapeHtml(u.email)}</div>
+              </div>
+            </div>
+            <span class="badge ${isAdmin ? 'badge-admin' : 'badge-user'}">
+              ${u.role || 'USER'}
+            </span>
+          </div>
+
+          <div class="mobile-item-meta">
+            <span>TZ: ${u.timezone || 'UTC'}</span>
+            <span>•</span>
+            <span>Joined: ${date}</span>
+          </div>
+
+          <div class="mobile-item-actions">
+            <button type="button" class="btn btn-secondary btn-xs btn-user-role" data-id="${u.id}" data-email="${escapeHtml(u.email)}" data-role="${u.role}">
+              Role
+            </button>
+            <button type="button" class="btn btn-secondary btn-xs btn-user-pwd" data-id="${u.id}" data-email="${escapeHtml(u.email)}">
+              Password
+            </button>
+            <button type="button" class="btn btn-danger-subtle btn-xs btn-user-del" data-id="${u.id}" data-email="${escapeHtml(u.email)}">
+              Delete
+            </button>
+          </div>
+        </div>
+      `;
+      })
+      .join('');
+
+    container.querySelectorAll('.btn-user-role').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        state.selectedUserId = btn.dataset.id;
+        document.getElementById('modal-role-email').value = btn.dataset.email;
+        document.getElementById('modal-role-select').value = btn.dataset.role === 'ADMIN' ? 'ADMIN' : 'ACTOR_USER';
+        openModal('modal-role');
+      });
+    });
+
+    container.querySelectorAll('.btn-user-pwd').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        state.selectedUserId = btn.dataset.id;
+        document.getElementById('modal-pwd-user').textContent = btn.dataset.email;
+        document.getElementById('modal-pwd-result').style.display = 'none';
+        openModal('modal-pwd');
+      });
+    });
+
+    container.querySelectorAll('.btn-user-del').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const id = btn.dataset.id;
+        const email = btn.dataset.email;
+        if (confirm(`Are you sure you want to delete user ${email}?`)) {
+          const res = await api(`/api/v1/admin/users/${id}`, { method: 'DELETE' });
+          if (res.ok) {
+            toast(`User ${email} deleted`, 'success');
+            loadData();
+          } else {
+            toast(res.data.message || 'Failed to delete user', 'error');
+          }
+        }
+      });
+    });
+  }
+
+  function renderJobs() {
+    const container = document.getElementById('jobs-cards-container');
+    if (!container) return;
+
+    if (state.jobs.length === 0) {
+      container.innerHTML = `
+        <div class="card-panel" style="text-align:center; padding: 32px 16px; color:var(--text-muted);">
+          No scheduled jobs configured.
+        </div>
+      `;
+      return;
+    }
+
+    container.innerHTML = state.jobs
+      .map((j) => {
+        const sec = Math.round(j.intervalMs / 1000);
+        const schedule = sec >= 3600 ? `Every ${sec / 3600}h` : `Every ${sec}s`;
+        const lastRun = j.lastRun ? new Date(j.lastRun).toLocaleTimeString() : 'Never';
+        const isSuccess = j.lastStatus === 'SUCCESS';
+
+        return `
+        <div class="mobile-item-card">
+          <div class="mobile-item-top">
+            <div class="mobile-item-main">
+              <div class="mobile-item-text">
+                <div class="mobile-item-title">${j.name}</div>
+                <div class="mobile-item-subtitle">${j.description || 'Automated recurring task'}</div>
+              </div>
+            </div>
+            <span class="badge ${isSuccess ? 'badge-success' : 'badge-idle'}">
+              ${j.lastStatus || 'IDLE'}
+            </span>
+          </div>
+
+          <div class="mobile-item-meta">
+            <span>Schedule: ${schedule}</span>
+            <span>•</span>
+            <span>Runs: ${j.runCount || 0}</span>
+            <span>•</span>
+            <span>Last: ${lastRun}</span>
+          </div>
+
+          <div class="mobile-item-actions" style="justify-content: flex-end;">
+            <button type="button" class="btn btn-tonal btn-sm btn-run-job" data-name="${j.name}">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <polygon points="5 3 19 12 5 21 5 3"></polygon>
+              </svg>
+              Run Now
+            </button>
+          </div>
+        </div>
+      `;
+      })
+      .join('');
+
+    container.querySelectorAll('.btn-run-job').forEach((btn) => {
+      btn.addEventListener('click', () => runJob(btn.dataset.name));
+    });
+  }
+
+  async function runJob(name) {
+    toast(`Running worker "${name}"...`, 'info');
+    const res = await api(`/api/v1/admin/jobs/${name}/run`, { method: 'POST' });
+    if (res.ok) {
+      const ms = res.data.data?.durationMs ?? 0;
+      toast(`✓ Worker "${name}" completed in ${ms}ms`, 'success');
+      loadData();
+    } else {
+      toast(`Job execution failed for "${name}"`, 'error');
+    }
+  }
+
   init();
 })();
