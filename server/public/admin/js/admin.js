@@ -369,5 +369,278 @@
     }
   }
 
-  init();
+  function renderLogs() {
+    const container = document.getElementById('logs-cards-container');
+    if (!container) return;
+
+    const q = (document.getElementById('input-search-logs')?.value || '').toLowerCase().trim();
+    const lvl = document.getElementById('select-log-level')?.value || 'ALL';
+
+    const filtered = state.logs.filter((l) => {
+      const matchLvl = lvl === 'ALL' || l.level === lvl;
+      const matchQ =
+        !q ||
+        l.message.toLowerCase().includes(q) ||
+        l.category.toLowerCase().includes(q);
+      return matchLvl && matchQ;
+    });
+
+    if (filtered.length === 0) {
+      container.innerHTML = `
+        <div class="card-panel" style="text-align:center; padding: 32px 16px; color:var(--text-muted);">
+          No audit logs match criteria.
+        </div>
+      `;
+      return;
+    }
+
+    container.innerHTML = filtered
+      .map((l) => {
+        const time = new Date(l.timestamp).toLocaleTimeString();
+        const badgeClass =
+          l.level === 'SUCCESS'
+            ? 'badge-success'
+            : l.level === 'ERROR'
+            ? 'badge-error'
+            : l.level === 'WARN'
+            ? 'badge-warning'
+            : 'badge-user';
+
+        return `
+        <div class="mobile-item-card">
+          <div class="mobile-item-top">
+            <span class="badge ${badgeClass}">${l.level}</span>
+            <span style="font-family:var(--font-mono); font-size:0.72rem; color:var(--text-dim);">${time}</span>
+          </div>
+          <div style="font-size:0.86rem; color:var(--text-primary); line-height:1.4;">
+            ${escapeHtml(l.message)}
+          </div>
+          <div class="mobile-item-meta">
+            <span>Category: ${l.category}</span>
+            <span>•</span>
+            <span>Actor: ${escapeHtml(l.user || 'system')}</span>
+          </div>
+        </div>
+      `;
+      })
+      .join('');
+  }
+
+  function populateSettings() {
+    if (!state.config) return;
+
+    const dbInfo = document.getElementById('settings-db-info');
+    if (dbInfo && state.stats?.system?.database) {
+      const db = state.stats.system.database;
+      dbInfo.textContent = `${db.mode} (${db.latencyMs}ms latency)`;
+    }
+
+    const flagAi = document.getElementById('flag-ai');
+    const flagGh = document.getElementById('flag-github');
+    const flagLc = document.getElementById('flag-leetcode');
+    const flagMm = document.getElementById('flag-maintenance');
+
+    if (flagAi) flagAi.checked = Boolean(state.config.aiAssistantEnabled);
+    if (flagGh) flagGh.checked = Boolean(state.config.githubSyncEnabled);
+    if (flagLc) flagLc.checked = Boolean(state.config.leetcodeSyncEnabled);
+    if (flagMm) flagMm.checked = Boolean(state.config.maintenanceMode);
+  }
+
+  function openModal(id) {
+    const el = document.getElementById(id);
+    if (el) el.classList.add('open');
+  }
+
+  function closeModal(id) {
+    const el = document.getElementById(id);
+    if (el) el.classList.remove('open');
+  }
+
+  function escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function setupEvents() {
+    // Bottom Nav view switches
+    document.querySelectorAll('.bottom-nav-item').forEach((btn) => {
+      btn.addEventListener('click', () => switchView(btn.dataset.view));
+    });
+
+    // Links on dashboard
+    document.getElementById('link-view-all-jobs')?.addEventListener('click', () => switchView('jobs'));
+    document.getElementById('link-view-all-logs')?.addEventListener('click', () => switchView('logs'));
+
+    // Refresh
+    document.getElementById('btn-refresh')?.addEventListener('click', () => {
+      loadData();
+      toast('Telemetry refreshed', 'info');
+    });
+
+    // Scheduler toggle
+    document.getElementById('btn-toggle-scheduler')?.addEventListener('click', () => {
+      state.schedulerPaused = !state.schedulerPaused;
+      const lbl = document.getElementById('lbl-scheduler-state');
+      if (lbl) lbl.textContent = state.schedulerPaused ? 'Resume Engine' : 'Pause Engine';
+      toast(state.schedulerPaused ? 'Scheduler paused' : 'Scheduler active', 'info');
+    });
+
+    // User filters
+    document.getElementById('input-search-users')?.addEventListener('input', renderUsers);
+    document.getElementById('select-role-filter')?.addEventListener('change', renderUsers);
+
+    // Logs filters
+    document.getElementById('input-search-logs')?.addEventListener('input', renderLogs);
+    document.getElementById('select-log-level')?.addEventListener('change', renderLogs);
+
+    // Save user role
+    document.getElementById('btn-save-role')?.addEventListener('click', async () => {
+      if (!state.selectedUserId) return;
+      const role = document.getElementById('modal-role-select')?.value;
+      const res = await api(`/api/v1/admin/users/${state.selectedUserId}/role`, {
+        method: 'PATCH',
+        body: JSON.stringify({ role }),
+      });
+      if (res.ok) {
+        toast('Role updated successfully', 'success');
+        closeModal('modal-role');
+        loadData();
+      } else {
+        toast(res.data.message || 'Failed to update role', 'error');
+      }
+    });
+
+    // Reset user password
+    document.getElementById('btn-confirm-pwd')?.addEventListener('click', async () => {
+      if (!state.selectedUserId) return;
+      const res = await api(`/api/v1/admin/users/${state.selectedUserId}/reset-password`, {
+        method: 'POST',
+      });
+      if (res.ok && res.data.data?.temporaryPassword) {
+        document.getElementById('modal-pwd-text').textContent = res.data.data.temporaryPassword;
+        document.getElementById('modal-pwd-result').style.display = 'flex';
+        toast('Temporary password created', 'success');
+      }
+    });
+
+    document.getElementById('btn-copy-pwd')?.addEventListener('click', () => {
+      const txt = document.getElementById('modal-pwd-text')?.textContent;
+      if (txt) {
+        navigator.clipboard.writeText(txt);
+        toast('Password copied to clipboard', 'info');
+      }
+    });
+
+    // Add user
+    document.getElementById('btn-add-user')?.addEventListener('click', () => {
+      openModal('modal-add-user');
+    });
+
+    document.getElementById('btn-submit-add-user')?.addEventListener('click', async () => {
+      const name = document.getElementById('add-user-name')?.value;
+      const email = document.getElementById('add-user-email')?.value;
+      const role = document.getElementById('add-user-role')?.value;
+      const password = document.getElementById('add-user-pwd')?.value;
+
+      if (!email) {
+        toast('Email is required', 'error');
+        return;
+      }
+
+      const res = await api('/api/v1/admin/users', {
+        method: 'POST',
+        body: JSON.stringify({ name, email, role, password }),
+      });
+
+      if (res.ok) {
+        toast(`User ${email} created`, 'success');
+        closeModal('modal-add-user');
+        loadData();
+      } else {
+        toast(res.data.message || 'Error creating user', 'error');
+      }
+    });
+
+    // Settings actions
+    document.getElementById('btn-clear-cache')?.addEventListener('click', async () => {
+      const res = await api('/api/v1/admin/maintenance/cache-clear', { method: 'POST' });
+      if (res.ok) toast('Dashboard feed cache cleared', 'success');
+    });
+
+    document.getElementById('btn-test-db')?.addEventListener('click', async () => {
+      const res = await api('/api/v1/admin/maintenance/db-ping');
+      if (res.ok) toast(`Connected (${res.data.data.latencyMs}ms)`, 'success');
+    });
+
+    document.getElementById('btn-save-settings')?.addEventListener('click', async () => {
+      const payload = {
+        aiAssistantEnabled: document.getElementById('flag-ai')?.checked,
+        githubSyncEnabled: document.getElementById('flag-github')?.checked,
+        leetcodeSyncEnabled: document.getElementById('flag-leetcode')?.checked,
+        maintenanceMode: document.getElementById('flag-maintenance')?.checked,
+      };
+      const res = await api('/api/v1/admin/config', {
+        method: 'PUT',
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) toast('Configuration saved', 'success');
+    });
+
+    // Export logs
+    document.getElementById('btn-export-logs')?.addEventListener('click', () => {
+      const blob = new Blob([JSON.stringify(state.logs, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `habos-audit-logs-${Date.now()}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast('Logs downloaded', 'info');
+    });
+
+    document.getElementById('btn-clear-logs')?.addEventListener('click', async () => {
+      if (confirm('Clear all in-memory audit logs?')) {
+        const res = await api('/api/v1/admin/logs/clear', { method: 'POST' });
+        if (res.ok) {
+          state.logs = [];
+          renderLogs();
+          toast('Logs cleared', 'info');
+        }
+      }
+    });
+
+    // Modal close buttons and backdrops
+    document.querySelectorAll('[data-close]').forEach((btn) => {
+      btn.addEventListener('click', () => closeModal(btn.dataset.close));
+    });
+
+    document.querySelectorAll('.modal-backdrop').forEach((backdrop) => {
+      backdrop.addEventListener('click', (e) => {
+        if (e.target === backdrop) closeModal(backdrop.id);
+      });
+    });
+
+    // Hash change routing
+    window.addEventListener('hashchange', () => {
+      const h = window.location.hash.replace('#', '');
+      if (h && h !== state.currentView) switchView(h);
+    });
+  }
+
+  function init() {
+    setupEvents();
+    const h = window.location.hash.replace('#', '');
+    if (h) switchView(h);
+    loadData();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
 })();
