@@ -677,6 +677,14 @@ export const getAllUsers = () => {
   return Array.from(usersById.values()).map(safeUserPayload);
 };
 
+export const updateUserRole = (userId: string, role: string) => {
+  const user = usersById.get(userId);
+  if (!user) throw new ApiError(404, 'User not found');
+  user.role = role;
+  user.updatedAt = new Date();
+  return safeUserPayload(user);
+};
+
 export default {
   register,
   login,
