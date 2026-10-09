@@ -37,3 +37,37 @@ export const clearCache = asyncHandler(async (req: Request, res: Response) => {
   const result = adminService.flushCache(actor);
   res.status(200).json({ success: true, data: result });
 });
+
+export const getUsers = asyncHandler(async (_req: Request, res: Response) => {
+  const users = await adminService.getAllUsers();
+  res.status(200).json({ success: true, data: users });
+});
+
+export const updateUserRole = asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { role } = req.body;
+  const actor = (req as any).user?.email || 'admin';
+  const updated = await adminService.updateUserRole(id, role, actor);
+  res.status(200).json({ success: true, data: updated });
+});
+
+export const deleteUser = asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const actor = (req as any).user?.email || 'admin';
+  await adminService.deleteUser(id, actor);
+  res.status(200).json({ success: true, message: 'User deleted successfully' });
+});
+
+export const resetUserPassword = asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { password } = req.body;
+  const actor = (req as any).user?.email || 'admin';
+  const result = await adminService.resetUserPassword(id, password, actor);
+  res.status(200).json({ success: true, data: result });
+});
+
+export const createUser = asyncHandler(async (req: Request, res: Response) => {
+  const actor = (req as any).user?.email || 'admin';
+  const result = await adminService.createUser(req.body, actor);
+  res.status(201).json({ success: true, data: result });
+});
