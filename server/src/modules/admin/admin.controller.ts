@@ -24,3 +24,16 @@ export const runJob = asyncHandler(async (req: Request, res: Response) => {
   const result = await adminService.triggerJob(jobName, actor);
   res.status(200).json({ success: true, data: result });
 });
+
+export const toggleScheduler = asyncHandler(async (req: Request, res: Response) => {
+  const { enabled } = req.body;
+  const actor = (req as any).user?.email || 'admin';
+  const result = adminService.toggleScheduler(Boolean(enabled), actor);
+  res.status(200).json({ success: true, data: result });
+});
+
+export const clearCache = asyncHandler(async (req: Request, res: Response) => {
+  const actor = (req as any).user?.email || 'admin';
+  const result = adminService.flushCache(actor);
+  res.status(200).json({ success: true, data: result });
+});
