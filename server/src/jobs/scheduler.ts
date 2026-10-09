@@ -110,13 +110,46 @@ class BackgroundScheduler {
   /**
    * Manually trigger a registered job immediately (useful for testing and admin APIs)
    */
-  async runJobNow(name: string): Promise<any> {
+  async runJobNow(name: string): Promise<{ success: boolean; durationMs: number; result: any; error?: string }> {
     const task = this.tasks.get(name);
     if (!task) {
       throw new Error(`Background job "${name}" not found`);
     }
+
     logger.info(`[Scheduler] Manually executing job "${name}"...`);
-    return await task.handler();
+    const start = Date.now();
+    task.lastStatus = 'RUNNING';
+
+    try {
+      const result = await task.handler();
+      const durationMs = Date.now() - start;
+      task.lastRun = new Date();
+      task.lastDurationMs = durationMs;
+      task.lastStatus = 'SUCCESS';
+      task.runCount++;
+      task.lastError = null;
+
+      return {
+        success: true,
+        durationMs,
+        result: result ?? { message: `Job ${name} executed successfully` },
+      };
+    } catch (error: any) {
+      const durationMs = Date.now() - start;
+      task.lastRun = new Date();
+      task.lastDurationMs = durationMs;
+      task.lastStatus = 'FAILED';
+      task.failCount++;
+      const errorMessage = error?.message || String(error);
+      task.lastError = errorMessage;
+
+      return {
+        success: false,
+        durationMs,
+        result: null,
+        error: errorMessage,
+      };
+    }
   }
 }
 
