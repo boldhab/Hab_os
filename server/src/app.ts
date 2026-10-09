@@ -75,9 +75,23 @@ app.use(
 );
 app.use(morgan('dev'));
 
-// Static serving for built Flutter client
+// Static serving for built Flutter client and Admin Console
 const clientBuildPath = path.resolve(__dirname, '../../client/build/web');
 const hasClientBuild = fs.existsSync(clientBuildPath);
+
+const adminStaticPath = path.resolve(__dirname, '../public/admin');
+const hasAdminStatic = fs.existsSync(adminStaticPath);
+
+if (hasAdminStatic) {
+  app.get('/admin', (_req: Request, res: Response) => {
+    res.sendFile(path.join(adminStaticPath, 'index.html'));
+  });
+  app.use('/admin', express.static(adminStaticPath));
+  app.get('/admin/*', (req: Request, res: Response, next) => {
+    if (req.path.startsWith('/api/')) return next();
+    res.sendFile(path.join(adminStaticPath, 'index.html'));
+  });
+}
 
 if (hasClientBuild) {
   app.use(express.static(clientBuildPath));
@@ -97,6 +111,7 @@ if (!hasClientBuild) {
       name: 'HABos API',
       status: 'running',
       version: '1.0.0',
+      admin: '/admin',
       documentation: '/api/v1',
       health: '/health',
     });
@@ -128,7 +143,7 @@ app.use('/api/v1/analytics', analyticsRoutes);
 // SPA Client Routing fallback
 if (hasClientBuild) {
   app.get('*', (req: Request, res: Response, next) => {
-    if (req.path.startsWith('/api/') || req.path === '/health') {
+    if (req.path.startsWith('/api/') || req.path.startsWith('/admin') || req.path === '/health') {
       return next();
     }
     res.sendFile(path.join(clientBuildPath, 'index.html'));
