@@ -71,6 +71,12 @@ class MoreScreen extends StatelessWidget {
       route: '/more/notifications',
       description: 'Inbox center, deadline alerts & reminders',
     ),
+    _MoreItem(
+      icon: Icons.admin_panel_settings_rounded,
+      label: 'Admin Console',
+      route: '/more/admin',
+      description: 'System health, workers, users & 24 domains',
+    ),
   ];
 
   @override
