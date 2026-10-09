@@ -4,11 +4,32 @@ import { runNotificationProcessor } from './scheduled/notificationProcessor.job'
 import { runDailyLifeScoreSnapshot } from './scheduled/dailyLifeScore.job';
 import { runIdempotencyCleanup } from './scheduled/idempotencyCleanup.job';
 
-interface ScheduledTask {
+export interface ScheduledTask {
   name: string;
   intervalMs: number;
+  description: string;
   handler: () => Promise<any>;
   timer: NodeJS.Timeout | null;
+  lastRun: Date | null;
+  lastDurationMs: number | null;
+  lastStatus: 'IDLE' | 'RUNNING' | 'SUCCESS' | 'FAILED';
+  lastError: string | null;
+  runCount: number;
+  failCount: number;
+}
+
+export interface TaskTelemetry {
+  name: string;
+  intervalMs: number;
+  description: string;
+  isRunning: boolean;
+  lastRun: string | null;
+  lastDurationMs: number | null;
+  lastStatus: 'IDLE' | 'RUNNING' | 'SUCCESS' | 'FAILED';
+  lastError: string | null;
+  runCount: number;
+  failCount: number;
+  nextRunEstimated: string | null;
 }
 
 class BackgroundScheduler {
