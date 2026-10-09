@@ -19,33 +19,33 @@
 ## 📖 Table of Contents
 
 - [🌟 Project Overview](#-project-overview)
-- [🚫 Problem Statement](#-problem-statement)
-- [🎯 Objectives](#-objectives)
-- [👥 System Users & Roles](#-system-users--roles)
-- [🛠️ Key Features](#️-key-features)
-- [🏗️ System Architecture](#️-system-architecture)
+- [Problem Statement](#-problem-statement)
+- [Objectives](#-objectives)
+- [System Users & Roles](#-system-users--roles)
+- [Key Features](#️-key-features)
+- [System Architecture](#️-system-architecture)
   - [High-Level Architectural Diagram](#high-level-architectural-diagram)
   - [Frontend Architecture (Flutter Clean Architecture)](#frontend-architecture-flutter-clean-architecture)
   - [Backend Architecture (Modular Monolith)](#backend-architecture-modular-monolith)
   - [Inter-Module Reactive Cascade Flow](#inter-module-reactive-cascade-flow)
-- [💻 Tech Stack](#-tech-stack)
-- [📂 Repository Structure](#-repository-structure)
-- [🚀 Developer Setup & Installation](#-developer-setup--installation)
+- [Tech Stack](#-tech-stack)
+- [Repository Structure](#-repository-structure)
+- [Developer Setup & Installation](#-developer-setup--installation)
   - [Prerequisites](#prerequisites)
   - [1. Clone Repository](#1-clone-repository)
   - [2. Backend Setup](#2-backend-setup)
   - [3. Frontend Setup (Flutter)](#3-frontend-setup-flutter)
-- [🗄️ Database Setup](#️-database-setup)
+- [ Database Setup](#️-database-setup)
   - [Migrations & Client Generation](#migrations--client-generation)
-- [📋 Use Cases Index](#-use-cases-index)
-- [🔐 Security](#-security)
-- [🐳 Docker Setup](#-docker-setup)
-- [🚀 Deployment](#-deployment)
-- [👥 Team & Responsibilities](#-team--responsibilities)
+- [use Cases Index](#-use-cases-index)
+- [Security](#-security)
+- [Docker Setup](#-docker-setup)
+- [Deployment](#-deployment)
+- [Team & Responsibilities](#-team--responsibilities)
 
 ---
 
-## 🌟 Project Overview
+## Project Overview
 
 **HabOS** is a modular personal life operating system engineered to eliminate digital fragmentation by uniting the tools people use every day into a reactive, single-source-of-truth ecosystem. 
 
