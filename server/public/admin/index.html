@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>HabOS Admin Console</title>
+  <meta name="theme-color" content="#120F0E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/admin/css/admin.css">
+</head>
+<body>
+  <div class="app-viewport" id="app-layout">
+
+    <!-- Topbar -->
+    <header class="topbar">
+      <div class="topbar-brand">
+        <div class="brand-flame-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/>
+          </svg>
+        </div>
+        <div class="brand-text-block">
+          <div class="brand-title">HabOS Admin</div>
+        </div>
+      </div>
+
+      <div class="topbar-actions">
+        <button type="button" class="icon-btn" id="btn-refresh" title="Refresh">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+
+      <!-- ============================================== -->
+      <!-- VIEW 1: OVERVIEW (HOME)                        -->
+      <!-- ============================================== -->
+      <section class="view-section active" id="view-overview">
+        <div class="view-header">
+          <h1 class="view-heading">Dashboard</h1>
+        </div>
+
+        <!-- 2x2 Metrics Grid -->
+        <div class="metrics-grid">
+          <!-- Users Metric -->
+          <div class="metric-card">
+            <div class="metric-top">
+              <span class="metric-label">Users</span>
+              <div class="metric-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                  <circle cx="9" cy="7" r="4"/>
+                  <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                  <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                </svg>
+              </div>
+            </div>
+            <span class="metric-number" id="metric-users">--</span>
+            <span class="metric-sub" id="metric-users-sub">--</span>
+          </div>
+
+          <!-- Jobs Metric -->
+          <div class="metric-card">
+            <div class="metric-top">
+              <span class="metric-label">Jobs</span>
+              <div class="metric-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"/>
+                  <polyline points="12 6 12 12 16 14"/>
+                </svg>
+              </div>
+            </div>
+            <span class="metric-number" id="metric-jobs">4</span>
+            <span class="metric-sub" id="metric-jobs-sub">4 active</span>
+          </div>
+
+          <!-- Database Metric -->
+          <div class="metric-card">
+            <div class="metric-top">
+              <span class="metric-label">Database</span>
+              <div class="metric-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <ellipse cx="12" cy="5" rx="9" ry="3"/>
+                  <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/>
+                  <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
+                </svg>
+              </div>
+            </div>
+            <span class="metric-number" id="metric-db-status">Online</span>
+            <span class="metric-sub" id="metric-db-mode">PostgreSQL</span>
+          </div>
+
+          <!-- Server Uptime Metric -->
+          <div class="metric-card">
+            <div class="metric-top">
+              <span class="metric-label">Uptime</span>
+              <div class="metric-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="2" y="2" width="20" height="8" rx="2" ry="2"/>
+                  <rect x="2" y="14" width="20" height="8" rx="2" ry="2"/>
+                  <line x1="6" y1="6" x2="6.01" y2="6"/>
+                  <line x1="6" y1="18" x2="6.01" y2="18"/>
+                </svg>
+              </div>
+            </div>
+            <span class="metric-number" id="metric-uptime">--</span>
+            <span class="metric-sub" id="metric-memory">-- MB RAM</span>
+          </div>
+        </div>
+
+        <!-- Scheduled Jobs Quick Card -->
+        <div class="card-panel">
+          <div class="card-panel-header">
+            <h2 class="card-panel-title">Scheduled Jobs</h2>
+            <button type="button" class="btn-link" id="link-view-all-jobs">View all</button>
+          </div>
+          <div class="mobile-card-list" id="overview-jobs-list">
+            <!-- Populated via JS -->
+          </div>
+        </div>
+
+        <!-- Recent Audit Activity -->
+        <div class="card-panel">
+          <div class="card-panel-header">
+            <h2 class="card-panel-title">Recent Activity</h2>
+            <button type="button" class="btn-link" id="link-view-all-logs">View all</button>
+          </div>
+          <div class="activity-list" id="activity-list-overview">
+            <!-- Populated via JS -->
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================== -->
+      <!-- VIEW 2: USERS                                  -->
+      <!-- ============================================== -->
+    </main>
+  </div>
+</body>
+</html>
