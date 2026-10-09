@@ -140,6 +140,54 @@
       <!-- ============================================== -->
       <!-- VIEW 2: USERS                                  -->
       <!-- ============================================== -->
+      <section class="view-section" id="view-users">
+        <div class="view-header">
+          <h1 class="view-heading">Users</h1>
+          <button type="button" class="btn btn-primary btn-sm" id="btn-add-user">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+            Add User
+          </button>
+        </div>
+
+        <!-- Search & Filter Controls -->
+        <div class="toolbar">
+          <input type="text" class="input-search" id="input-search-users" placeholder="Search by name or email...">
+          <select class="select-filter" id="select-role-filter">
+            <option value="ALL">All Roles</option>
+            <option value="ADMIN">Admin Only</option>
+            <option value="ACTOR_USER">Standard Users</option>
+          </select>
+        </div>
+
+        <!-- User Cards Container -->
+        <div class="mobile-card-list" id="users-cards-container">
+          <!-- Populated via JS -->
+        </div>
+      </section>
+
+      <!-- ============================================== -->
+      <!-- VIEW 3: SCHEDULED JOBS                         -->
+      <!-- ============================================== -->
+      <section class="view-section" id="view-jobs">
+        <div class="view-header">
+          <h1 class="view-heading">Scheduled Jobs</h1>
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-toggle-scheduler">
+            <span id="lbl-scheduler-state">Pause Engine</span>
+          </button>
+        </div>
+
+        <!-- Scheduled Jobs Container -->
+        <div class="mobile-card-list" id="jobs-cards-container">
+          <!-- Populated via JS -->
+        </div>
+      </section>
+
+      <!-- ============================================== -->
+      <!-- VIEW 4: AUDIT LOGS                             -->
+      <!-- ============================================== -->
     </main>
   </div>
 </body>
