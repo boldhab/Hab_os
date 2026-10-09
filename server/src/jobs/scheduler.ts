@@ -37,7 +37,7 @@ class BackgroundScheduler {
   private isRunning: boolean = false;
 
   /**
-   * Register a recurring job
+   * Register a recurring job with descriptive metadata
    */
   register(name: string, intervalMs: number, handler: () => Promise<any>, description = ''): void {
     this.tasks.set(name, {
@@ -108,12 +108,15 @@ class BackgroundScheduler {
   }
 
   /**
-   * Manually trigger a registered job immediately (useful for testing and admin APIs)
+   * Check if engine is running
    */
   isEngineRunning(): boolean {
     return this.isRunning;
   }
 
+  /**
+   * Get metadata and live status of all registered jobs
+   */
   getTasksInfo(): TaskTelemetry[] {
     const list: TaskTelemetry[] = [];
     for (const task of this.tasks.values()) {
@@ -138,6 +141,9 @@ class BackgroundScheduler {
     return list;
   }
 
+  /**
+   * Manually trigger a registered job immediately with detailed timing report
+   */
   async runJobNow(name: string): Promise<{ success: boolean; durationMs: number; result: any; error?: string }> {
     const task = this.tasks.get(name);
     if (!task) {
@@ -185,16 +191,36 @@ export const scheduler = new BackgroundScheduler();
 
 // Register Default Scheduled Jobs:
 // 1. Notification processor: runs every 60 seconds
-scheduler.register('notificationProcessor', 60 * 1000, runNotificationProcessor);
+scheduler.register(
+  'notificationProcessor',
+  60 * 1000,
+  runNotificationProcessor,
+  'Scans pending domain deadline alerts, budget warnings, and habit reminders for delivery'
+);
 
 // 2. Habit streak decay: runs every 60 minutes
-scheduler.register('habitStreakDecay', 60 * 60 * 1000, runHabitStreakDecay);
+scheduler.register(
+  'habitStreakDecay',
+  60 * 60 * 1000,
+  runHabitStreakDecay,
+  'Evaluates daily habit deadlines and resets or decays broken streaks across all user profiles'
+);
 
 // 3. Daily Life Score snapshot: runs every 6 hours
-scheduler.register('dailyLifeScore', 6 * 60 * 60 * 1000, runDailyLifeScoreSnapshot);
+scheduler.register(
+  'dailyLifeScore',
+  6 * 60 * 60 * 1000,
+  runDailyLifeScoreSnapshot,
+  'Calculates composite 0-100 Life Score metrics and stores historical trend data points'
+);
 
 // 4. Idempotency key cleanup: runs every 12 hours
-scheduler.register('idempotencyCleanup', 12 * 60 * 60 * 1000, runIdempotencyCleanup);
+scheduler.register(
+  'idempotencyCleanup',
+  12 * 60 * 60 * 1000,
+  runIdempotencyCleanup,
+  'Flushes expired mutation idempotency tokens and transactional hashes to preserve database index performance'
+);
 
 export const initScheduler = (): void => {
   scheduler.start();
