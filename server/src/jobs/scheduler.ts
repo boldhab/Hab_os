@@ -110,6 +110,34 @@ class BackgroundScheduler {
   /**
    * Manually trigger a registered job immediately (useful for testing and admin APIs)
    */
+  isEngineRunning(): boolean {
+    return this.isRunning;
+  }
+
+  getTasksInfo(): TaskTelemetry[] {
+    const list: TaskTelemetry[] = [];
+    for (const task of this.tasks.values()) {
+      const nextRunMs = task.lastRun
+        ? task.lastRun.getTime() + task.intervalMs
+        : Date.now() + task.intervalMs;
+
+      list.push({
+        name: task.name,
+        intervalMs: task.intervalMs,
+        description: task.description,
+        isRunning: this.isRunning && !!task.timer,
+        lastRun: task.lastRun ? task.lastRun.toISOString() : null,
+        lastDurationMs: task.lastDurationMs,
+        lastStatus: task.lastStatus,
+        lastError: task.lastError,
+        runCount: task.runCount,
+        failCount: task.failCount,
+        nextRunEstimated: this.isRunning ? new Date(nextRunMs).toISOString() : null,
+      });
+    }
+    return list;
+  }
+
   async runJobNow(name: string): Promise<{ success: boolean; durationMs: number; result: any; error?: string }> {
     const task = this.tasks.get(name);
     if (!task) {
