@@ -101,7 +101,7 @@ function createDefaultCategories(): InMemoryCategory[] {
   ];
 }
 
-// Pre-seed demo user so demo login works immediately without database
+// Pre-seed demo user and root admin so admin login works immediately
 function seedDemoUser() {
   const demoId = 'demo-user-habos-2026';
   const demoEmail = 'demo@habos.dev';
@@ -673,6 +673,10 @@ export const getUserById = (userId: string) => {
   return usersById.get(userId) || null;
 };
 
+// ──────────────────────────────────────────────
+// Admin Helpers
+// ──────────────────────────────────────────────
+
 export const getAllUsers = () => {
   return Array.from(usersById.values()).map(safeUserPayload);
 };
@@ -702,6 +706,47 @@ export const adminResetPassword = async (userId: string, newPassword?: string) =
   return { id: user.id, email: user.email, temporaryPassword: tempPassword };
 };
 
+export const createNewUserByAdmin = async (data: {
+  name: string;
+  email: string;
+  password?: string;
+  role?: string;
+  timezone?: string;
+}) => {
+  const emailKey = data.email.toLowerCase();
+  if (usersStore.has(emailKey)) {
+    throw new ApiError(400, 'An account with this email address already exists');
+  }
+
+  const generatedPassword = data.password || `HabOS#${Math.floor(100000 + Math.random() * 900000)}`;
+  const hashedPassword = await bcrypt.hash(generatedPassword, 10);
+  const id = crypto.randomUUID();
+  const now = new Date();
+
+  const user: InMemoryUser = {
+    id,
+    email: emailKey,
+    name: data.name || null,
+    role: data.role || 'ACTOR_USER',
+    password: hashedPassword,
+    avatarUrl: null,
+    timezone: data.timezone || 'UTC',
+    dateFormat: 'YYYY-MM-DD',
+    preferences: createDefaultPreferences(),
+    categories: createDefaultCategories(),
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  usersStore.set(emailKey, user);
+  usersById.set(id, user);
+
+  return {
+    user: safeUserPayload(user),
+    temporaryPassword: generatedPassword,
+  };
+};
+
 export default {
   register,
   login,
@@ -714,4 +759,9 @@ export default {
   updateProfile,
   updatePreferences,
   getUserById,
+  getAllUsers,
+  updateUserRole,
+  deleteUserById,
+  adminResetPassword,
+  createNewUserByAdmin,
 };
