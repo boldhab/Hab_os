@@ -188,7 +188,278 @@
       <!-- ============================================== -->
       <!-- VIEW 4: AUDIT LOGS                             -->
       <!-- ============================================== -->
+      <section class="view-section" id="view-logs">
+        <div class="view-header">
+          <h1 class="view-heading">Audit Logs</h1>
+          <div style="display:flex; gap:6px;">
+            <button type="button" class="btn btn-secondary btn-sm" id="btn-export-logs" title="Export JSON">Export</button>
+            <button type="button" class="btn btn-secondary btn-sm" id="btn-clear-logs" title="Clear logs">Clear</button>
+          </div>
+        </div>
+
+        <div class="toolbar">
+          <input type="text" class="input-search" id="input-search-logs" placeholder="Search logs...">
+          <select class="select-filter" id="select-log-level">
+            <option value="ALL">All Levels</option>
+            <option value="INFO">Info</option>
+            <option value="SUCCESS">Success</option>
+            <option value="WARN">Warning</option>
+            <option value="ERROR">Error</option>
+            <option value="SECURITY">Security</option>
+          </select>
+        </div>
+
+        <div class="mobile-card-list" id="logs-cards-container">
+          <!-- Populated via JS -->
+        </div>
+      </section>
+
+      <!-- ============================================== -->
+      <!-- VIEW 5: SETTINGS                               -->
+      <!-- ============================================== -->
+      <section class="view-section" id="view-settings">
+        <div class="view-header">
+          <h1 class="view-heading">Settings</h1>
+          <button type="button" class="btn btn-primary btn-sm" id="btn-save-settings">Save</button>
+        </div>
+
+        <!-- Storage & System Maintenance Panel -->
+        <div class="card-panel">
+          <div class="card-panel-header">
+            <h2 class="card-panel-title">Storage & Cache</h2>
+          </div>
+
+          <div class="settings-list">
+            <div class="settings-card-item">
+              <div>
+                <strong style="color:var(--text-primary); font-size:0.9rem;">Dashboard Feed Cache</strong>
+                <p style="color:var(--text-muted); font-size:0.75rem;">In-memory 60s cache for user dashboard feeds</p>
+              </div>
+              <button type="button" class="btn btn-secondary btn-sm" id="btn-clear-cache">Flush Cache</button>
+            </div>
+
+            <div class="settings-card-item">
+              <div>
+                <strong style="color:var(--text-primary); font-size:0.9rem;">Database Connection</strong>
+                <p style="color:var(--text-muted); font-size:0.75rem;" id="settings-db-info">Checking connection...</p>
+              </div>
+              <button type="button" class="btn btn-secondary btn-sm" id="btn-test-db">Test DB</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Feature Flags Panel -->
+        <div class="card-panel">
+          <div class="card-panel-header">
+            <h2 class="card-panel-title">Feature Flags</h2>
+          </div>
+
+          <div class="settings-list">
+            <label class="toggle-item-row">
+              <div>
+                <strong style="color:var(--text-primary); font-size:0.9rem;">AI Insights & Suggestions</strong>
+                <p style="color:var(--text-muted); font-size:0.75rem;">Diurnal suggestions and productivity chat</p>
+              </div>
+              <input type="checkbox" id="flag-ai" checked>
+              <span class="toggle-switch"></span>
+            </label>
+
+            <label class="toggle-item-row">
+              <div>
+                <strong style="color:var(--text-primary); font-size:0.9rem;">GitHub Integration</strong>
+                <p style="color:var(--text-muted); font-size:0.75rem;">Automated commit and PR activity tracking</p>
+              </div>
+              <input type="checkbox" id="flag-github" checked>
+              <span class="toggle-switch"></span>
+            </label>
+
+            <label class="toggle-item-row">
+              <div>
+                <strong style="color:var(--text-primary); font-size:0.9rem;">LeetCode Integration</strong>
+                <p style="color:var(--text-muted); font-size:0.75rem;">Coding problem statistics sync</p>
+              </div>
+              <input type="checkbox" id="flag-leetcode" checked>
+              <span class="toggle-switch"></span>
+            </label>
+
+            <label class="toggle-item-row">
+              <div>
+                <strong style="color:var(--text-primary); font-size:0.9rem;">Maintenance Mode</strong>
+                <p style="color:var(--text-muted); font-size:0.75rem;">Return 503 for non-admin API requests</p>
+              </div>
+              <input type="checkbox" id="flag-maintenance">
+              <span class="toggle-switch"></span>
+            </label>
+          </div>
+        </div>
+      </section>
+
     </main>
+
+    <!-- ============================================== -->
+    <!-- FLOATING MOBILE BOTTOM NAVIGATION BAR           -->
+    <!-- (Strictly matches HabOS ScaffoldWithNavBar)     -->
+    <!-- ============================================== -->
+    <nav class="bottom-nav">
+      <!-- Tab 1: Overview -->
+      <button type="button" class="bottom-nav-item active" data-view="overview">
+        <div class="bottom-nav-icon-wrap">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+            <polyline points="9 22 9 12 15 12 15 22"/>
+          </svg>
+        </div>
+        <span class="bottom-nav-label">Home</span>
+      </button>
+
+      <!-- Tab 2: Users -->
+      <button type="button" class="bottom-nav-item" data-view="users">
+        <div class="bottom-nav-icon-wrap">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+            <circle cx="9" cy="7" r="4"/>
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+            <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+          </svg>
+          <span class="nav-count-badge" id="count-users">2</span>
+        </div>
+        <span class="bottom-nav-label">Users</span>
+      </button>
+
+      <!-- Tab 3: Jobs -->
+      <button type="button" class="bottom-nav-item" data-view="jobs">
+        <div class="bottom-nav-icon-wrap">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <polyline points="12 6 12 12 16 14"/>
+          </svg>
+          <span class="nav-count-badge" id="count-jobs">4</span>
+        </div>
+        <span class="bottom-nav-label">Jobs</span>
+      </button>
+
+      <!-- Tab 4: Logs -->
+      <button type="button" class="bottom-nav-item" data-view="logs">
+        <div class="bottom-nav-icon-wrap">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="16" y1="13" x2="8" y2="13"/>
+            <line x1="16" y1="17" x2="8" y2="17"/>
+          </svg>
+        </div>
+        <span class="bottom-nav-label">Logs</span>
+      </button>
+
+      <!-- Tab 5: Settings -->
+      <button type="button" class="bottom-nav-item" data-view="settings">
+        <div class="bottom-nav-icon-wrap">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+        </div>
+        <span class="bottom-nav-label">Settings</span>
+      </button>
+    </nav>
+
   </div>
+
+  <!-- Modals -->
+  <!-- Modal 1: Edit Role Sheet -->
+  <div class="modal-backdrop" id="modal-role">
+    <div class="modal-sheet">
+      <div class="modal-drag-handle"></div>
+      <div class="modal-header">
+        <h3 class="modal-title">Edit User Role</h3>
+        <button type="button" class="modal-close-btn" data-close="modal-role">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">User Email</label>
+          <input type="text" class="form-input" id="modal-role-email" readonly style="opacity:0.8;">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Role</label>
+          <select class="form-select" id="modal-role-select">
+            <option value="ACTOR_USER">Standard User (ACTOR_USER)</option>
+            <option value="ADMIN">Administrator (ADMIN)</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-close="modal-role">Cancel</button>
+        <button type="button" class="btn btn-primary" id="btn-save-role">Save Role</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 2: Reset Password Sheet -->
+  <div class="modal-backdrop" id="modal-pwd">
+    <div class="modal-sheet">
+      <div class="modal-drag-handle"></div>
+      <div class="modal-header">
+        <h3 class="modal-title">Reset Password</h3>
+        <button type="button" class="modal-close-btn" data-close="modal-pwd">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size:0.88rem; color:var(--text-muted);">
+          Generate a temporary password for <strong id="modal-pwd-user" style="color:var(--text-primary);">--</strong>?
+        </p>
+        <div id="modal-pwd-result" style="display:none; background:var(--bg-surface-highest); border:1px solid var(--border-card); padding:12px; border-radius:12px; align-items:center; justify-content:space-between; gap:10px;">
+          <div>
+            <div style="font-size:0.72rem; color:var(--text-dim); text-transform:uppercase;">Temporary Password</div>
+            <code id="modal-pwd-text" style="font-family:var(--font-mono); font-size:1rem; color:var(--primary); font-weight:700;">--</code>
+          </div>
+          <button type="button" class="btn btn-tonal btn-xs" id="btn-copy-pwd">Copy</button>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-close="modal-pwd">Close</button>
+        <button type="button" class="btn btn-primary" id="btn-confirm-pwd">Generate</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 3: Add User Sheet -->
+  <div class="modal-backdrop" id="modal-add-user">
+    <div class="modal-sheet">
+      <div class="modal-drag-handle"></div>
+      <div class="modal-header">
+        <h3 class="modal-title">Add User</h3>
+        <button type="button" class="modal-close-btn" data-close="modal-add-user">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Full Name</label>
+          <input type="text" class="form-input" id="add-user-name" placeholder="Name">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Email Address *</label>
+          <input type="email" class="form-input" id="add-user-email" placeholder="user@example.com">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Role</label>
+          <select class="form-select" id="add-user-role">
+            <option value="ACTOR_USER">Standard User (ACTOR_USER)</option>
+            <option value="ADMIN">Administrator (ADMIN)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Password (Optional)</label>
+          <input type="text" class="form-input" id="add-user-pwd" placeholder="Leave empty for auto-generated">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-close="modal-add-user">Cancel</button>
+        <button type="button" class="btn btn-primary" id="btn-submit-add-user">Create User</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <script src="/admin/js/admin.js"></script>
 </body>
 </html>
