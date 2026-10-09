@@ -34,6 +34,7 @@ async function runTest(file: string): Promise<boolean> {
     const child = spawn('npx', ['tsx', filePath], {
       stdio: 'inherit',
       cwd: path.resolve(__dirname, '..'),
+      shell: true,
     });
 
     child.on('close', (code) => {
