@@ -685,6 +685,14 @@ export const updateUserRole = (userId: string, role: string) => {
   return safeUserPayload(user);
 };
 
+export const deleteUserById = (userId: string) => {
+  const user = usersById.get(userId);
+  if (!user) throw new ApiError(404, 'User not found');
+  usersStore.delete(user.email.toLowerCase());
+  usersById.delete(userId);
+  return true;
+};
+
 export default {
   register,
   login,
