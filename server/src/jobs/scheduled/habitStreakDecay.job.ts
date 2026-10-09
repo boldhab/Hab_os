@@ -9,6 +9,10 @@ import { evaluateHabitStreak } from '../../modules/habits/habits.service';
  * Runs periodically to ensure streaks accurately reflect daily consistency.
  */
 export async function runHabitStreakDecay(): Promise<{ evaluated: number; reset: number }> {
+  if (!prisma?.habit?.findMany) {
+    return { evaluated: 0, reset: 0 };
+  }
+
   // Fetch all active habits with positive streaks
   const activeHabits = await prisma.habit.findMany({
     where: {
