@@ -27,6 +27,7 @@ import notificationRoutes from './modules/notifications/notifications.routes';
 import integrationRoutes from './modules/integrations/integrations.routes';
 import techRoutes from './modules/tech/tech.routes';
 import analyticsRoutes from './modules/analytics/analytics.routes';
+import adminRoutes from './modules/admin/admin.routes';
 
 const app = express();
 
@@ -102,7 +103,8 @@ if (!hasClientBuild) {
   });
 }
 
-// Domain API Routes (Complete 24 Modules)
+// Domain API Routes (Complete 24 Modules + Admin)
+app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/dashboard', dashboardRoutes);
 app.use('/api/v1/lifescore', lifeScoreRoutes);
