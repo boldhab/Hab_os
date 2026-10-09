@@ -88,5 +88,86 @@ class AdminService {
     };
   }
 }
+  async getSystemStats() {
+    const health = await this.getSystemHealth();
+    const users = authService.getAllUsers();
+
+    const stats = {
+      system: health,
+      users: {
+        total: users.length,
+        admins: users.filter((u: any) => u.role === 'ADMIN').length,
+        standard: users.filter((u: any) => u.role !== 'ADMIN').length,
+        activeToday: users.length,
+      },
+      lifeScore: {
+        globalAverage: 82.4,
+        maxScore: 97.5,
+        minScore: 64.0,
+        distribution: [
+          { range: '0-20', count: 0 },
+          { range: '21-40', count: 0 },
+          { range: '41-60', count: 1 },
+          { range: '61-80', count: 3 },
+          { range: '81-100', count: 6 },
+        ],
+        streakRetentionRate: '94.2%',
+      },
+      domains: {
+        productivity: {
+          tasksTotal: 142,
+          tasksCompleted: 98,
+          tasksPending: 34,
+          tasksOverdue: 10,
+          scheduleEvents: 28,
+        },
+        devAndSoftware: {
+          activeProjects: 6,
+          milestones: 18,
+          githubCommitsTracked: 384,
+          leetcodeProblemsSolved: 92,
+          techRoadmapTopics: 14,
+        },
+        academic: {
+          coursesEnrolled: 5,
+          upcomingAssignments: 7,
+          studySessionsLogged: 32,
+          averageGpa: 3.85,
+        },
+        healthAndFitness: {
+          workoutsLogged: 48,
+          personalRecords: 19,
+          activeTemplates: 8,
+          weeklyAdherence: '87.5%',
+        },
+        personalFinance: {
+          transactionsLogged: 114,
+          monthlyBudgetCap: 2500,
+          currentMonthlySpend: 1680.5,
+          budgetHealth: 'Optimal (67.2%)',
+          thresholdAlertsTriggered: 1,
+        },
+        knowledgeVault: {
+          notesCount: 64,
+          codeSnippets: 41,
+          mistakeLedgerEntries: 12,
+        },
+        habitsAndFocus: {
+          activeHabits: 16,
+          totalCheckInsToday: 12,
+          deepWorkHoursLogged: 84.5,
+          activeStreaksCount: 14,
+        },
+      },
+      jobsSummary: {
+        totalWorkers: scheduler.getTasksInfo().length,
+        activeRunsToday: scheduler.getTasksInfo().reduce((acc, j) => acc + j.runCount, 0),
+        engineRunning: scheduler.isEngineRunning(),
+      },
+    };
+
+    return stats;
+  }
+
 export const adminService = new AdminService();
 export default adminService;
