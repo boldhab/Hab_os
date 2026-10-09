@@ -39,12 +39,19 @@ class BackgroundScheduler {
   /**
    * Register a recurring job
    */
-  register(name: string, intervalMs: number, handler: () => Promise<any>): void {
+  register(name: string, intervalMs: number, handler: () => Promise<any>, description = ''): void {
     this.tasks.set(name, {
       name,
       intervalMs,
+      description,
       handler,
       timer: null,
+      lastRun: null,
+      lastDurationMs: null,
+      lastStatus: 'IDLE',
+      lastError: null,
+      runCount: 0,
+      failCount: 0,
     });
   }
 
@@ -59,8 +66,15 @@ class BackgroundScheduler {
 
     for (const [name, task] of this.tasks.entries()) {
       task.timer = setInterval(async () => {
+        const start = Date.now();
+        task.lastStatus = 'RUNNING';
         try {
           await task.handler();
+          task.lastRun = new Date();
+          task.lastDurationMs = Date.now() - start;
+          task.lastStatus = 'SUCCESS';
+          task.runCount++;
+          task.lastError = null;
         } catch (error) {
           logger.error(`[Scheduler] Error in background job "${name}":`, error);
         }
