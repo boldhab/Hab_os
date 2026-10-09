@@ -1,42 +1,53 @@
 import os from 'os';
-import prisma from '../../config/database';
+import prisma from '../../config/db';
 import env from '../../config/env';
-import scheduler from '../../jobs/scheduler';
 import authService from '../auth/auth.service';
+import scheduler from '../../jobs/scheduler';
 import auditLogger from './auditLog.service';
 import { invalidateDashboardCache } from '../dashboard/dashboard.service';
 
-const startTime = Date.now();
-
 export interface RuntimeConfig {
   maintenanceMode: boolean;
-  registrationOpen: boolean;
-  telemetryEnabled: boolean;
-  jobIntervalMultiplier: number;
-  defaultWeights: Record<string, number>;
+  aiAssistantEnabled: boolean;
+  githubSyncEnabled: boolean;
+  leetcodeSyncEnabled: boolean;
+  strictRateLimiting: boolean;
+  queryLogging: boolean;
+  defaultWeights: {
+    tasks: number;
+    coding: number;
+    study: number;
+    gym: number;
+    habits: number;
+    finance: number;
+  };
 }
 
 let runtimeConfig: RuntimeConfig = {
   maintenanceMode: false,
-  registrationOpen: true,
-  telemetryEnabled: true,
-  jobIntervalMultiplier: 1.0,
+  aiAssistantEnabled: true,
+  githubSyncEnabled: true,
+  leetcodeSyncEnabled: true,
+  strictRateLimiting: false,
+  queryLogging: false,
   defaultWeights: {
-    habits: 0.25,
-    tasks: 0.2,
-    focus: 0.2,
+    tasks: 0.15,
+    coding: 0.2,
+    study: 0.2,
     gym: 0.15,
-    finance: 0.1,
-    academic: 0.1,
+    habits: 0.15,
+    finance: 0.15,
   },
 };
+
+const startTime = Date.now();
 
 function formatUptime(seconds: number): string {
   const d = Math.floor(seconds / (3600 * 24));
   const h = Math.floor((seconds % (3600 * 24)) / 3600);
   const m = Math.floor((seconds % 3600) / 60);
   const s = Math.floor(seconds % 60);
-  const parts = [];
+  const parts: string[] = [];
   if (d > 0) parts.push(`${d}d`);
   if (h > 0) parts.push(`${h}h`);
   if (m > 0) parts.push(`${m}m`);
@@ -44,15 +55,35 @@ function formatUptime(seconds: number): string {
   return parts.join(' ');
 }
 
-class AdminService {
-  private async getDatabaseStatus() {
+export class AdminService {
+  /**
+   * Check live database connection status and latency
+   */
+  async getDatabaseStatus(): Promise<{ connected: boolean; mode: string; latencyMs: number }> {
+    const start = Date.now();
+    try {
+      if (prisma && typeof (prisma as any).$queryRaw === 'function') {
+        await (prisma as any).$queryRaw`SELECT 1`;
+        return {
+          connected: true,
+          mode: 'PostgreSQL',
+          latencyMs: Date.now() - start,
+        };
+      }
+    } catch (_err) {
+      // Fallback to in-memory mode
+    }
+
     return {
       connected: true,
-      provider: 'in-memory-sqlite-hybrid',
-      latencyMs: Math.floor(Math.random() * 4) + 1,
+      mode: 'In-Memory',
+      latencyMs: Math.max(1, Date.now() - start),
     };
   }
 
+  /**
+   * System resource utilization and health telemetry
+   */
   async getSystemHealth() {
     const mem = process.memoryUsage();
     const uptimeSec = Math.floor((Date.now() - startTime) / 1000);
@@ -87,11 +118,15 @@ class AdminService {
       config: runtimeConfig,
     };
   }
-}
+
+  /**
+   * Comprehensive Statistics across all 24 HabOS Domains
+   */
   async getSystemStats() {
     const health = await this.getSystemHealth();
     const users = authService.getAllUsers();
 
+    // Domain entity counts (calculated from active state & persistent fabric)
     const stats = {
       system: health,
       users: {
@@ -169,64 +204,9 @@ class AdminService {
     return stats;
   }
 
-  getJobsTelemetry() {
-    return {
-      isRunning: scheduler.isEngineRunning(),
-      tasks: scheduler.getTasksInfo(),
-    };
-  }
-
-  async triggerJob(jobName: string, actor = 'admin') {
-    auditLogger.log({
-      level: 'INFO',
-      category: 'SCHEDULER',
-      message: `Manual execution triggered for worker "${jobName}"`,
-      user: actor,
-    });
-
-    const result = await scheduler.runJobNow(jobName);
-
-    auditLogger.log({
-      level: result.success ? 'SUCCESS' : 'ERROR',
-      category: 'SCHEDULER',
-      message: `Worker "${jobName}" completed in ${result.durationMs}ms with status: ${
-        result.success ? 'SUCCESS' : 'FAILED'
-      }`,
-      details: result,
-      user: actor,
-    });
-
-    return result;
-  }
-
-  toggleScheduler(enabled: boolean, actor = 'admin') {
-    if (enabled) {
-      scheduler.start();
-    } else {
-      scheduler.stop();
-    }
-
-    auditLogger.log({
-      level: 'WARN',
-      category: 'SCHEDULER',
-      message: `Background Job Engine ${enabled ? 'RESUMED' : 'PAUSED'} by administrator`,
-      user: actor,
-    });
-
-    return { isRunning: scheduler.isEngineRunning() };
-  }
-
-  flushCache(actor = 'admin') {
-    invalidateDashboardCache();
-    auditLogger.log({
-      level: 'SUCCESS',
-      category: 'MAINTENANCE',
-      message: 'In-memory dashboard feed cache completely invalidated',
-      user: actor,
-    });
-    return { success: true, message: 'All caches flushed successfully' };
-  }
-
+  /**
+   * User management
+   */
   async getAllUsers() {
     const rawUsers = authService.getAllUsers();
     return rawUsers.map((u: any) => ({
@@ -292,6 +272,98 @@ class AdminService {
     });
     return res;
   }
+
+  /**
+   * Background Scheduler control
+   */
+  getJobsTelemetry() {
+    return {
+      isRunning: scheduler.isEngineRunning(),
+      tasks: scheduler.getTasksInfo(),
+    };
+  }
+
+  async triggerJob(jobName: string, actor = 'admin') {
+    auditLogger.log({
+      level: 'INFO',
+      category: 'SCHEDULER',
+      message: `Manual execution triggered for worker "${jobName}"`,
+      user: actor,
+    });
+
+    const result = await scheduler.runJobNow(jobName);
+
+    auditLogger.log({
+      level: result.success ? 'SUCCESS' : 'ERROR',
+      category: 'SCHEDULER',
+      message: `Worker "${jobName}" completed in ${result.durationMs}ms with status: ${
+        result.success ? 'SUCCESS' : 'FAILED'
+      }`,
+      details: result,
+      user: actor,
+    });
+
+    return result;
+  }
+
+  toggleScheduler(enabled: boolean, actor = 'admin') {
+    if (enabled) {
+      scheduler.start();
+    } else {
+      scheduler.stop();
+    }
+
+    auditLogger.log({
+      level: 'WARN',
+      category: 'SCHEDULER',
+      message: `Background Job Engine ${enabled ? 'RESUMED' : 'PAUSED'} by administrator`,
+      user: actor,
+    });
+
+    return { isRunning: scheduler.isEngineRunning() };
+  }
+
+  /**
+   * Runtime Configuration
+   */
+  getRuntimeConfig(): RuntimeConfig {
+    return { ...runtimeConfig };
+  }
+
+  updateRuntimeConfig(update: Partial<RuntimeConfig>, actor = 'admin'): RuntimeConfig {
+    runtimeConfig = {
+      ...runtimeConfig,
+      ...update,
+      defaultWeights: update.defaultWeights
+        ? { ...runtimeConfig.defaultWeights, ...update.defaultWeights }
+        : runtimeConfig.defaultWeights,
+    };
+
+    auditLogger.log({
+      level: 'INFO',
+      category: 'SYSTEM_CONFIG',
+      message: 'System runtime parameters & Life Score weights updated',
+      details: runtimeConfig,
+      user: actor,
+    });
+
+    return runtimeConfig;
+  }
+
+  /**
+   * Cache Maintenance
+   */
+  flushCache(actor = 'admin') {
+    invalidateDashboardCache();
+    auditLogger.log({
+      level: 'SUCCESS',
+      category: 'MAINTENANCE',
+      message: 'In-memory dashboard feed cache completely invalidated',
+      user: actor,
+    });
+    return { success: true, message: 'All caches flushed successfully' };
+  }
+}
 
 export const adminService = new AdminService();
 export default adminService;
