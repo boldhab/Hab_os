@@ -75,7 +75,12 @@ class BackgroundScheduler {
           task.lastStatus = 'SUCCESS';
           task.runCount++;
           task.lastError = null;
-        } catch (error) {
+        } catch (error: any) {
+          task.lastRun = new Date();
+          task.lastDurationMs = Date.now() - start;
+          task.lastStatus = 'FAILED';
+          task.failCount++;
+          task.lastError = error?.message || String(error);
           logger.error(`[Scheduler] Error in background job "${name}":`, error);
         }
       }, task.intervalMs);
@@ -96,6 +101,7 @@ class BackgroundScheduler {
         clearInterval(task.timer);
         task.timer = null;
       }
+      task.lastStatus = 'IDLE';
     }
     this.isRunning = false;
     logger.info('🛑 [Scheduler] Stopped Background Job Engine');
