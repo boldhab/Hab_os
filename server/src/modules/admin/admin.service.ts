@@ -216,5 +216,16 @@ class AdminService {
     return { isRunning: scheduler.isEngineRunning() };
   }
 
+  flushCache(actor = 'admin') {
+    invalidateDashboardCache();
+    auditLogger.log({
+      level: 'SUCCESS',
+      category: 'MAINTENANCE',
+      message: 'In-memory dashboard feed cache completely invalidated',
+      user: actor,
+    });
+    return { success: true, message: 'All caches flushed successfully' };
+  }
+
 export const adminService = new AdminService();
 export default adminService;
