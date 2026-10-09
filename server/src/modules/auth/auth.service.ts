@@ -673,6 +673,10 @@ export const getUserById = (userId: string) => {
   return usersById.get(userId) || null;
 };
 
+export const getAllUsers = () => {
+  return Array.from(usersById.values()).map(safeUserPayload);
+};
+
 export default {
   register,
   login,
