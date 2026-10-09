@@ -82,4 +82,39 @@ class AuditLogService {
     }
     return fullEntry;
   }
+
+  public getLogs(filter?: { level?: string; search?: string; limit?: number }): AuditLogEntry[] {
+    let result = [...this.logs];
+
+    if (filter?.level && filter.level !== 'ALL') {
+      const targetLevel = filter.level.toUpperCase();
+      result = result.filter((l) => l.level === targetLevel);
+    }
+
+    if (filter?.search) {
+      const q = filter.search.toLowerCase();
+      result = result.filter(
+        (l) =>
+          l.message.toLowerCase().includes(q) ||
+          l.category.toLowerCase().includes(q) ||
+          (l.user && l.user.toLowerCase().includes(q))
+      );
+    }
+
+    const limit = filter?.limit && filter.limit > 0 ? filter.limit : 100;
+    return result.slice(0, limit);
+  }
+
+  public clear(): void {
+    this.logs = [];
+    this.log({
+      level: 'INFO',
+      category: 'AUDIT',
+      message: 'Audit log buffer cleared by administrator',
+      user: 'admin',
+    });
+  }
 }
+
+export const auditLogger = new AuditLogService();
+export default auditLogger;
