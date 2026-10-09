@@ -12,6 +12,7 @@ export interface AuthenticatedUser {
   timezone: string;
   dateFormat: string;
   avatarUrl: string | null;
+  role?: string;
 }
 
 export interface AuthRequest extends Request {
@@ -57,6 +58,7 @@ export const authenticate = asyncHandler(async (req: Request, _res: Response, ne
       timezone: storedUser.timezone,
       dateFormat: storedUser.dateFormat,
       avatarUrl: storedUser.avatarUrl,
+      role: (storedUser as any).role || 'ACTOR_USER',
     };
     next();
   } catch (error: unknown) {
