@@ -8,6 +8,10 @@ import lifeScoreService from '../../modules/lifescore/lifescore.service';
  * and stores it into the life_score_logs table.
  */
 export async function runDailyLifeScoreSnapshot(): Promise<{ snapshotsCreated: number }> {
+  if (!prisma?.user?.findMany) {
+    return { snapshotsCreated: 0 };
+  }
+
   const users = await prisma.user.findMany({
     select: { id: true },
     take: 50,

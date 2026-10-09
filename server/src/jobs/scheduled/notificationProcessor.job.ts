@@ -8,6 +8,10 @@ import logger from '../../utils/logger';
 export async function runNotificationProcessor(): Promise<{ dispatched: number }> {
   const now = new Date();
 
+  if (!prisma?.notification?.findMany) {
+    return { dispatched: 0 };
+  }
+
   // Find unread, scheduled notifications whose time has arrived and haven't been marked sent
   const dueNotifications = await prisma.notification.findMany({
     where: {

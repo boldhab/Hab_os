@@ -27,6 +27,7 @@ import '../../presentation/screens/vault/note_edit_screen.dart';
 import '../../presentation/screens/search/global_search_screen.dart';
 import '../../presentation/screens/ai/ai_chat_screen.dart';
 import '../../presentation/screens/notifications/notifications_screen.dart';
+import '../../presentation/screens/admin/admin_screen.dart';
 import 'scaffold_with_nav_bar.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
@@ -250,6 +251,10 @@ final routerProvider = Provider<GoRouter>((ref) {
                   GoRoute(
                     path: 'settings',
                     builder: (context, state) => const SettingsScreen(),
+                  ),
+                  GoRoute(
+                    path: 'admin',
+                    builder: (context, state) => const AdminScreen(),
                   ),
                 ],
               ),

@@ -4,11 +4,32 @@ import { runNotificationProcessor } from './scheduled/notificationProcessor.job'
 import { runDailyLifeScoreSnapshot } from './scheduled/dailyLifeScore.job';
 import { runIdempotencyCleanup } from './scheduled/idempotencyCleanup.job';
 
-interface ScheduledTask {
+export interface ScheduledTask {
   name: string;
   intervalMs: number;
+  description: string;
   handler: () => Promise<any>;
   timer: NodeJS.Timeout | null;
+  lastRun: Date | null;
+  lastDurationMs: number | null;
+  lastStatus: 'IDLE' | 'RUNNING' | 'SUCCESS' | 'FAILED';
+  lastError: string | null;
+  runCount: number;
+  failCount: number;
+}
+
+export interface TaskTelemetry {
+  name: string;
+  intervalMs: number;
+  description: string;
+  isRunning: boolean;
+  lastRun: string | null;
+  lastDurationMs: number | null;
+  lastStatus: 'IDLE' | 'RUNNING' | 'SUCCESS' | 'FAILED';
+  lastError: string | null;
+  runCount: number;
+  failCount: number;
+  nextRunEstimated: string | null;
 }
 
 class BackgroundScheduler {
@@ -16,14 +37,21 @@ class BackgroundScheduler {
   private isRunning: boolean = false;
 
   /**
-   * Register a recurring job
+   * Register a recurring job with descriptive metadata
    */
-  register(name: string, intervalMs: number, handler: () => Promise<any>): void {
+  register(name: string, intervalMs: number, handler: () => Promise<any>, description = ''): void {
     this.tasks.set(name, {
       name,
       intervalMs,
+      description,
       handler,
       timer: null,
+      lastRun: null,
+      lastDurationMs: null,
+      lastStatus: 'IDLE',
+      lastError: null,
+      runCount: 0,
+      failCount: 0,
     });
   }
 
@@ -38,9 +66,21 @@ class BackgroundScheduler {
 
     for (const [name, task] of this.tasks.entries()) {
       task.timer = setInterval(async () => {
+        const start = Date.now();
+        task.lastStatus = 'RUNNING';
         try {
           await task.handler();
-        } catch (error) {
+          task.lastRun = new Date();
+          task.lastDurationMs = Date.now() - start;
+          task.lastStatus = 'SUCCESS';
+          task.runCount++;
+          task.lastError = null;
+        } catch (error: any) {
+          task.lastRun = new Date();
+          task.lastDurationMs = Date.now() - start;
+          task.lastStatus = 'FAILED';
+          task.failCount++;
+          task.lastError = error?.message || String(error);
           logger.error(`[Scheduler] Error in background job "${name}":`, error);
         }
       }, task.intervalMs);
@@ -61,21 +101,89 @@ class BackgroundScheduler {
         clearInterval(task.timer);
         task.timer = null;
       }
+      task.lastStatus = 'IDLE';
     }
     this.isRunning = false;
     logger.info('🛑 [Scheduler] Stopped Background Job Engine');
   }
 
   /**
-   * Manually trigger a registered job immediately (useful for testing and admin APIs)
+   * Check if engine is running
    */
-  async runJobNow(name: string): Promise<any> {
+  isEngineRunning(): boolean {
+    return this.isRunning;
+  }
+
+  /**
+   * Get metadata and live status of all registered jobs
+   */
+  getTasksInfo(): TaskTelemetry[] {
+    const list: TaskTelemetry[] = [];
+    for (const task of this.tasks.values()) {
+      const nextRunMs = task.lastRun
+        ? task.lastRun.getTime() + task.intervalMs
+        : Date.now() + task.intervalMs;
+
+      list.push({
+        name: task.name,
+        intervalMs: task.intervalMs,
+        description: task.description,
+        isRunning: this.isRunning && !!task.timer,
+        lastRun: task.lastRun ? task.lastRun.toISOString() : null,
+        lastDurationMs: task.lastDurationMs,
+        lastStatus: task.lastStatus,
+        lastError: task.lastError,
+        runCount: task.runCount,
+        failCount: task.failCount,
+        nextRunEstimated: this.isRunning ? new Date(nextRunMs).toISOString() : null,
+      });
+    }
+    return list;
+  }
+
+  /**
+   * Manually trigger a registered job immediately with detailed timing report
+   */
+  async runJobNow(name: string): Promise<{ success: boolean; durationMs: number; result: any; error?: string }> {
     const task = this.tasks.get(name);
     if (!task) {
       throw new Error(`Background job "${name}" not found`);
     }
+
     logger.info(`[Scheduler] Manually executing job "${name}"...`);
-    return await task.handler();
+    const start = Date.now();
+    task.lastStatus = 'RUNNING';
+
+    try {
+      const result = await task.handler();
+      const durationMs = Date.now() - start;
+      task.lastRun = new Date();
+      task.lastDurationMs = durationMs;
+      task.lastStatus = 'SUCCESS';
+      task.runCount++;
+      task.lastError = null;
+
+      return {
+        success: true,
+        durationMs,
+        result: result ?? { message: `Job ${name} executed successfully` },
+      };
+    } catch (error: any) {
+      const durationMs = Date.now() - start;
+      task.lastRun = new Date();
+      task.lastDurationMs = durationMs;
+      task.lastStatus = 'FAILED';
+      task.failCount++;
+      const errorMessage = error?.message || String(error);
+      task.lastError = errorMessage;
+
+      return {
+        success: false,
+        durationMs,
+        result: null,
+        error: errorMessage,
+      };
+    }
   }
 }
 
@@ -83,16 +191,36 @@ export const scheduler = new BackgroundScheduler();
 
 // Register Default Scheduled Jobs:
 // 1. Notification processor: runs every 60 seconds
-scheduler.register('notificationProcessor', 60 * 1000, runNotificationProcessor);
+scheduler.register(
+  'notificationProcessor',
+  60 * 1000,
+  runNotificationProcessor,
+  'Scans pending domain deadline alerts, budget warnings, and habit reminders for delivery'
+);
 
 // 2. Habit streak decay: runs every 60 minutes
-scheduler.register('habitStreakDecay', 60 * 60 * 1000, runHabitStreakDecay);
+scheduler.register(
+  'habitStreakDecay',
+  60 * 60 * 1000,
+  runHabitStreakDecay,
+  'Evaluates daily habit deadlines and resets or decays broken streaks across all user profiles'
+);
 
 // 3. Daily Life Score snapshot: runs every 6 hours
-scheduler.register('dailyLifeScore', 6 * 60 * 60 * 1000, runDailyLifeScoreSnapshot);
+scheduler.register(
+  'dailyLifeScore',
+  6 * 60 * 60 * 1000,
+  runDailyLifeScoreSnapshot,
+  'Calculates composite 0-100 Life Score metrics and stores historical trend data points'
+);
 
 // 4. Idempotency key cleanup: runs every 12 hours
-scheduler.register('idempotencyCleanup', 12 * 60 * 60 * 1000, runIdempotencyCleanup);
+scheduler.register(
+  'idempotencyCleanup',
+  12 * 60 * 60 * 1000,
+  runIdempotencyCleanup,
+  'Flushes expired mutation idempotency tokens and transactional hashes to preserve database index performance'
+);
 
 export const initScheduler = (): void => {
   scheduler.start();

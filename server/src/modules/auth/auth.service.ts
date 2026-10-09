@@ -19,6 +19,7 @@ interface InMemoryUser {
   name: string | null;
   bio?: string | null;
   password: string; // bcrypt hash
+  role?: string; // 'ADMIN' or 'ACTOR_USER'
   googleId?: string;
   authProvider?: string;
   avatarUrl: string | null;
@@ -100,7 +101,7 @@ function createDefaultCategories(): InMemoryCategory[] {
   ];
 }
 
-// Pre-seed demo user so demo login works immediately without database
+// Pre-seed demo user and root admin so admin login works immediately
 function seedDemoUser() {
   const demoId = 'demo-user-habos-2026';
   const demoEmail = 'demo@habos.dev';
@@ -111,6 +112,7 @@ function seedDemoUser() {
     id: demoId,
     email: demoEmail,
     name: 'HabOS Explorer',
+    role: 'ADMIN',
     password: hashedPassword,
     avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
     timezone: 'UTC',
@@ -123,6 +125,29 @@ function seedDemoUser() {
 
   usersStore.set(demoEmail, demoUser);
   usersById.set(demoId, demoUser);
+
+  // Root Administrator
+  const adminId = 'admin-user-habos-root';
+  const adminEmail = 'admin@habos.dev';
+  const adminPassword = bcrypt.hashSync('Admin@2026!', 10);
+
+  const adminUser: InMemoryUser = {
+    id: adminId,
+    email: adminEmail,
+    name: 'System Administrator',
+    role: 'ADMIN',
+    password: adminPassword,
+    avatarUrl: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150',
+    timezone: 'UTC',
+    dateFormat: 'YYYY-MM-DD',
+    preferences: createDefaultPreferences(),
+    categories: createDefaultCategories(),
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  usersStore.set(adminEmail, adminUser);
+  usersById.set(adminId, adminUser);
 }
 seedDemoUser();
 
@@ -131,6 +156,7 @@ function safeUserPayload(user: InMemoryUser) {
     id: user.id,
     email: user.email,
     name: user.name,
+    role: user.role || 'ACTOR_USER',
     bio: user.bio || null,
     timezone: user.timezone,
     dateFormat: user.dateFormat,
@@ -647,6 +673,80 @@ export const getUserById = (userId: string) => {
   return usersById.get(userId) || null;
 };
 
+// ──────────────────────────────────────────────
+// Admin Helpers
+// ──────────────────────────────────────────────
+
+export const getAllUsers = () => {
+  return Array.from(usersById.values()).map(safeUserPayload);
+};
+
+export const updateUserRole = (userId: string, role: string) => {
+  const user = usersById.get(userId);
+  if (!user) throw new ApiError(404, 'User not found');
+  user.role = role;
+  user.updatedAt = new Date();
+  return safeUserPayload(user);
+};
+
+export const deleteUserById = (userId: string) => {
+  const user = usersById.get(userId);
+  if (!user) throw new ApiError(404, 'User not found');
+  usersStore.delete(user.email.toLowerCase());
+  usersById.delete(userId);
+  return true;
+};
+
+export const adminResetPassword = async (userId: string, newPassword?: string) => {
+  const user = usersById.get(userId);
+  if (!user) throw new ApiError(404, 'User not found');
+  const tempPassword = newPassword || `HabOS#${Math.floor(100000 + Math.random() * 900000)}`;
+  user.password = await bcrypt.hash(tempPassword, 10);
+  user.updatedAt = new Date();
+  return { id: user.id, email: user.email, temporaryPassword: tempPassword };
+};
+
+export const createNewUserByAdmin = async (data: {
+  name: string;
+  email: string;
+  password?: string;
+  role?: string;
+  timezone?: string;
+}) => {
+  const emailKey = data.email.toLowerCase();
+  if (usersStore.has(emailKey)) {
+    throw new ApiError(400, 'An account with this email address already exists');
+  }
+
+  const generatedPassword = data.password || `HabOS#${Math.floor(100000 + Math.random() * 900000)}`;
+  const hashedPassword = await bcrypt.hash(generatedPassword, 10);
+  const id = crypto.randomUUID();
+  const now = new Date();
+
+  const user: InMemoryUser = {
+    id,
+    email: emailKey,
+    name: data.name || null,
+    role: data.role || 'ACTOR_USER',
+    password: hashedPassword,
+    avatarUrl: null,
+    timezone: data.timezone || 'UTC',
+    dateFormat: 'YYYY-MM-DD',
+    preferences: createDefaultPreferences(),
+    categories: createDefaultCategories(),
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  usersStore.set(emailKey, user);
+  usersById.set(id, user);
+
+  return {
+    user: safeUserPayload(user),
+    temporaryPassword: generatedPassword,
+  };
+};
+
 export default {
   register,
   login,
@@ -659,4 +759,9 @@ export default {
   updateProfile,
   updatePreferences,
   getUserById,
+  getAllUsers,
+  updateUserRole,
+  deleteUserById,
+  adminResetPassword,
+  createNewUserByAdmin,
 };

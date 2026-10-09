@@ -8,6 +8,10 @@ import logger from '../../utils/logger';
  */
 export async function runIdempotencyCleanup(): Promise<{ deletedCount: number }> {
   try {
+    if (!prisma?.idempotencyKey?.deleteMany) {
+      return { deletedCount: 0 };
+    }
+
     const result = await prisma.idempotencyKey.deleteMany({
       where: {
         expiresAt: {
