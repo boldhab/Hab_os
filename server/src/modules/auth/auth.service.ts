@@ -124,6 +124,29 @@ function seedDemoUser() {
 
   usersStore.set(demoEmail, demoUser);
   usersById.set(demoId, demoUser);
+
+  // Root Administrator
+  const adminId = 'admin-user-habos-root';
+  const adminEmail = 'admin@habos.dev';
+  const adminPassword = bcrypt.hashSync('Admin@2026!', 10);
+
+  const adminUser: InMemoryUser = {
+    id: adminId,
+    email: adminEmail,
+    name: 'System Administrator',
+    role: 'ADMIN',
+    password: adminPassword,
+    avatarUrl: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150',
+    timezone: 'UTC',
+    dateFormat: 'YYYY-MM-DD',
+    preferences: createDefaultPreferences(),
+    categories: createDefaultCategories(),
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  usersStore.set(adminEmail, adminUser);
+  usersById.set(adminId, adminUser);
 }
 seedDemoUser();
 
