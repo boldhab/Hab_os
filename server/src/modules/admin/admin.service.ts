@@ -169,5 +169,35 @@ class AdminService {
     return stats;
   }
 
+  getJobsTelemetry() {
+    return {
+      isRunning: scheduler.isEngineRunning(),
+      tasks: scheduler.getTasksInfo(),
+    };
+  }
+
+  async triggerJob(jobName: string, actor = 'admin') {
+    auditLogger.log({
+      level: 'INFO',
+      category: 'SCHEDULER',
+      message: `Manual execution triggered for worker "${jobName}"`,
+      user: actor,
+    });
+
+    const result = await scheduler.runJobNow(jobName);
+
+    auditLogger.log({
+      level: result.success ? 'SUCCESS' : 'ERROR',
+      category: 'SCHEDULER',
+      message: `Worker "${jobName}" completed in ${result.durationMs}ms with status: ${
+        result.success ? 'SUCCESS' : 'FAILED'
+      }`,
+      details: result,
+      user: actor,
+    });
+
+    return result;
+  }
+
 export const adminService = new AdminService();
 export default adminService;
