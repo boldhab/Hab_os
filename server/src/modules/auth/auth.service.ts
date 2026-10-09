@@ -19,6 +19,7 @@ interface InMemoryUser {
   name: string | null;
   bio?: string | null;
   password: string; // bcrypt hash
+  role?: string; // 'ADMIN' or 'ACTOR_USER'
   googleId?: string;
   authProvider?: string;
   avatarUrl: string | null;
