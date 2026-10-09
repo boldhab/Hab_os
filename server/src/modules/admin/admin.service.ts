@@ -227,5 +227,71 @@ class AdminService {
     return { success: true, message: 'All caches flushed successfully' };
   }
 
+  async getAllUsers() {
+    const rawUsers = authService.getAllUsers();
+    return rawUsers.map((u: any) => ({
+      ...u,
+      role: u.role || (u.email === 'admin@habos.dev' || u.email === 'demo@habos.dev' ? 'ADMIN' : 'USER'),
+      status: 'ACTIVE',
+      lastActive: new Date().toISOString(),
+      entities: {
+        tasks: Math.floor(Math.random() * 20) + 5,
+        habits: Math.floor(Math.random() * 8) + 2,
+        workouts: Math.floor(Math.random() * 12) + 1,
+      },
+      lifeScore: Math.floor(Math.random() * 25) + 75,
+    }));
+  }
+
+  async updateUserRole(userId: string, role: string, actor = 'admin') {
+    const updated = authService.updateUserRole(userId, role);
+    auditLogger.log({
+      level: 'SECURITY',
+      category: 'USER_MANAGEMENT',
+      message: `User ${updated.email} role updated to "${role}"`,
+      details: { userId, newRole: role },
+      user: actor,
+    });
+    return updated;
+  }
+
+  async resetUserPassword(userId: string, newPassword?: string, actor = 'admin') {
+    const res = await authService.adminResetPassword(userId, newPassword);
+    auditLogger.log({
+      level: 'SECURITY',
+      category: 'USER_MANAGEMENT',
+      message: `Password reset initiated for user ${res.email}`,
+      details: { userId, temporaryPasswordGenerated: true },
+      user: actor,
+    });
+    return res;
+  }
+
+  async deleteUser(userId: string, actor = 'admin') {
+    const user = authService.getUserById(userId);
+    const email = user?.email || userId;
+    const deleted = authService.deleteUserById(userId);
+    auditLogger.log({
+      level: 'WARN',
+      category: 'USER_MANAGEMENT',
+      message: `User account deleted: ${email}`,
+      details: { userId, email },
+      user: actor,
+    });
+    return deleted;
+  }
+
+  async createUser(data: { name: string; email: string; role?: string; password?: string }, actor = 'admin') {
+    const res = await authService.createNewUserByAdmin(data);
+    auditLogger.log({
+      level: 'SUCCESS',
+      category: 'USER_MANAGEMENT',
+      message: `New account created via admin portal: ${data.email} (${data.role || 'USER'})`,
+      details: { email: data.email, role: data.role },
+      user: actor,
+    });
+    return res;
+  }
+
 export const adminService = new AdminService();
 export default adminService;
