@@ -192,4 +192,13 @@ class ApiEndpoints {
   static const String integrationsGitHubImport = '/integrations/github/import';
   static String integrationsGitHubAnalyze(String owner, String repo) =>
       '/integrations/github/repos/$owner/$repo/analyze';
+
+  // Administrative Mission Control & Telemetry
+  static const String adminHealth = '/admin/health';
+  static const String adminStats = '/admin/stats';
+  static const String adminJobs = '/admin/jobs';
+  static const String adminUsers = '/admin/users';
+  static String adminRunJob(String jobName) => '/admin/jobs/$jobName/run';
+  static const String adminToggleScheduler = '/admin/jobs/toggle';
+  static const String adminFlushCache = '/admin/maintenance/cache-clear';
 }
