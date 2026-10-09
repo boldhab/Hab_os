@@ -199,5 +199,22 @@ class AdminService {
     return result;
   }
 
+  toggleScheduler(enabled: boolean, actor = 'admin') {
+    if (enabled) {
+      scheduler.start();
+    } else {
+      scheduler.stop();
+    }
+
+    auditLogger.log({
+      level: 'WARN',
+      category: 'SCHEDULER',
+      message: `Background Job Engine ${enabled ? 'RESUMED' : 'PAUSED'} by administrator`,
+      user: actor,
+    });
+
+    return { isRunning: scheduler.isEngineRunning() };
+  }
+
 export const adminService = new AdminService();
 export default adminService;
