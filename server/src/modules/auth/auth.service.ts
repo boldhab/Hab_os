@@ -693,6 +693,15 @@ export const deleteUserById = (userId: string) => {
   return true;
 };
 
+export const adminResetPassword = async (userId: string, newPassword?: string) => {
+  const user = usersById.get(userId);
+  if (!user) throw new ApiError(404, 'User not found');
+  const tempPassword = newPassword || `HabOS#${Math.floor(100000 + Math.random() * 900000)}`;
+  user.password = await bcrypt.hash(tempPassword, 10);
+  user.updatedAt = new Date();
+  return { id: user.id, email: user.email, temporaryPassword: tempPassword };
+};
+
 export default {
   register,
   login,
