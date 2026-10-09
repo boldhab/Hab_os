@@ -132,6 +132,7 @@ function safeUserPayload(user: InMemoryUser) {
     id: user.id,
     email: user.email,
     name: user.name,
+    role: user.role || 'ACTOR_USER',
     bio: user.bio || null,
     timezone: user.timezone,
     dateFormat: user.dateFormat,
