@@ -103,7 +103,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   void _signInWithGoogle() {
-    GoogleAuthLauncher.launch(context);
+    GoogleAuthLauncher.launch(context, ref: ref);
   }
 
   @override
