@@ -284,37 +284,71 @@ export const configureGoogleOAuth = asyncHandler(async (req: Request, res: Respo
  * @access  Public
  */
 export const handleGoogleCallback = asyncHandler(async (req: Request, res: Response) => {
-  const returnUrl = (env.FRONTEND_URL || 'http://localhost:3000').replace(/\/+$/, '');
+  let defaultReturnUrl = (env.FRONTEND_URL || 'http://localhost:3000').replace(/\/+$/, '');
+  const state = req.query.state as string;
+  const code = req.query.code as string;
+
+  // Resolve target return URL from state if available
+  if (state) {
+    try {
+      const jwtDecoded = require('jsonwebtoken').verify(state, env.JWT_SECRET) as { returnUrl?: string };
+      if (jwtDecoded.returnUrl) {
+        defaultReturnUrl = jwtDecoded.returnUrl.replace(/\/+$/, '');
+      }
+    } catch (_err) {}
+  }
+
+  const isLoopback = (url: string) =>
+    url.includes('127.0.0.1') ||
+    url.endsWith('/callback') ||
+    (url.includes('localhost') && !url.includes('3000') && !url.includes('8080'));
 
   if (req.query.error) {
     const errorDesc = (req.query.error_description || req.query.error) as string;
-    return res.redirect(`${returnUrl}/#/login?error=${encodeURIComponent(errorDesc)}`);
+    if (isLoopback(defaultReturnUrl)) {
+      const sep = defaultReturnUrl.includes('?') ? '&' : '?';
+      return res.redirect(`${defaultReturnUrl}${sep}error=${encodeURIComponent(errorDesc)}`);
+    }
+    return res.redirect(`${defaultReturnUrl}/#/login?error=${encodeURIComponent(errorDesc)}`);
   }
 
-  const code = req.query.code as string;
-  const state = req.query.state as string;
-
   if (!code || !state) {
-    return res.redirect(
-      `${returnUrl}/#/login?error=${encodeURIComponent(
-        'Missing authorization code or state from Google callback'
-      )}`
-    );
+    const errorMsg = 'Missing authorization code or state from Google callback';
+    if (isLoopback(defaultReturnUrl)) {
+      const sep = defaultReturnUrl.includes('?') ? '&' : '?';
+      return res.redirect(`${defaultReturnUrl}${sep}error=${encodeURIComponent(errorMsg)}`);
+    }
+    return res.redirect(`${defaultReturnUrl}/#/login?error=${encodeURIComponent(errorMsg)}`);
   }
 
   try {
     const result = await authService.handleGoogleOAuthCallback(code, state);
-    const baseReturn = (result.returnUrl || returnUrl).replace(/\/+$/, '');
-    const redirectUrl = `${baseReturn}/#/auth/callback?token=${encodeURIComponent(
-      result.tokens.accessToken
-    )}&refreshToken=${encodeURIComponent(result.tokens.refreshToken)}&expiresIn=${encodeURIComponent(
-      result.tokens.expiresIn
-    )}`;
+    const baseReturn = (result.returnUrl || defaultReturnUrl).replace(/\/+$/, '');
+
+    let redirectUrl: string;
+    if (isLoopback(baseReturn)) {
+      const sep = baseReturn.includes('?') ? '&' : '?';
+      redirectUrl = `${baseReturn}${sep}token=${encodeURIComponent(
+        result.tokens.accessToken
+      )}&refreshToken=${encodeURIComponent(result.tokens.refreshToken)}&expiresIn=${encodeURIComponent(
+        result.tokens.expiresIn
+      )}`;
+    } else {
+      redirectUrl = `${baseReturn}/#/auth/callback?token=${encodeURIComponent(
+        result.tokens.accessToken
+      )}&refreshToken=${encodeURIComponent(result.tokens.refreshToken)}&expiresIn=${encodeURIComponent(
+        result.tokens.expiresIn
+      )}`;
+    }
 
     return res.redirect(redirectUrl);
   } catch (err: any) {
     const message = err.message || 'Google authentication failed';
-    return res.redirect(`${returnUrl}/#/login?error=${encodeURIComponent(message)}`);
+    if (isLoopback(defaultReturnUrl)) {
+      const sep = defaultReturnUrl.includes('?') ? '&' : '?';
+      return res.redirect(`${defaultReturnUrl}${sep}error=${encodeURIComponent(message)}`);
+    }
+    return res.redirect(`${defaultReturnUrl}/#/login?error=${encodeURIComponent(message)}`);
   }
 });
 
