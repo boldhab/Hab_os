@@ -39,7 +39,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   }
 
   void _signUpWithGoogle() {
-    GoogleAuthLauncher.launch(context);
+    GoogleAuthLauncher.launch(context, ref: ref);
   }
 
   @override

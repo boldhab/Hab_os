@@ -1,32 +1,16 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
-import '../constants/api_endpoints.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-// Conditional import: use dart:html on web, stub on native
+// Conditional imports across Web, Native (Desktop/Mobile), and Stub
 import 'google_auth_launcher_stub.dart'
-    if (dart.library.html) 'google_auth_launcher_web.dart' as platform;
+    if (dart.library.html) 'google_auth_launcher_web.dart'
+    if (dart.library.io) 'google_auth_launcher_native.dart' as platform;
 
 class GoogleAuthLauncher {
-  /// Launches the real Google OAuth 2.0 / OpenID Connect authorization flow
-  /// by navigating the current browser window to the backend OAuth initiation endpoint.
-  static Future<void> launch(BuildContext context) async {
-    final returnUrl = Uri.base.origin.isNotEmpty ? Uri.base.origin : 'http://localhost:3000';
-    final oauthEndpoint = '${ApiEndpoints.baseUrl}/auth/google?returnUrl=${Uri.encodeComponent(returnUrl)}';
-
+  /// Launches Google authentication flow on Web or Native platforms
+  static Future<void> launch(BuildContext context, {WidgetRef? ref}) async {
     try {
-      if (kIsWeb) {
-        platform.navigateToUrl(oauthEndpoint);
-      } else {
-        // For native platforms, show a message (not supported in this web-only flow)
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Google sign-in is only available on the web version.'),
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
-        }
-      }
+      await platform.performGoogleSignIn(context, ref);
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
