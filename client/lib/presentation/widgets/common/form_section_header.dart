@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../app/theme/app_theme.dart';
 
 /// Reusable Section Header for Form Dialogs and Modals in HABos.
 /// Provides consistent typography, spacing, and optional icon styling for form groupings.
@@ -32,12 +33,10 @@ class FormSectionHeader extends StatelessWidget {
           ],
           Text(
             title.toUpperCase(),
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0.9,
+            style: AppTypography.micro(
+              context,
               color: colorScheme.onSurfaceVariant.withAlpha(200),
-            ),
+            ).copyWith(letterSpacing: 0.8),
           ),
           if (trailing != null) ...[
             const Spacer(),

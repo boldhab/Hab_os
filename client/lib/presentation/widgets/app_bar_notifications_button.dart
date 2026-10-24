@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../app/theme/app_theme.dart';
 import '../providers/notifications_provider.dart';
 
 /// Top AppBar notification bell action with live unread badge counter (UC-160)
@@ -50,10 +51,7 @@ class AppBarNotificationsButton extends ConsumerWidget {
                 child: Center(
                   child: Text(
                     unreadCount > 9 ? '9+' : unreadCount.toString(),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 9.5,
-                      fontWeight: FontWeight.w800,
+                    style: AppTypography.micro(context, color: Colors.white).copyWith(
                       height: 1.0,
                     ),
                   ),

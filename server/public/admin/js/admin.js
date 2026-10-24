@@ -410,9 +410,9 @@
         <div class="mobile-item-card">
           <div class="mobile-item-top">
             <span class="badge ${badgeClass}">${l.level}</span>
-            <span style="font-family:var(--font-mono); font-size:0.72rem; color:var(--text-dim);">${time}</span>
+            <span class="font-mono tabular-nums text-dim" style="font-size:var(--text-xs);">${time}</span>
           </div>
-          <div style="font-size:0.86rem; color:var(--text-primary); line-height:1.4;">
+          <div style="font-size:var(--text-sm); color:var(--text-primary); line-height:1.4;">
             ${escapeHtml(l.message)}
           </div>
           <div class="mobile-item-meta">

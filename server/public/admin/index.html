@@ -232,16 +232,16 @@
           <div class="settings-list">
             <div class="settings-card-item">
               <div>
-                <strong style="color:var(--text-primary); font-size:0.9rem;">Dashboard Feed Cache</strong>
-                <p style="color:var(--text-muted); font-size:0.75rem;">In-memory 60s cache for user dashboard feeds</p>
+                <strong style="color:var(--text-primary); font-size:var(--text-base);">Dashboard Feed Cache</strong>
+                <p style="color:var(--text-muted); font-size:var(--text-xs);">In-memory 60s cache for user dashboard feeds</p>
               </div>
               <button type="button" class="btn btn-secondary btn-sm" id="btn-clear-cache">Flush Cache</button>
             </div>
 
             <div class="settings-card-item">
               <div>
-                <strong style="color:var(--text-primary); font-size:0.9rem;">Database Connection</strong>
-                <p style="color:var(--text-muted); font-size:0.75rem;" id="settings-db-info">Checking connection...</p>
+                <strong style="color:var(--text-primary); font-size:var(--text-base);">Database Connection</strong>
+                <p style="color:var(--text-muted); font-size:var(--text-xs);" id="settings-db-info">Checking connection...</p>
               </div>
               <button type="button" class="btn btn-secondary btn-sm" id="btn-test-db">Test DB</button>
             </div>
@@ -257,8 +257,8 @@
           <div class="settings-list">
             <label class="toggle-item-row">
               <div>
-                <strong style="color:var(--text-primary); font-size:0.9rem;">AI Insights & Suggestions</strong>
-                <p style="color:var(--text-muted); font-size:0.75rem;">Diurnal suggestions and productivity chat</p>
+                <strong style="color:var(--text-primary); font-size:var(--text-base);">AI Insights & Suggestions</strong>
+                <p style="color:var(--text-muted); font-size:var(--text-xs);">Diurnal suggestions and productivity chat</p>
               </div>
               <input type="checkbox" id="flag-ai" checked>
               <span class="toggle-switch"></span>
@@ -266,8 +266,8 @@
 
             <label class="toggle-item-row">
               <div>
-                <strong style="color:var(--text-primary); font-size:0.9rem;">GitHub Integration</strong>
-                <p style="color:var(--text-muted); font-size:0.75rem;">Automated commit and PR activity tracking</p>
+                <strong style="color:var(--text-primary); font-size:var(--text-base);">GitHub Integration</strong>
+                <p style="color:var(--text-muted); font-size:var(--text-xs);">Automated commit and PR activity tracking</p>
               </div>
               <input type="checkbox" id="flag-github" checked>
               <span class="toggle-switch"></span>
@@ -275,8 +275,8 @@
 
             <label class="toggle-item-row">
               <div>
-                <strong style="color:var(--text-primary); font-size:0.9rem;">LeetCode Integration</strong>
-                <p style="color:var(--text-muted); font-size:0.75rem;">Coding problem statistics sync</p>
+                <strong style="color:var(--text-primary); font-size:var(--text-base);">LeetCode Integration</strong>
+                <p style="color:var(--text-muted); font-size:var(--text-xs);">Coding problem statistics sync</p>
               </div>
               <input type="checkbox" id="flag-leetcode" checked>
               <span class="toggle-switch"></span>
@@ -284,8 +284,8 @@
 
             <label class="toggle-item-row">
               <div>
-                <strong style="color:var(--text-primary); font-size:0.9rem;">Maintenance Mode</strong>
-                <p style="color:var(--text-muted); font-size:0.75rem;">Return 503 for non-admin API requests</p>
+                <strong style="color:var(--text-primary); font-size:var(--text-base);">Maintenance Mode</strong>
+                <p style="color:var(--text-muted); font-size:var(--text-xs);">Return 503 for non-admin API requests</p>
               </div>
               <input type="checkbox" id="flag-maintenance">
               <span class="toggle-switch"></span>
@@ -403,13 +403,13 @@
         <button type="button" class="modal-close-btn" data-close="modal-pwd">&times;</button>
       </div>
       <div class="modal-body">
-        <p style="font-size:0.88rem; color:var(--text-muted);">
+        <p style="font-size:var(--text-sm); color:var(--text-muted);">
           Generate a temporary password for <strong id="modal-pwd-user" style="color:var(--text-primary);">--</strong>?
         </p>
         <div id="modal-pwd-result" style="display:none; background:var(--bg-surface-highest); border:1px solid var(--border-card); padding:12px; border-radius:12px; align-items:center; justify-content:space-between; gap:10px;">
           <div>
-            <div style="font-size:0.72rem; color:var(--text-dim); text-transform:uppercase;">Temporary Password</div>
-            <code id="modal-pwd-text" style="font-family:var(--font-mono); font-size:1rem; color:var(--primary); font-weight:700;">--</code>
+            <div style="font-size:var(--text-xs); color:var(--text-dim); text-transform:uppercase; letter-spacing:var(--tracking-wide);">Temporary Password</div>
+            <code id="modal-pwd-text" style="font-family:var(--font-mono); font-size:var(--text-base); color:var(--primary); font-weight:700;">--</code>
           </div>
           <button type="button" class="btn btn-tonal btn-xs" id="btn-copy-pwd">Copy</button>
         </div>

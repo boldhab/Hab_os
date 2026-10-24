@@ -11,6 +11,15 @@ import 'package:google_fonts/google_fonts.dart';
 class AppTypography {
   AppTypography._();
 
+  /// Explicit font fallback stack supporting Latin and Ethiopic (Amharic) glyphs cleanly.
+  static const List<String> ethiopicFontFallback = [
+    'Noto Sans Ethiopic',
+    'Abyssinica SIL',
+    'Nyala',
+    'Roboto',
+    'sans-serif',
+  ];
+
   /// Builds a cohesive [TextTheme] combining Outfit for headings/numerals and Inter for body/labels.
   static TextTheme buildTextTheme(ColorScheme colorScheme) {
     final baseTextTheme = ThemeData.light().textTheme;
@@ -22,22 +31,25 @@ class AppTypography {
       fontWeight: FontWeight.w700,
       letterSpacing: -0.25,
       color: colorScheme.onSurface,
+      fontFamilyFallback: ethiopicFontFallback,
     );
 
     final displayMedium = GoogleFonts.outfit(
       textStyle: baseTextTheme.displayMedium,
       fontSize: 45,
       fontWeight: FontWeight.w700,
-      letterSpacing: 0,
+      letterSpacing: -0.2,
       color: colorScheme.onSurface,
+      fontFamilyFallback: ethiopicFontFallback,
     );
 
     final displaySmall = GoogleFonts.outfit(
       textStyle: baseTextTheme.displaySmall,
       fontSize: 36,
       fontWeight: FontWeight.w600,
-      letterSpacing: 0,
+      letterSpacing: -0.15,
       color: colorScheme.onSurface,
+      fontFamilyFallback: ethiopicFontFallback,
     );
 
     final headlineLarge = GoogleFonts.outfit(
@@ -46,6 +58,7 @@ class AppTypography {
       fontWeight: FontWeight.w700,
       letterSpacing: -0.2,
       color: colorScheme.onSurface,
+      fontFamilyFallback: ethiopicFontFallback,
     );
 
     final headlineMedium = GoogleFonts.outfit(
@@ -54,6 +67,7 @@ class AppTypography {
       fontWeight: FontWeight.w700,
       letterSpacing: -0.15,
       color: colorScheme.onSurface,
+      fontFamilyFallback: ethiopicFontFallback,
     );
 
     final headlineSmall = GoogleFonts.outfit(
@@ -62,6 +76,7 @@ class AppTypography {
       fontWeight: FontWeight.w600,
       letterSpacing: 0,
       color: colorScheme.onSurface,
+      fontFamilyFallback: ethiopicFontFallback,
     );
 
     final titleLarge = GoogleFonts.outfit(
@@ -70,14 +85,16 @@ class AppTypography {
       fontWeight: FontWeight.w600,
       letterSpacing: 0,
       color: colorScheme.onSurface,
+      fontFamilyFallback: ethiopicFontFallback,
     );
 
     final titleMedium = GoogleFonts.outfit(
       textStyle: baseTextTheme.titleMedium,
       fontSize: 16,
       fontWeight: FontWeight.w600,
-      letterSpacing: 0.15,
+      letterSpacing: 0.1,
       color: colorScheme.onSurface,
+      fontFamilyFallback: ethiopicFontFallback,
     );
 
     final titleSmall = GoogleFonts.outfit(
@@ -86,6 +103,7 @@ class AppTypography {
       fontWeight: FontWeight.w600,
       letterSpacing: 0.1,
       color: colorScheme.onSurface,
+      fontFamilyFallback: ethiopicFontFallback,
     );
 
     // Body & Label styles with Inter
@@ -93,24 +111,27 @@ class AppTypography {
       textStyle: baseTextTheme.bodyLarge,
       fontSize: 16,
       fontWeight: FontWeight.w400,
-      letterSpacing: 0.25,
+      letterSpacing: 0,
       color: colorScheme.onSurface,
+      fontFamilyFallback: ethiopicFontFallback,
     );
 
     final bodyMedium = GoogleFonts.inter(
       textStyle: baseTextTheme.bodyMedium,
       fontSize: 14,
       fontWeight: FontWeight.w400,
-      letterSpacing: 0.2,
+      letterSpacing: 0,
       color: colorScheme.onSurface,
+      fontFamilyFallback: ethiopicFontFallback,
     );
 
     final bodySmall = GoogleFonts.inter(
       textStyle: baseTextTheme.bodySmall,
       fontSize: 12,
       fontWeight: FontWeight.w400,
-      letterSpacing: 0.3,
+      letterSpacing: 0.1,
       color: colorScheme.onSurfaceVariant,
+      fontFamilyFallback: ethiopicFontFallback,
     );
 
     final labelLarge = GoogleFonts.inter(
@@ -119,22 +140,25 @@ class AppTypography {
       fontWeight: FontWeight.w600,
       letterSpacing: 0.1,
       color: colorScheme.onSurface,
+      fontFamilyFallback: ethiopicFontFallback,
     );
 
     final labelMedium = GoogleFonts.inter(
       textStyle: baseTextTheme.labelMedium,
       fontSize: 12,
       fontWeight: FontWeight.w500,
-      letterSpacing: 0.4,
+      letterSpacing: 0.2,
       color: colorScheme.onSurfaceVariant,
+      fontFamilyFallback: ethiopicFontFallback,
     );
 
     final labelSmall = GoogleFonts.inter(
       textStyle: baseTextTheme.labelSmall,
       fontSize: 11,
       fontWeight: FontWeight.w600,
-      letterSpacing: 0.4,
+      letterSpacing: 0.3,
       color: colorScheme.onSurfaceVariant,
+      fontFamilyFallback: ethiopicFontFallback,
     );
 
     return TextTheme(
@@ -157,16 +181,45 @@ class AppTypography {
   }
 
   /// Specific helper for large numeral displays (Life Score, GPA, Countdown timer, Net Balance).
+  /// Automatically enables tabular figures to prevent horizontal jitter during updates.
   static TextStyle statNumeral({
     required double fontSize,
     FontWeight fontWeight = FontWeight.w700,
     Color? color,
+    List<FontFeature>? fontFeatures,
   }) {
     return GoogleFonts.outfit(
       fontSize: fontSize,
       fontWeight: fontWeight,
       letterSpacing: -0.5,
       color: color,
+      fontFeatures: fontFeatures ?? const [FontFeature.tabularFigures()],
+      fontFamilyFallback: ethiopicFontFallback,
+    );
+  }
+
+  /// Enforces tabular numbers on any text style.
+  static TextStyle tabular(TextStyle style) {
+    return style.copyWith(
+      fontFeatures: [
+        ...?style.fontFeatures,
+        const FontFeature.tabularFigures(),
+      ],
+    );
+  }
+
+  /// Monospace style for identifiers, temporary passwords, codes, and tech values.
+  static TextStyle mono({
+    double fontSize = 13,
+    FontWeight fontWeight = FontWeight.w500,
+    Color? color,
+  }) {
+    return GoogleFonts.jetBrainsMono(
+      fontSize: fontSize,
+      fontWeight: fontWeight,
+      color: color,
+      fontFeatures: const [FontFeature.tabularFigures()],
+      fontFamilyFallback: ethiopicFontFallback,
     );
   }
 
@@ -198,4 +251,63 @@ class AppTypography {
       Theme.of(context).textTheme.labelMedium ?? const TextStyle(fontSize: 12);
   static TextStyle labelSmall(BuildContext context) =>
       Theme.of(context).textTheme.labelSmall ?? const TextStyle(fontSize: 11);
+
+  // ── Semantic Role Accessors ────────────────────────────────────────────────
+  /// Main Page Title (text-2xl / text-3xl, font-bold, tracking-tight)
+  static TextStyle pageTitle(BuildContext context, {Color? color}) =>
+      (Theme.of(context).textTheme.headlineMedium ?? const TextStyle(fontSize: 28)).copyWith(
+        fontWeight: FontWeight.w700,
+        letterSpacing: -0.2,
+        color: color ?? Theme.of(context).colorScheme.onSurface,
+      );
+
+  /// Section Heading (text-lg / text-xl, font-semibold)
+  static TextStyle sectionHeading(BuildContext context, {Color? color}) =>
+      (Theme.of(context).textTheme.titleLarge ?? const TextStyle(fontSize: 20)).copyWith(
+        fontWeight: FontWeight.w600,
+        color: color ?? Theme.of(context).colorScheme.onSurface,
+      );
+
+  /// Card Title (text-base / text-lg, font-semibold)
+  static TextStyle cardTitle(BuildContext context, {Color? color}) =>
+      (Theme.of(context).textTheme.titleMedium ?? const TextStyle(fontSize: 16)).copyWith(
+        fontWeight: FontWeight.w600,
+        color: color ?? Theme.of(context).colorScheme.onSurface,
+      );
+
+  /// Dialog Heading (text-lg, font-semibold / font-bold)
+  static TextStyle dialogTitle(BuildContext context, {Color? color}) =>
+      (Theme.of(context).textTheme.titleLarge ?? const TextStyle(fontSize: 20)).copyWith(
+        fontWeight: FontWeight.w700,
+        color: color ?? Theme.of(context).colorScheme.onSurface,
+      );
+
+  /// Dialog Subtitle / Supporting description (text-sm, text-muted-foreground)
+  static TextStyle dialogSubtitle(BuildContext context, {Color? color}) =>
+      (Theme.of(context).textTheme.bodySmall ?? const TextStyle(fontSize: 12)).copyWith(
+        color: color ?? Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(180),
+      );
+
+  /// Form Label (text-sm, font-medium)
+  static TextStyle formLabel(BuildContext context, {Color? color}) =>
+      (Theme.of(context).textTheme.labelMedium ?? const TextStyle(fontSize: 12)).copyWith(
+        fontWeight: FontWeight.w500,
+        color: color ?? Theme.of(context).colorScheme.onSurfaceVariant,
+      );
+
+  /// Caption and metadata (text-xs, text-muted-foreground)
+  static TextStyle caption(BuildContext context, {Color? color}) =>
+      (Theme.of(context).textTheme.labelSmall ?? const TextStyle(fontSize: 11)).copyWith(
+        color: color ?? Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(190),
+      );
+
+  /// Micro-label or compact badge (10sp, font-bold, uppercase tracking)
+  static TextStyle micro(BuildContext context, {Color? color}) =>
+      GoogleFonts.inter(
+        fontSize: 10,
+        fontWeight: FontWeight.w700,
+        letterSpacing: 0.5,
+        color: color ?? Theme.of(context).colorScheme.onSurfaceVariant,
+        fontFamilyFallback: ethiopicFontFallback,
+      );
 }

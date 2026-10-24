@@ -47,10 +47,8 @@ class SectionHeader extends StatelessWidget {
             children: [
               Text(
                 title,
-                style: textTheme.titleMedium?.copyWith(
+                style: AppTypography.cardTitle(context, color: colorScheme.onSurface).copyWith(
                   fontWeight: FontWeight.w700,
-                  fontSize: 16,
-                  color: colorScheme.onSurface,
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -59,10 +57,7 @@ class SectionHeader extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(
                   subtitle!,
-                  style: textTheme.bodySmall?.copyWith(
-                    color: colorScheme.onSurfaceVariant.withAlpha(180),
-                    fontSize: 12,
-                  ),
+                  style: AppTypography.dialogSubtitle(context),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),

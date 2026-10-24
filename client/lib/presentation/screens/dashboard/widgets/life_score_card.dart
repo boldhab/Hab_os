@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import '../../../../app/theme/app_theme.dart';
 import '../../../../data/models/dashboard_feed_model.dart';
 import '../../../widgets/common/app_card.dart';
 
@@ -41,14 +42,10 @@ class LifeScoreCard extends StatelessWidget {
                         Expanded(
                           child: Text(
                             'Overall Momentum',
-                            style: Theme.of(context)
-                                .textTheme
-                                .titleSmall
-                                ?.copyWith(
-                                  fontWeight: FontWeight.w700,
-                                  color: colorScheme.onSurface,
-                                  fontSize: 13,
-                                ),
+                            style: AppTypography.titleSmall(context).copyWith(
+                              fontWeight: FontWeight.w700,
+                              color: colorScheme.onSurface,
+                            ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -76,11 +73,9 @@ class LifeScoreCard extends StatelessWidget {
                               const SizedBox(width: 2),
                               Text(
                                 lifeScore.level.toUpperCase(),
-                                style: TextStyle(
-                                  fontSize: 9.5,
-                                  fontWeight: FontWeight.w800,
+                                style: AppTypography.micro(
+                                  context,
                                   color: primaryRed,
-                                  letterSpacing: 0.5,
                                 ),
                               ),
                             ],
@@ -146,24 +141,20 @@ class _GlowingScoreGauge extends StatelessWidget {
                 children: [
                   Text(
                     score.toStringAsFixed(0),
-                    style: TextStyle(
+                    style: AppTypography.statNumeral(
                       fontSize: 30,
                       fontWeight: FontWeight.w800,
-                      letterSpacing: -1.0,
                       color: colorScheme.onSurface,
-                      fontFeatures: const [FontFeature.tabularFigures()],
-                      height: 1.0,
-                    ),
+                    ).copyWith(height: 1.0, letterSpacing: -1.0),
                   ),
                   Padding(
                     padding: const EdgeInsets.only(bottom: 2),
                     child: Text(
                       '/100',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
+                      style: AppTypography.micro(
+                        context,
                         color: colorScheme.onSurfaceVariant.withAlpha(160),
-                      ),
+                      ).copyWith(fontWeight: FontWeight.w600),
                     ),
                   ),
                 ],
@@ -171,12 +162,10 @@ class _GlowingScoreGauge extends StatelessWidget {
               const SizedBox(height: 2),
               Text(
                 'LIFE SCORE',
-                style: TextStyle(
-                  fontSize: 8.5,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 0.8,
+                style: AppTypography.micro(
+                  context,
                   color: colorScheme.onSurfaceVariant.withAlpha(180),
-                ),
+                ).copyWith(letterSpacing: 0.8),
               ),
             ],
           ),

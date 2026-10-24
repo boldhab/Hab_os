@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import '../../../../app/theme/app_theme.dart';
 import '../../../providers/focus_provider.dart';
 
 class FocusTimerGauge extends StatefulWidget {
@@ -134,15 +135,11 @@ class _FocusTimerGaugeState extends State<FocusTimerGauge>
                         children: [
                           Text(
                             formattedTime,
-                            style: TextStyle(
+                            style: AppTypography.statNumeral(
                               fontSize: gaugeSize > 240 ? 56 : 48,
                               fontWeight: FontWeight.w300,
-                              letterSpacing: -1.5,
                               color: colorScheme.onSurface,
-                              fontFeatures: const [
-                                FontFeature.tabularFigures()
-                              ],
-                            ),
+                            ).copyWith(letterSpacing: -1.5),
                           ),
                           const SizedBox(height: 4),
                           Row(
@@ -157,29 +154,25 @@ class _FocusTimerGaugeState extends State<FocusTimerGauge>
                               const SizedBox(width: 6),
                               Text(
                                 _formatCategoryLabel(state.category),
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: colorScheme.onSurfaceVariant
-                                      .withAlpha(180),
-                                ),
+                                style: AppTypography.caption(
+                                  context,
+                                  color: colorScheme.onSurfaceVariant.withAlpha(180),
+                                ).copyWith(fontWeight: FontWeight.w600),
                               ),
                             ],
                           ),
                           const SizedBox(height: 6),
                           Text(
                             statusCaption.toUpperCase(),
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 1.2,
+                            style: AppTypography.micro(
+                              context,
                               color: isRunning
                                   ? primaryRed
                                   : isPaused
                                       ? colorScheme.secondary
                                       : colorScheme.onSurfaceVariant
                                           .withAlpha(120),
-                            ),
+                            ).copyWith(letterSpacing: 1.2),
                           ),
                         ],
                       ),
