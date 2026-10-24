@@ -197,19 +197,18 @@ class FinanceScreen extends ConsumerWidget {
                           children: [
                             Text(
                               'Income',
-                              style: TextStyle(
-                                fontSize: 11,
-                                color:
-                                    semantics.onSuccessContainer.withAlpha(180),
+                              style: AppTypography.caption(
+                                context,
+                                color: semantics.onSuccessContainer.withAlpha(180),
                               ),
                             ),
                             Text(
                               '+\$${income.toStringAsFixed(2)}',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
+                              style: AppTypography.statNumeral(
                                 fontSize: 13,
+                                fontWeight: FontWeight.bold,
                                 color: semantics.onSuccessContainer,
                               ),
                             ),
@@ -247,19 +246,18 @@ class FinanceScreen extends ConsumerWidget {
                           children: [
                             Text(
                               'Expenses',
-                              style: TextStyle(
-                                fontSize: 11,
-                                color:
-                                    semantics.onDangerContainer.withAlpha(180),
+                              style: AppTypography.caption(
+                                context,
+                                color: semantics.onDangerContainer.withAlpha(180),
                               ),
                             ),
                             Text(
                               '-\$${expense.toStringAsFixed(2)}',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
+                              style: AppTypography.statNumeral(
                                 fontSize: 13,
+                                fontWeight: FontWeight.bold,
                                 color: semantics.onDangerContainer,
                               ),
                             ),
@@ -527,12 +525,13 @@ class FinanceScreen extends ConsumerWidget {
                       children: [
                         Text(
                           '${isIncome ? '+' : '-'}\$${t.amount.toStringAsFixed(2)}',
-                          style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                                fontWeight: FontWeight.w800,
-                                color: isIncome
-                                    ? semantics.success
-                                    : semantics.danger,
-                              ),
+                          style: AppTypography.statNumeral(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                            color: isIncome
+                                ? semantics.success
+                                : semantics.danger,
+                          ),
                         ),
                         IconButton(
                           tooltip: 'Delete transaction',

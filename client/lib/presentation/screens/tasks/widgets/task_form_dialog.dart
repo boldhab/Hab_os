@@ -210,7 +210,7 @@ class _TaskFormDialogState extends ConsumerState<TaskFormDialog> {
           TextFormField(
             controller: _titleController,
             autofocus: !isEditing,
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            style: AppTypography.cardTitle(context).copyWith(fontWeight: FontWeight.w600),
             decoration: InputDecoration(
               labelText: 'Task Title *',
               hintText: 'What needs to be done?',
@@ -243,10 +243,8 @@ class _TaskFormDialogState extends ConsumerState<TaskFormDialog> {
                     const SizedBox(width: 6),
                     Text(
                       'Set due date to $_detectedLabel (${_detectedDate!.month}/${_detectedDate!.day})?',
-                      style: TextStyle(
-                        fontSize: 12,
+                      style: AppTypography.caption(context, color: primaryRed).copyWith(
                         fontWeight: FontWeight.w700,
-                        color: primaryRed,
                       ),
                     ),
                     const SizedBox(width: 4),
@@ -262,7 +260,7 @@ class _TaskFormDialogState extends ConsumerState<TaskFormDialog> {
           TextFormField(
             controller: _descController,
             maxLines: 2,
-            style: const TextStyle(fontSize: 14),
+            style: AppTypography.bodyMedium(context),
             decoration: const InputDecoration(
               labelText: 'Description (optional)',
               hintText: 'Add description, checklist or notes...',
@@ -335,9 +333,8 @@ class _TaskFormDialogState extends ConsumerState<TaskFormDialog> {
                           _dueDate == null
                               ? 'No Due Date'
                               : 'Due: ${_dueDate!.year}-${_dueDate!.month.toString().padLeft(2, '0')}-${_dueDate!.day.toString().padLeft(2, '0')}',
-                          style: TextStyle(
+                          style: AppTypography.bodyMedium(context).copyWith(
                             fontWeight: FontWeight.w600,
-                            fontSize: 14,
                             color: _dueDate == null
                                 ? colorScheme.onSurfaceVariant
                                 : colorScheme.onSurface,
@@ -548,17 +545,13 @@ class _TaskFormDialogState extends ConsumerState<TaskFormDialog> {
                       children: [
                         Text(
                           isEditing ? 'Edit Task' : 'New Task',
-                          style: const TextStyle(
-                              fontSize: 18, fontWeight: FontWeight.w800),
+                          style: AppTypography.dialogTitle(context),
                         ),
                         Text(
                           isEditing
                               ? 'Update task details and timeline'
                               : 'Create an actionable task item',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: colorScheme.onSurfaceVariant.withAlpha(170),
-                          ),
+                          style: AppTypography.dialogSubtitle(context),
                         ),
                       ],
                     ),
@@ -590,8 +583,9 @@ class _TaskFormDialogState extends ConsumerState<TaskFormDialog> {
                   ),
                   label: Text(
                     isEditing ? 'Save Changes' : 'Create Task',
-                    style: const TextStyle(
-                        fontWeight: FontWeight.w700, fontSize: 15),
+                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
                   ),
                 ),
               ),

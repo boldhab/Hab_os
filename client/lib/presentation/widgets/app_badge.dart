@@ -166,7 +166,13 @@ class AppBadge extends StatelessWidget {
         : const EdgeInsets.symmetric(
             horizontal: AppSpacing.sm, vertical: AppSpacing.xs);
 
-    final fontSize = size == AppBadgeSize.compact ? 10.0 : 11.5;
+    final textStyle = size == AppBadgeSize.compact
+        ? AppTypography.micro(context, color: fg)
+        : (Theme.of(context).textTheme.labelSmall ?? const TextStyle(fontSize: 11)).copyWith(
+            color: fg,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.2,
+          );
     final iconSize = size == AppBadgeSize.compact ? 11.0 : 13.0;
 
     Widget badgeContent = Row(
@@ -179,12 +185,7 @@ class AppBadge extends StatelessWidget {
         ],
         Text(
           label,
-          style: TextStyle(
-            fontSize: fontSize,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.2,
-            color: fg,
-          ),
+          style: textStyle,
         ),
       ],
     );

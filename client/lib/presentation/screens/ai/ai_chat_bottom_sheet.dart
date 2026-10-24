@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../../../app/theme/app_theme.dart';
+import '../../../app/theme/app_theme.dart';
 import 'widgets/ai_chat_view.dart';
 
 /// Interactive conversational AI Assistant Bottom Sheet (UC-131, UC-132, UC-147)

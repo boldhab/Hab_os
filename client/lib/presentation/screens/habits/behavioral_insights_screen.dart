@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../app/theme/app_semantic_colors.dart';
-import '../../../../data/models/habit_model.dart';
+import '../../../data/models/habit_model.dart';
 import '../../providers/habits_provider.dart';
 
 /// Dedicated screen detailing behavioral habit correlations, lift percentages,

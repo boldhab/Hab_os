@@ -31,7 +31,7 @@ interface InMemoryUser {
   updatedAt: Date;
 }
 
-interface InMemoryPreferences {
+export interface InMemoryPreferences {
   dashboardModules: string[];
   dailyCodingTargetMins: number;
   dailyStudyTargetMins: number;
@@ -42,7 +42,7 @@ interface InMemoryPreferences {
   lifeScoreWeights: Record<string, number>;
 }
 
-interface InMemoryCategory {
+export interface InMemoryCategory {
   name: string;
   color: string;
   icon: string;
