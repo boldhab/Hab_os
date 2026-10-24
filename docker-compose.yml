@@ -30,6 +30,9 @@ services:
       PORT: 5000
       JWT_SECRET: "${JWT_SECRET:-habos_production_super_secret_jwt_access_signing_key_2026_x99}"
       JWT_REFRESH_SECRET: "${JWT_REFRESH_SECRET:-habos_production_super_secret_jwt_refresh_signing_key_2026_x99}"
+      GOOGLE_CLIENT_ID: "${GOOGLE_CLIENT_ID:-384114652753-543grsegq0dj2blns4mmjeu369r4ifqb.apps.googleusercontent.com}"
+      GOOGLE_CLIENT_SECRET: "${GOOGLE_CLIENT_SECRET:-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}"
+      GOOGLE_CALLBACK_URL: "${GOOGLE_CALLBACK_URL:-http://localhost:5000/api/v1/auth/google/callback}"
     ports:
       - "5000:5000"
     depends_on:

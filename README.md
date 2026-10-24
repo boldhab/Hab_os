@@ -19,33 +19,34 @@
 ## 📖 Table of Contents
 
 - [🌟 Project Overview](#-project-overview)
-- [Problem Statement](#-problem-statement)
-- [Objectives](#-objectives)
-- [System Users & Roles](#-system-users--roles)
-- [Key Features](#️-key-features)
-- [System Architecture](#️-system-architecture)
+- [🚫 Problem Statement](#-problem-statement)
+- [🎯 Objectives](#-objectives)
+- [👥 System Users & Roles](#-system-users--roles)
+- [🛠️ Key Features](#️-key-features)
+- [🏗️ System Architecture](#️-system-architecture)
   - [High-Level Architectural Diagram](#high-level-architectural-diagram)
   - [Frontend Architecture (Flutter Clean Architecture)](#frontend-architecture-flutter-clean-architecture)
   - [Backend Architecture (Modular Monolith)](#backend-architecture-modular-monolith)
   - [Inter-Module Reactive Cascade Flow](#inter-module-reactive-cascade-flow)
-- [Tech Stack](#-tech-stack)
-- [Repository Structure](#-repository-structure)
-- [Developer Setup & Installation](#-developer-setup--installation)
+- [💻 Tech Stack](#-tech-stack)
+- [📂 Repository Structure](#-repository-structure)
+- [🚀 Developer Setup & Installation](#-developer-setup--installation)
   - [Prerequisites](#prerequisites)
   - [1. Clone Repository](#1-clone-repository)
   - [2. Backend Setup](#2-backend-setup)
   - [3. Frontend Setup (Flutter)](#3-frontend-setup-flutter)
-- [ Database Setup](#️-database-setup)
-  - [Migrations & Client Generation](#migrations--client-generation)
-- [use Cases Index](#-use-cases-index)
-- [Security](#-security)
-- [Docker Setup](#-docker-setup)
-- [Deployment](#-deployment)
-- [Team & Responsibilities](#-team--responsibilities)
+- [🗄️ Database Setup](#️-database-setup)
+  - [Schema Synchronization & Migrations](#schema-synchronization--migrations)
+- [📋 Use Cases Index](#-use-cases-index)
+- [🔐 Security](#-security)
+- [🐳 Docker Setup](#-docker-setup)
+- [🚀 Deployment](#-deployment)
+- [👥 Team & Responsibilities](#-team--responsibilities)
+- [🤝 Contributing](#-contributing)
 
 ---
 
-## Project Overview
+## 🌟 Project Overview
 
 **HabOS** is a modular personal life operating system engineered to eliminate digital fragmentation by uniting the tools people use every day into a reactive, single-source-of-truth ecosystem. 
 
@@ -331,6 +332,7 @@ sequenceDiagram
 Hab_os/
 ├── .agent                          # AI agent development guide & module taxonomy
 ├── docker-compose.yml              # Local orchestration (PostgreSQL 16 + Express API)
+├── LICENSE                         # Project MIT license
 ├── README.md                       # Comprehensive project documentation
 ├── docs/                           # Architecture, API versioning & use case specifications
 │   ├── API_VERSIONING.md           # API evolution strategy and deprecation policies
@@ -347,6 +349,7 @@ Hab_os/
 │   │   ├── core/                   # Network client (Dio), error types, constants
 │   │   ├── domain/                 # Pure business rules (Entities, Use Cases, Contracts)
 │   │   ├── data/                   # Models (DTOs), Data Sources, Repository implementations
+│   │   ├── infrastructure/         # Platform device services (Local notifications, storage)
 │   │   ├── presentation/           # Riverpod state notifiers, pages, shared widgets
 │   │   └── main.dart               # App entrypoint wrapped in ProviderScope
 │   └── test/                       # Flutter unit and widget test suites
@@ -355,14 +358,18 @@ Hab_os/
     ├── tsconfig.json               # TypeScript compiler options
     ├── Dockerfile                  # Multi-stage production container build
     ├── .env.example                # Template for server environment variables
+    ├── public/                     # Static assets & web client hosting
+    │   └── admin/                  # Mission Control Admin Dashboard (HTML/CSS/JS)
     ├── prisma/
     │   ├── schema.prisma           # Relational schema definition (50+ tables)
     │   └── seed.ts                 # Database seed script for initial testing data
     ├── scripts/                    # Maintenance, security & test runner scripts
     │   ├── reset-password.ts       # CLI utility to safely reset user passwords
     │   ├── test_runner.ts          # Master automated test suite runner
+    │   ├── verify_admin_endpoints.ts # Admin mission control endpoint tester
     │   ├── verify_architecture.js  # Clean architecture verification script
-    │   └── verify_security.js      # Endpoint security & authentication auditor
+    │   ├── verify_security.js      # Endpoint security & authentication auditor
+    │   └── verify_tasks_advanced.js# Task dependency & workload validation script
     ├── tests/                      # Jest & tsx unit/integration test suites
     └── src/
         ├── server.ts               # HTTP server listener and graceful shutdown
@@ -440,11 +447,12 @@ cd Hab_os
    docker compose up postgres -d
    ```
 
-5. **Generate Prisma Client & Apply Migrations**:
+5. **Generate Prisma Client & Synchronize Database**:
    ```bash
    npm run prisma:generate
-   npm run prisma:migrate
+   npm run prisma:push
    ```
+   *(Initializes all 50+ models directly into the PostgreSQL database).*
 
 6. **Seed Initial Database Data**:
    ```bash
@@ -455,7 +463,7 @@ cd Hab_os
    ```bash
    npm run dev
    ```
-   *The server starts on `http://localhost:5000` (Health Check: `http://localhost:5000/health`).*
+   *The server starts on `http://localhost:5000` (Health Check: `http://localhost:5000/health`, Mission Control: `http://localhost:5000/admin`).*
 
 ---
 
@@ -481,6 +489,7 @@ cd Hab_os
    ```bash
    flutter run
    ```
+   *(To point to a remote server or specific local IP, pass `--dart-define=API_BASE_URL=http://<IP>:5000/api/v1`)*.
 
 ---
 
@@ -488,22 +497,26 @@ cd Hab_os
 
 HabOS utilizes **PostgreSQL 16** with **Prisma ORM**. The database schema is defined in `server/prisma/schema.prisma` and encompasses 50+ models organized across all 24 domains.
 
-### Migrations & Client Generation
+### Schema Synchronization & Migrations
 
 - **Generate Prisma Client**:
   ```bash
   cd server
   npm run prisma:generate
   ```
-- **Apply Development Migrations**:
-  Creates and runs timestamped SQL migration files:
-  ```bash
-  npm run prisma:migrate
-  ```
-- **Push Schema (Prototyping / Testing)**:
-  Directly synchronizes schema without generating migration files:
+- **Synchronize Database Schema (Fresh Environment / Local / Staging)**:
+  Directly creates or synchronizes all 50+ relational tables into PostgreSQL:
   ```bash
   npm run prisma:push
+  ```
+- **Apply Production Migrations**:
+  For production pipelines utilizing tracked migration files:
+  ```bash
+  npm run prisma:deploy
+  ```
+- **Create New Migration (Schema Changes in Development)**:
+  ```bash
+  npm run prisma:migrate
   ```
 
 ---
@@ -569,19 +582,128 @@ Security in HabOS is implemented defensively across every layer of the architect
 
 ---
 
+## 🐳 Docker Setup
 
+HabOS provides a production-grade multi-container orchestration setup via `docker-compose.yml`.
 
+### Services Overview
 
+* **`postgres`**: PostgreSQL 16 Alpine database with persistent volume storage (`pgdata`) and automated health checks (`pg_isready`).
+* **`server`**: Multi-stage Node.js 20 Alpine container running the production TypeScript server, serving the REST API on `:5000` and the Mission Control Admin UI on `/admin`.
+
+### Running with Docker Compose
+
+1. **Start the database only** (useful during local backend development):
+   ```bash
+   docker compose up postgres -d
+   ```
+
+2. **Start the complete stack (Database + API Server)**:
+   ```bash
+   docker compose up --build -d
+   ```
+
+3. **Check Container Status & Health**:
+   ```bash
+   docker compose ps
+   ```
+
+4. **View Live Server Logs**:
+   ```bash
+   docker compose logs -f server
+   ```
+
+5. **Stop and Tear Down Containers**:
+   ```bash
+   docker compose down
+   ```
+
+---
+
+## 🚀 Deployment
+
+### 1. Production Backend Deployment
+
+1. **Containerized Deployment (Recommended)**:
+   * Build and run the image using `server/Dockerfile`:
+     ```bash
+     cd server
+     docker build -t habos-api:latest .
+     docker run -d \
+       -p 5000:5000 \
+       -e NODE_ENV=production \
+       -e DATABASE_URL="postgresql://user:password@host:5432/habos_db?schema=public" \
+       -e JWT_SECRET="your_secure_random_jwt_secret_at_least_32_chars_long" \
+       -e JWT_REFRESH_SECRET="your_secure_random_refresh_secret_at_least_32_chars" \
+       -e ALLOWED_ORIGINS="https://app.yourdomain.com" \
+       habos-api:latest
+     ```
+
+2. **Database Initialization in Production**:
+   * Synchronize the PostgreSQL schema before initiating traffic:
+     ```bash
+     npm run prisma:push
+     # or for tracked migration pipelines:
+     npm run prisma:deploy
+     ```
+
+### 2. Client Application Deployment
+
+1. **Android Deployment (APK / Google Play Bundle)**:
+   * Configure a release keystore in `client/android/key.properties`.
+   * Compile the optimized production binary with the production API endpoint:
+     ```bash
+     cd client
+     flutter build appbundle --release --dart-define=API_BASE_URL=https://api.yourdomain.com/api/v1
+     ```
+
+2. **Web Deployment (SPA)**:
+   * Build the production web bundle:
+     ```bash
+     cd client
+     flutter build web --release --dart-define=API_BASE_URL=https://api.yourdomain.com/api/v1
+     ```
+   * Deploy the resulting `client/build/web` directory to CDN/Hosting (Firebase Hosting, Vercel, Cloudflare Pages, Nginx), or host directly through the Express server.
+
+---
 
 ## 👥 Team & Responsibilities
 
-| Contributor | CTC | 
-| :--- | :--- | 
-| **Habtamu Befekadu**<br> | CTC-894-26
-| **Petros Geto**<br> | CTC-2934-26
-### Contributing
+| Contributor | CTC / ID | Role & Core Responsibilities |
+| :--- | :--- | :--- |
+| **Habtamu Befekadu** | CTC-894-26 | **Lead Systems Architect & Full-Stack Engineer**<br>• Flutter Clean Architecture, Riverpod state management & design system<br>• Composite Life Score mathematical calculation engine<br>• Flutter cross-platform mobile client development & feature integration<br>• Modular monolith Express/TypeScript backend architecture & Prisma ORM schema modeling |
+| **Petros Geto** | CTC-2934-26 | **Full-Stack & Security Engineer**<br>• Authentication, dual JWT rotation & family token revocation<br>• Server security hardening, rate limiting & input sanitization<br>• Mission Control Admin Dashboard (frontend & backend endpoints)<br>• Backend API services, endpoint validation & testing verification |
 
+---
 
+## 🤝 Contributing
+
+Contributions to HabOS are welcomed! Please follow these steps:
+
+1. **Fork the Repository** and create a feature branch:
+   ```bash
+   git checkout -b feature/amazing-feature
+   ```
+2. **Adhere to Code Standards**:
+   * **Backend**: Follow the 4-layer modular monolith structure (`routes`, `controller`, `service`, `validation`).
+   * **Client**: Strictly preserve Flutter Clean Architecture (`domain`, `data`, `presentation`).
+3. **Verify Tests Pass**:
+   ```bash
+   # In server/
+   npm run build
+   npm run test:unit
+   npm run test:habits
+   npm run test:focus
+   npm run test:gym
+
+   # In client/
+   flutter test
+   ```
+4. **Commit with Clear Semantic Messages**:
+   ```bash
+   git commit -m "feat(gym): add plate calculator dialog and 1RM progression tracking"
+   ```
+5. **Open a Pull Request** against the `develop` branch.
 
 ---
 

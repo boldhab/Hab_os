@@ -31,7 +31,6 @@ class AppTypography {
       fontWeight: FontWeight.w700,
       letterSpacing: -0.25,
       color: colorScheme.onSurface,
-      fontFamilyFallback: ethiopicFontFallback,
     );
 
     final displayMedium = GoogleFonts.outfit(
@@ -40,7 +39,6 @@ class AppTypography {
       fontWeight: FontWeight.w700,
       letterSpacing: -0.2,
       color: colorScheme.onSurface,
-      fontFamilyFallback: ethiopicFontFallback,
     );
 
     final displaySmall = GoogleFonts.outfit(
@@ -49,7 +47,6 @@ class AppTypography {
       fontWeight: FontWeight.w600,
       letterSpacing: -0.15,
       color: colorScheme.onSurface,
-      fontFamilyFallback: ethiopicFontFallback,
     );
 
     final headlineLarge = GoogleFonts.outfit(
@@ -58,7 +55,6 @@ class AppTypography {
       fontWeight: FontWeight.w700,
       letterSpacing: -0.2,
       color: colorScheme.onSurface,
-      fontFamilyFallback: ethiopicFontFallback,
     );
 
     final headlineMedium = GoogleFonts.outfit(
@@ -67,7 +63,6 @@ class AppTypography {
       fontWeight: FontWeight.w700,
       letterSpacing: -0.15,
       color: colorScheme.onSurface,
-      fontFamilyFallback: ethiopicFontFallback,
     );
 
     final headlineSmall = GoogleFonts.outfit(
@@ -76,7 +71,6 @@ class AppTypography {
       fontWeight: FontWeight.w600,
       letterSpacing: 0,
       color: colorScheme.onSurface,
-      fontFamilyFallback: ethiopicFontFallback,
     );
 
     final titleLarge = GoogleFonts.outfit(
@@ -85,7 +79,6 @@ class AppTypography {
       fontWeight: FontWeight.w600,
       letterSpacing: 0,
       color: colorScheme.onSurface,
-      fontFamilyFallback: ethiopicFontFallback,
     );
 
     final titleMedium = GoogleFonts.outfit(
@@ -94,7 +87,6 @@ class AppTypography {
       fontWeight: FontWeight.w600,
       letterSpacing: 0.1,
       color: colorScheme.onSurface,
-      fontFamilyFallback: ethiopicFontFallback,
     );
 
     final titleSmall = GoogleFonts.outfit(
@@ -103,7 +95,6 @@ class AppTypography {
       fontWeight: FontWeight.w600,
       letterSpacing: 0.1,
       color: colorScheme.onSurface,
-      fontFamilyFallback: ethiopicFontFallback,
     );
 
     // Body & Label styles with Inter
@@ -113,7 +104,6 @@ class AppTypography {
       fontWeight: FontWeight.w400,
       letterSpacing: 0,
       color: colorScheme.onSurface,
-      fontFamilyFallback: ethiopicFontFallback,
     );
 
     final bodyMedium = GoogleFonts.inter(
@@ -122,7 +112,6 @@ class AppTypography {
       fontWeight: FontWeight.w400,
       letterSpacing: 0,
       color: colorScheme.onSurface,
-      fontFamilyFallback: ethiopicFontFallback,
     );
 
     final bodySmall = GoogleFonts.inter(
@@ -131,7 +120,6 @@ class AppTypography {
       fontWeight: FontWeight.w400,
       letterSpacing: 0.1,
       color: colorScheme.onSurfaceVariant,
-      fontFamilyFallback: ethiopicFontFallback,
     );
 
     final labelLarge = GoogleFonts.inter(
@@ -140,7 +128,6 @@ class AppTypography {
       fontWeight: FontWeight.w600,
       letterSpacing: 0.1,
       color: colorScheme.onSurface,
-      fontFamilyFallback: ethiopicFontFallback,
     );
 
     final labelMedium = GoogleFonts.inter(
@@ -149,7 +136,6 @@ class AppTypography {
       fontWeight: FontWeight.w500,
       letterSpacing: 0.2,
       color: colorScheme.onSurfaceVariant,
-      fontFamilyFallback: ethiopicFontFallback,
     );
 
     final labelSmall = GoogleFonts.inter(
@@ -158,7 +144,6 @@ class AppTypography {
       fontWeight: FontWeight.w600,
       letterSpacing: 0.3,
       color: colorScheme.onSurfaceVariant,
-      fontFamilyFallback: ethiopicFontFallback,
     );
 
     return TextTheme(
@@ -177,6 +162,8 @@ class AppTypography {
       labelLarge: labelLarge,
       labelMedium: labelMedium,
       labelSmall: labelSmall,
+    ).apply(
+      fontFamilyFallback: ethiopicFontFallback,
     );
   }
 
@@ -194,6 +181,7 @@ class AppTypography {
       letterSpacing: -0.5,
       color: color,
       fontFeatures: fontFeatures ?? const [FontFeature.tabularFigures()],
+    ).copyWith(
       fontFamilyFallback: ethiopicFontFallback,
     );
   }
@@ -219,6 +207,7 @@ class AppTypography {
       fontWeight: fontWeight,
       color: color,
       fontFeatures: const [FontFeature.tabularFigures()],
+    ).copyWith(
       fontFamilyFallback: ethiopicFontFallback,
     );
   }
@@ -308,6 +297,7 @@ class AppTypography {
         fontWeight: FontWeight.w700,
         letterSpacing: 0.5,
         color: color ?? Theme.of(context).colorScheme.onSurfaceVariant,
+      ).copyWith(
         fontFamilyFallback: ethiopicFontFallback,
       );
 }

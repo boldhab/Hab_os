@@ -16,7 +16,7 @@ import 'widgets/finance_card.dart';
 import 'widgets/ai_tip_card.dart';
 import 'widgets/schedule_timeline_card.dart';
 import 'widgets/academic_deadlines_card.dart';
-import '../../widgets/app_bar_search_button.dart';
+import '../../widgets/app_bar_search_bar.dart';
 import '../../widgets/app_bar_ai_button.dart';
 import '../../widgets/app_bar_notifications_button.dart';
 
@@ -309,7 +309,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         ),
       ),
       actions: [
-        const AppBarSearchButton(),
+        const AppBarSearchBar(),
         const AppBarAiButton(),
         const AppBarNotificationsButton(),
         Padding(
