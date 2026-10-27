@@ -297,14 +297,7 @@ The project documents the following security measures:
 
 Security depends on correct configuration and implementation. Review the server environment, authorization checks, token lifecycle, and deployment settings before deploying to production.
 
-## Documentation
 
-Additional project documentation is available in the `docs/` directory:
-
-- [`docs/architecture.md`](docs/architecture.md) — System architecture and design.
-- [`docs/API_VERSIONING.md`](docs/API_VERSIONING.md) — API versioning approach.
-- [`docs/usecases.md`](docs/usecases.md) — Use-case specifications.
-- [`docs/database/schema_reference.md`](docs/database/schema_reference.md) — Database schema reference.
 
 ## Team
 
