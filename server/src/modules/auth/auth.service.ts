@@ -13,7 +13,7 @@ const JWT_REFRESH_EXPIRES_IN = env.JWT_REFRESH_EXPIRES_IN || '30d';
 // In-memory stores (no database required)
 // ──────────────────────────────────────────────
 
-interface InMemoryUser {
+export interface InMemoryUser {
   id: string;
   email: string;
   name: string | null;
@@ -49,7 +49,7 @@ export interface InMemoryCategory {
   type: string;
 }
 
-interface InMemoryRefreshToken {
+export interface InMemoryRefreshToken {
   id: string;
   token: string;
   userId: string;
