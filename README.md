@@ -581,7 +581,76 @@ Security in HabOS is implemented defensively across every layer of the architect
 | **Petros Geto**<br> | CTC-2934-26
 ### Contributing
 
-
+DEVELOPER CONTRIBUTIONS AND
+MODULE ASSIGNMENTS
+.1. Habtamu Befekadu — Lead Systems Architect and
+Full-Stack Engineer
+Identification: CTC-894-26
+Role: Lead Systems Architect and Full-Stack Engineer
+Habtamu Befekadu is responsible for the system architecture, database design, cross-platform client, and
+core personal productivity modules of HabOS. These responsibilities focus on integrating the
+application's functional domains into a centralized life-management platform.
+Cross-Platform Client Development
+This module covers the Flutter client and its user interface. It organizes application logic, data access, and
+presentation components to improve maintainability and provide a consistent user experience.
+Composite Life Score Engine
+This module calculates an overall score from supported areas of personal development. It combines
+domain-level measurements using configured weights to help users review their progress and identify
+areas that need attention.
+Productivity and Task Management
+This module provides task organization, project tracking, priority management, and scheduling
+functionality. It helps users organize responsibilities, monitor deadlines, and plan daily activities.
+Habit and Focus Management
+The habit module tracks routines, completion records, and streaks. The focus module records
+concentrated work or study sessions and supports time-management techniques such as Pomodoro
+sessions, where implemented.
+Developer Hub and External Integrations
+This module supports software project organization and coding-related progress tracking. Planned or
+implemented integrations, such as GitHub and LeetCode, can provide additional information about
+development activities when their functionality is available and configured.
+14Academic Management
+This module helps students organize courses, assignments, study sessions, and academic deadlines.
+Supported calculation features may include grade projections and the aggregation of study time without
+double-counting overlapping sessions.
+Fitness and Workout Management
+This module allows users to record exercises, sets, repetitions, training weights, and related fitness
+measurements. Supporting calculations can include estimated one-repetition maximums and
+personal-record detection when implemented.
+Personal Finance Management
+This module manages financial transactions, budgets, and spending summaries. Budget threshold
+indicators and savings calculations help users monitor their financial activities.
+Knowledge Management and Analytics
+This module provides a centralized space for organizing notes, code snippets, and learning resources.
+Supporting analytics can summarize activity trends and provide insights based on available user data.
+2.Petros Geto — Authentication and Security Engineer
+Identification: CTC-2934-26
+Role: Full-Stack and Security Engineer
+Petros Geto is responsible for implementing the authentication, authorization, and security components of
+HabOS. These modules protect user accounts, enforce access permissions, and support secure system
+administration.
+Authentication and Identity Management
+This module manages user registration, login, logout, and profile identity. It verifies user credentials and
+establishes authenticated sessions using the configured token-based authentication mechanism.
+Authorization and Role-Based Access Control
+This module controls access to protected resources based on user roles and permissions. It distinguishes
+standard users from administrators and helps prevent unauthorized access to administrative functions and
+other users' private records.
+Server Security and Defensive Middleware
+15This module supports server-side security through authentication middleware, request validation, rate
+limiting, password hashing, and other defensive mechanisms. These controls help reduce risks associated
+with invalid requests, brute-force attempts, and unauthorized access.
+Mission Control Administration and Audit Logging
+This module supports authorized administrative operations, including system monitoring, user
+management, background job controls, and security diagnostics, where implemented. Audit logging
+provides information for investigating relevant system events and troubleshooting problems.
+Authentication and Security Verification
+Security verification includes testing credential validation, token handling, access restrictions, and
+protection against cross-user data access. Test results are documented to identify security weaknesses and
+confirm expected behavior.
+System Architecture and Database Design
+This module defines the overall application structure, communication between components, and data
+organization. It includes database modeling and the design of relationships between users and the
+different productivity domains.
 
 ---
 
