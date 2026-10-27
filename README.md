@@ -304,7 +304,7 @@ Security depends on correct configuration and implementation. Review the server 
 | Contributor | Identification | Main Responsibility |
 |---|---|---|
 | **Habtamu Befekadu** | `CTC-894-26` | System architecture, Flutter client, database design, and core productivity and life-management modules. |
-| **Petros Geto** | `CTC-2934-26` | Authentication, authorization, security middleware, and security verification. |
+| **Petros Geto** | `CTC-2934-26` | Authentication, authorization, security middleware, and security verification, including admin boards. |
 
 ## Contributing
 
