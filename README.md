@@ -148,7 +148,7 @@ This structure keeps related functionality together while allowing modules to sh
 
 ## 🎥 Project Demonstration Video
 
-**Watch the HabOS project demonstration:** [Click here to watch the video]([https://drive.google.com/file/d/YOUR_FILE_ID/view)](https://drive.google.com/file/d/1GPHnH-ise4IyqSzduP9XUP3QxiK30CBh/view?usp=drivesdk)
+**Watch the HabOS project demonstration:** [Click the link to watch the video] ([https://drive.google.com/file/d/YOUR_FILE_ID/view)](https://drive.google.com/file/d/1GPHnH-ise4IyqSzduP9XUP3QxiK30CBh/view?usp=drivesdk)
 
 ## Repository Structure
 
