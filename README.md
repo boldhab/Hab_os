@@ -18,6 +18,7 @@ HabOS is a cross-platform personal management application designed to bring ever
 - [Security](#security)
 - [Documentation](#documentation)
 - [Team](#team)
+- [Project Demonstration Video](#-project-demonstration-video)
 
 ## Overview
 
@@ -301,8 +302,7 @@ Security depends on correct configuration and implementation. Review the server 
 
 ## 🎥 Project Demonstration Video
 
-**Watch the HabOS project demonstration:** [Click the link to watch the video] ([https://drive.google.com/file/d/YOUR_FILE_ID/view)](https://drive.google.com/file/d/1GPHnH-ise4IyqSzduP9XUP3QxiK30CBh/view?usp=drivesdk)
-
+[![HabOS Project Demonstration](https://img.shields.io/badge/▶-Watch%20Project%20Demonstration-orange?style=for-the-badge)](https://drive.google.com/file/d/1GPHnH-ise4IyqSzduP9XUP3QxiK30CBh/view?usp=drivesdk)
 
 ## Team
 
