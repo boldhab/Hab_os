@@ -302,7 +302,9 @@ Security depends on correct configuration and implementation. Review the server 
 
 ## 🎥 Project Demonstration Video
 
-[![HabOS Project Demonstration](https://img.shields.io/badge/▶-Watch%20Project%20Demonstration-orange?style=for-the-badge)](https://drive.google.com/file/d/1GPHnH-ise4IyqSzduP9XUP3QxiK30CBh/view?usp=drivesdk)
+**Watch the HabOS Project Demonstration:**
+
+[▶ Watch HabOS Demonstration Video on Google Drive](https://drive.google.com/file/d/1GPHnH-ise4IyqSzduP9XUP3QxiK30CBh/view?usp=drivesdk)
 
 ## Team
 
