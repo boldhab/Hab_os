@@ -146,9 +146,6 @@ This structure keeps related functionality together while allowing modules to sh
 | Containers | Docker, Docker Compose |
 
 
-## 🎥 Project Demonstration Video
-
-**Watch the HabOS project demonstration:** [Click the link to watch the video] ([https://drive.google.com/file/d/YOUR_FILE_ID/view)](https://drive.google.com/file/d/1GPHnH-ise4IyqSzduP9XUP3QxiK30CBh/view?usp=drivesdk)
 
 ## Repository Structure
 
@@ -302,6 +299,9 @@ The project documents the following security measures:
 
 Security depends on correct configuration and implementation. Review the server environment, authorization checks, token lifecycle, and deployment settings before deploying to production.
 
+## 🎥 Project Demonstration Video
+
+**Watch the HabOS project demonstration:** [Click the link to watch the video] ([https://drive.google.com/file/d/YOUR_FILE_ID/view)](https://drive.google.com/file/d/1GPHnH-ise4IyqSzduP9XUP3QxiK30CBh/view?usp=drivesdk)
 
 
 ## Team
