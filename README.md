@@ -313,16 +313,7 @@ Security depends on correct configuration and implementation. Review the server 
 | **Habtamu Befekadu** | `CTC-894-26` | System architecture, Flutter client, database design, and core productivity and life-management modules. |
 | **Petros Geto** | `CTC-2934-26` | Authentication, authorization, security middleware, and security verification, including admin boards. |
 
-## Contributing
 
-When contributing:
-
-1. Keep changes focused on a specific feature or fix.
-2. Follow the existing client and server architecture.
-3. Validate incoming API data and enforce user-level access control.
-4. Run relevant tests and analysis before opening a pull request.
-5. Update documentation when behavior, setup, or API contracts change.
-6. Never commit credentials, tokens, or local environment files.
 
 ---
 
